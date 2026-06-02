@@ -38,7 +38,7 @@ export default function MusicPlayer() {
   const [trackIndex, setTrackIndex] = useState(0);
   const [progress, setProgress] = useState(0);
   const [volume, setVolume] = useState(80);
-  const progressIntervalRef = useRef<ReturnType<typeof setInterval>>();
+  const progressIntervalRef = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const currentTrack = TRACKS[trackIndex];
 

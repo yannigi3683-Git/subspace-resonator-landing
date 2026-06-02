@@ -11,7 +11,7 @@ export default function GallerySection() {
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const triggerRefs = useRef<(HTMLButtonElement | null)[]>([]);
   const scrollPos = useRef(0);
-  const rafId = useRef<number>();
+  const rafId = useRef<number | undefined>(undefined);
 
   const prefersReduced =
     typeof window !== 'undefined' &&
