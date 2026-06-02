@@ -1,12 +1,12 @@
 ﻿import { motion } from 'framer-motion';
-import { Music2, Youtube, Instagram } from 'lucide-react';
+import { Music2, Video } from 'lucide-react';
 import { ReactNode } from 'react';
 
 function getIcon(name: string): ReactNode {
   if (name === 'SoundCloud' || name === 'Spotify' || name === 'Bandcamp')
     return <Music2 size={14} className="mr-2" />;
-  if (name === 'YouTube') return <Youtube size={14} className="mr-2" />;
-  if (name === 'Instagram') return <Instagram size={14} className="mr-2" />;
+  if (name === 'YouTube') return <Video size={14} className="mr-2" />;
+  if (name === 'Instagram') return <span className="font-mono text-xs mr-2">IG</span>;
   if (name === 'Facebook') return <span className="font-mono text-xs mr-2">FB</span>;
   if (name === 'TikTok') return <span className="font-mono text-xs mr-2">TK</span>;
   if (name === 'Discogs') return <span className="font-mono text-xs mr-2">DC</span>;
