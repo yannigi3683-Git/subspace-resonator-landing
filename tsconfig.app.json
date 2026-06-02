@@ -20,9 +20,11 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
-    "noUncheckedSideEffectImports": true,
+    "noUncheckedSideEffectImports": false,
+    "types": ["vite/client"],
 
     /* Path alias */
+    "ignoreDeprecations": "6.0",
     "baseUrl": ".",
     "paths": { "@/*": ["./src/*"] }
   },

@@ -1,9 +1,3 @@
-function App() {
-  return (
-    <div>
-      <h1>Subspace Resonator</h1>
-    </div>
-  )
+export default function App() {
+  return <div />;
 }
-
-export default App
