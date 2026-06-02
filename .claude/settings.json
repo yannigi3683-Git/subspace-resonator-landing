@@ -1,0 +1,15 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm install *)",
+      "Bash(npm run build)",
+      "Bash(npm run dev)",
+      "Bash(npm run preview)",
+      "Bash(npx tsc --noEmit)",
+      "Bash(npx vitest *)",
+      "Bash(mkdir -p src/**)",
+      "Bash(cp *)",
+      "Bash(node *)"
+    ]
+  }
+}
