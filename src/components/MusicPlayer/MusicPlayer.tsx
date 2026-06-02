@@ -59,6 +59,11 @@ export default function MusicPlayer() {
     if (e.key === 'ArrowLeft')  { e.preventDefault(); setProgress((p) => Math.max(0, p - 5)); }
   }, []);
 
+  const handleProgressClick = useCallback((e: React.MouseEvent<HTMLDivElement>) => {
+    const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+    setProgress(((e.clientX - rect.left) / rect.width) * 100);
+  }, []);
+
   useEffect(() => {
     if (playing) {
       progressIntervalRef.current = setInterval(() => {
@@ -81,7 +86,7 @@ export default function MusicPlayer() {
       />
 
       {/* Mobile: fixed bottom bar */}
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 bg-card border-t border-border flex items-center px-3 gap-3">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 h-16 w-full bg-card border-t border-border flex items-center px-3 gap-3">
         <img
           src={artFallback}
           alt={currentTrack?.title ?? ''}
@@ -126,10 +131,7 @@ export default function MusicPlayer() {
               aria-valuenow={Math.round(progress)}
               className="w-full h-1 bg-muted rounded-full cursor-pointer focus:outline-none focus:ring-2 focus:ring-primary my-4"
               onKeyDown={handleProgressKey}
-              onClick={(e) => {
-                const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
-                setProgress(((e.clientX - rect.left) / rect.width) * 100);
-              }}
+              onClick={handleProgressClick}
             >
               <div className="h-full bg-primary rounded-full" style={{ width: `${progress}%` }} />
             </div>
