@@ -1,3 +1,41 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 4% 6%;
+    --foreground: 240 5% 95%;
+    --muted: 240 4% 12%;
+    --muted-foreground: 220 9% 65%;
+    --primary: 202 100% 61%;
+    --primary-foreground: 240 4% 6%;
+    --border: 240 4% 18%;
+    --card: 240 4% 8%;
+    --ring: 202 100% 61%;
+  }
+
+  * { @apply border-border; }
+  html { scroll-behavior: smooth; }
+  body {
+    @apply bg-background text-foreground;
+    font-family: 'Inter', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  h1, h2, h3, .display { font-family: 'Space Grotesk', sans-serif; }
+  .mono, code, .terminal { font-family: 'JetBrains Mono', monospace; }
+}
+
+@layer components {
+  .section-border {
+    @apply border border-border bg-card/40;
+  }
+  .nav-link {
+    @apply px-3 min-h-[44px] flex items-center text-xs tracking-[0.15em] uppercase text-muted-foreground hover:text-primary transition-colors;
+  }
+  .glass-header {
+    background: hsla(240, 4%, 6%, 0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid hsl(var(--border));
+  }
+}
