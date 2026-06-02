@@ -10,3 +10,18 @@ global.IntersectionObserver = class IntersectionObserver {
   }
   unobserve() {}
 } as any;
+
+// Mock matchMedia for reduced-motion queries
+Object.defineProperty(window, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: query === '(prefers-reduced-motion: reduce)' ? false : false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => {},
+  }),
+});
