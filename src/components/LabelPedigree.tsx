@@ -15,7 +15,7 @@ const LabelPedigree = () => {
   return (
     <section id="labels" aria-label="Labels" className="py-10 md:py-16 border-t border-border">
       <div className="container">
-        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+        <h2 className="text-sm tracking-[0.3em] text-primary mb-8 uppercase">
           // RESONANCE NETWORK
         </h2>
         <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">

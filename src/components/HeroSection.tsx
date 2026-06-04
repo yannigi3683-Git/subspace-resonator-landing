@@ -20,16 +20,16 @@ const HeroSection = () => {
           />
         </div>
         <h1 className="sr-only">Subspace Resonator — Goa &amp; Psychedelic Trance</h1>
-        <p className="mt-8 text-xs tracking-[0.3em] text-muted-foreground uppercase text-center">
+        <p className="mt-8 text-sm tracking-[0.3em] text-muted-foreground uppercase text-center">
           Goa Trance · Psychedelic Trance
         </p>
-        <p className="mt-2 text-[10px] tracking-[0.25em] text-muted-foreground/60 uppercase text-center">
+        <p className="mt-2 text-xs tracking-[0.25em] text-foreground/55 uppercase text-center">
           Est. 1998 · Reborn 2024
         </p>
         <a
           href="#music"
           onClick={handleScroll}
-          className="mt-6 text-[10px] tracking-[0.35em] text-primary uppercase border border-primary/40 px-6 py-2 hover:border-primary hover:bg-primary/5 transition-colors"
+          className="mt-6 text-xs tracking-[0.35em] text-primary uppercase border border-primary/40 px-6 py-2 hover:border-primary hover:bg-primary/5 transition-colors"
           aria-label="Scroll to music player"
         >
           LISTEN ↓

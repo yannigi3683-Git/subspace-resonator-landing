@@ -50,7 +50,7 @@ const SocialMatrix = () => {
   return (
     <section id="connect" aria-label="Social" className="py-10 md:py-16 border-t border-border">
       <div className="container">
-        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+        <h2 className="text-sm tracking-[0.3em] text-primary mb-8 uppercase">
           // CONNECTION MATRIX
         </h2>
         <div className="flex flex-wrap gap-2 sm:gap-3">

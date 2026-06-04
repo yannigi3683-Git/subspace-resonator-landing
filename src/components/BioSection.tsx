@@ -10,7 +10,7 @@ const BioSection = () => {
       />
 
       <div className="container relative z-10">
-        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+        <h2 className="text-sm tracking-[0.3em] text-primary mb-8 uppercase">
           // BIO
         </h2>
 

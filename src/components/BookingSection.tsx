@@ -5,7 +5,7 @@ const BookingSection = () => {
   return (
     <section id="contact" aria-label="Booking" className="pt-10 pb-4 md:pt-20 md:pb-8">
       <div className="container">
-        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+        <h2 className="text-sm tracking-[0.3em] text-primary mb-8 uppercase">
           // BOOKING - A DIRECT SIGNAL PATH
         </h2>
 
@@ -32,7 +32,7 @@ const BookingSection = () => {
             <div className="flex flex-col sm:flex-row gap-3">
               <motion.a
                 href="mailto:subspaceresonator@gmail.com"
-                className="inline-flex items-center justify-center border border-primary text-primary text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-fit"
+                className="inline-flex items-center justify-center border border-primary text-primary text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-fit"
                 whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.4)" }}
               >
                 INITIATE CONTACT
@@ -40,7 +40,7 @@ const BookingSection = () => {
 
               <motion.a
                 href="tel:+972507974184"
-                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
+                className="inline-flex items-center justify-center border border-border text-foreground text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
                 whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
               >
                 FAST CHANNEL · CALL
@@ -50,7 +50,7 @@ const BookingSection = () => {
                 href="https://wa.me/972507974184"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
+                className="inline-flex items-center justify-center border border-border text-foreground text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
                 whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
               >
                 WHATSAPP · CHAT
