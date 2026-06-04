@@ -30,6 +30,12 @@ export default function App() {
         <meta name="twitter:description" content="Goa &amp; Psychedelic Trance producer. Stream releases, book direct." />
         <meta name="twitter:image" content="https://subspaceresonator.com/og-image.jpg" />
         <meta name="theme-color" content="#030303" />
+        <meta property="og:locale" content="en_US" />
+        <meta property="og:site_name" content="Subspace Resonator" />
+        <meta property="og:image:alt" content="Subspace Resonator — Goa &amp; Psychedelic Trance" />
+        <meta property="og:image:secure_url" content="https://subspaceresonator.com/og-image.jpg" />
+        <meta name="twitter:image:alt" content="Subspace Resonator — Goa &amp; Psychedelic Trance" />
+        <meta name="robots" content="index, follow" />
 <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',
           '@type': 'MusicGroup',
