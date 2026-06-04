@@ -20,7 +20,7 @@ const BioSection = () => {
             Emerging from the late '90s Goa Trance movement, I operated when the underground was a guarded frequency — no stage names, no digital footprints. If you knew the coordinates, you were part of the resonance.
           </p>
           <p className="text-sm leading-relaxed text-foreground mb-6">
-            Israel, 1998. Illegal outdoor parties in the Judean hills, the Galilee, and the Negev desert — before permits, before streams, before algorithms. A generation that staged the "Give Trance a Chance" protest at Rabin Square just to defend the right to the frequency. That's the scene I came from. That's the signal I carry.
+            Israel, 1998. Illegal outdoor parties in the Judean hills, the Galilee, and the Negev desert. That's the signal I carry.
           </p>
           <p className="text-xs tracking-[0.2em] text-primary mb-3 uppercase">The Reactivation</p>
           <p className="text-sm leading-relaxed text-foreground mb-6">
