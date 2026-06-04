@@ -45,7 +45,7 @@ const MusicPlayer = () => {
   const scWidgetRef = useRef<any>(null);
   const scPlaylistWidgetRef = useRef<any>(null);
   const trackIndexMapRef = useRef<number[]>([]);
-  const progressInterval = useRef<ReturnType<typeof setInterval>>();
+  const progressInterval = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const getActiveWidget = useCallback(() => {
     return activeSource === "tracks" ? scWidgetRef.current : scPlaylistWidgetRef.current;

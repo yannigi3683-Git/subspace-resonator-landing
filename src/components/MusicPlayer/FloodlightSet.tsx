@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from "react";
 export default function FloodlightSet({ playing = false, side = "left" }: { playing?: boolean; side?: "left" | "right" }) {
   const [wobble, setWobble] = useState(0);
   const [hiPulse, setHiPulse] = useState(0);
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
 
   useEffect(() => {
     if (!playing) { setWobble(0); setHiPulse(0); return; }

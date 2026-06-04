@@ -20,7 +20,7 @@ export default function SpectrumAnalyzer({
   const peakHoldRef = useRef<number[]>(Array(bands).fill(0));
   const [renderLevels, setRenderLevels] = useState<number[]>(Array(bands).fill(0));
   const [renderPeaks, setRenderPeaks] = useState<number[]>(Array(bands).fill(0));
-  const rafRef = useRef<number>();
+  const rafRef = useRef<number | undefined>(undefined);
   const channelOffset = label === "CH-R" ? 1.7 : 0;
 
   useEffect(() => {
