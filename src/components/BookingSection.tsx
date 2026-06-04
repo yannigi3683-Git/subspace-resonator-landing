@@ -16,6 +16,8 @@ const BookingSection = () => {
               <img
                 src={liveAlpha}
                 alt="Subspace Resonator performing live"
+                width={1920}
+                height={1080}
                 className="w-full h-full object-cover scale-110"
                 style={{ objectPosition: "50% 30%" }}
                 loading="lazy"
@@ -25,23 +27,25 @@ const BookingSection = () => {
 
           {/* Copy */}
           <div className="section-border p-6 md:p-10 flex flex-col justify-center">
-            <p className="text-sm leading-relaxed text-foreground mb-6">
+            <p className="text-base sm:text-sm leading-relaxed text-foreground mb-6">
               Subspace Resonator operates on a Direct-contact model, ensuring creative alignment and access to exclusive music available nowhere else.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-3">
               <motion.a
                 href="mailto:subspaceresonator@gmail.com"
-                className="inline-flex items-center justify-center border border-primary text-primary text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-fit"
-                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.4)" }}
+                className="inline-flex items-center justify-center border border-primary text-primary text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-fit"
+                whileHover={{ filter: "drop-shadow(0 0 16px hsl(210 100% 50% / 0.5))" }}
+                transition={{ duration: 0.2 }}
               >
                 INITIATE CONTACT
               </motion.a>
 
               <motion.a
                 href="tel:+972507974184"
-                className="inline-flex items-center justify-center border border-border text-foreground text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
-                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
+                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
+                whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))" }}
+                transition={{ duration: 0.2 }}
               >
                 FAST CHANNEL · CALL
               </motion.a>
@@ -50,8 +54,10 @@ const BookingSection = () => {
                 href="https://wa.me/972507974184"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="inline-flex items-center justify-center border border-border text-foreground text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
-                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
+                aria-label="Contact via WhatsApp (opens in new tab)"
+                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
+                whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))" }}
+                transition={{ duration: 0.2 }}
               >
                 WHATSAPP · CHAT
               </motion.a>

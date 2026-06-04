@@ -42,7 +42,7 @@ const socials = [
   { icon: InstagramIcon,  name: "Instagram",  url: "https://www.instagram.com/subspace_resonator" },
   { icon: TikTokIcon,     name: "TikTok",     url: "https://www.tiktok.com/@subspace.resonato" },
   { icon: DiscogsIcon,    name: "Discogs",    url: "https://www.discogs.com/artist/15101171-Subspace-Resonator" },
-  { icon: CalendarIcon,   name: "Events",     url: "https://soundcloudevents.velvetcake.live/" },
+  { icon: CalendarIcon,   name: "Live Events", url: "https://soundcloudevents.velvetcake.live/" },
   { icon: LinktreeIcon,   name: "Linktree",   url: "https://linktr.ee/yanni_subspace_resonator" },
 ];
 
@@ -66,6 +66,7 @@ const SocialMatrix = () => {
               >
                 <Icon />
                 <span>{s.name}</span>
+                <span className="sr-only"> (opens in new tab)</span>
               </a>
             );
           })}
