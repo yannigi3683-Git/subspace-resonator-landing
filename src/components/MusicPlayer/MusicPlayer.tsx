@@ -40,6 +40,7 @@ const MusicPlayer = () => {
   const [volume, setVolume] = useState(100);
   const [activePlaylistKey, setActivePlaylistKey] = useState<string>(DEFAULT_PLAYLIST_KEY);
   const [playlistLoading, setPlaylistLoading] = useState(false);
+  const [playlistMounted, setPlaylistMounted] = useState(false);
   const iframeRef = useRef<HTMLIFrameElement>(null);
   const playlistIframeRef = useRef<HTMLIFrameElement>(null);
   const scWidgetRef = useRef<any>(null);
@@ -313,14 +314,16 @@ const MusicPlayer = () => {
     <>
       <iframe ref={iframeRef} src={embedUrl} onLoad={handleIframeLoad}
         width="0" height="0" allow="autoplay" className="hidden" title="SoundCloud Player" />
-      <iframe ref={playlistIframeRef} src={playlistEmbedUrl} onLoad={handlePlaylistIframeLoad}
-        width="0" height="0" allow="autoplay" className="hidden" title="SoundCloud Playlist Player" />
+      {playlistMounted && (
+        <iframe ref={playlistIframeRef} src={playlistEmbedUrl} onLoad={handlePlaylistIframeLoad}
+          width="0" height="0" allow="autoplay" className="hidden" title="SoundCloud Playlist Player" />
+      )}
 
       {/* Track List */}
       <section id="music" className="pt-2 pb-8 sm:pt-4 sm:pb-12">
         <div className="container px-4 sm:px-6">
           <h2 className="text-xs tracking-[0.3em] text-primary mb-4 sm:mb-6 uppercase">
-            // TRANSMISSION LOG
+            // MUSIC ARCHIVE
           </h2>
 
           {/* Tab strip */}
@@ -331,7 +334,10 @@ const MusicPlayer = () => {
             ]).map((tab) => {
               const isActive = activeTab === tab.key;
               return (
-                <button key={tab.key} onClick={() => setActiveTab(tab.key)}
+                <button key={tab.key} onClick={() => {
+                  setActiveTab(tab.key);
+                  if (tab.key === "playlist") setPlaylistMounted(true);
+                }}
                   className={`px-4 py-2 text-[10px] sm:text-xs tracking-[0.25em] uppercase border-r border-border last:border-r-0 transition-colors min-h-[44px] ${
                     isActive ? "text-primary bg-secondary/40" : "text-muted-foreground hover:text-primary"
                   }`}
@@ -464,15 +470,15 @@ const MusicPlayer = () => {
               </a>
               <div className="min-w-0 border border-border p-2 flex-1" style={{ background: "hsl(0,0%,2%)" }}>
                 <p className="text-[10px] lg:text-xs text-primary truncate font-medium tracking-wider">{current.title}</p>
-                <p className="text-[8px] lg:text-[9px] text-muted-foreground tracking-[0.2em] mt-1">SUBSPACE RESONATOR</p>
+                <p className="text-[10px] text-muted-foreground tracking-[0.2em] mt-1">SUBSPACE RESONATOR</p>
                 <div className="mt-1.5">
                   <div className="w-full h-[3px] bg-border cursor-pointer relative group" onClick={handleProgressClick}>
                     <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
                     <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-primary opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: `${progress}%`, transform: "translateX(-50%) translateY(-50%)" }} />
                   </div>
                   <div className="flex justify-between mt-0.5">
-                    <span className="text-[7px] text-muted-foreground tracking-widest">{formatTime(position)}</span>
-                    <span className="text-[7px] text-muted-foreground tracking-widest">{duration > 0 ? formatTime(duration) : "--:--"}</span>
+                    <span className="text-[10px] text-muted-foreground tracking-widest">{formatTime(position)}</span>
+                    <span className="text-[10px] text-muted-foreground tracking-widest">{duration > 0 ? formatTime(duration) : "--:--"}</span>
                   </div>
                 </div>
               </div>
@@ -495,7 +501,7 @@ const MusicPlayer = () => {
                   <SpectrumAnalyzer playing={playing} label={label} trackIndex={currentTrack} volume={volume} />
                   <div className="w-full mt-1 flex items-center justify-center"
                     style={{ background: "linear-gradient(180deg, hsl(0,0%,7%), hsl(0,0%,4%))", border: "1px solid hsl(0,0%,10%)", padding: "2px 6px" }}>
-                    <span style={{ fontSize: "9px", color: "hsl(0,0%,35%)", fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>{label}</span>
+                    <span style={{ fontSize: "10px", color: "hsl(0,0%,35%)", fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>{label}</span>
                   </div>
                 </div>
               ))}
@@ -505,7 +511,7 @@ const MusicPlayer = () => {
                 <Knob label="" value={volume} onChange={handleVolumeChange} ariaLabel="Volume" />
                 <div className="w-full mt-1 flex items-center justify-center"
                   style={{ background: "linear-gradient(180deg, hsl(0,0%,7%), hsl(0,0%,4%))", border: "1px solid hsl(0,0%,10%)", padding: "2px 6px" }}>
-                  <span style={{ fontSize: "9px", color: "hsl(0,0%,35%)", fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>VOL</span>
+                  <span style={{ fontSize: "10px", color: "hsl(0,0%,35%)", fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>VOL</span>
                 </div>
               </div>
             </div>
@@ -522,31 +528,31 @@ const MusicPlayer = () => {
           <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
         </div>
         {/* Controls */}
-        <div className="flex items-center gap-1 px-3"
-          style={{ minHeight: 56, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
+        <div className="flex items-center gap-0.5 px-3"
+          style={{ minHeight: 68, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
           <img src={current.art} alt={current.title} className="w-8 h-8 object-cover border border-border shrink-0" />
           <div className="flex-1 min-w-0 px-1">
             <p className="text-[10px] text-primary truncate font-medium">{current.title}</p>
-            <p className="text-[8px] text-muted-foreground tracking-widest">SUBSPACE RESONATOR</p>
+            <p className="text-[10px] text-muted-foreground tracking-widest truncate">SUBSPACE RESONATOR</p>
           </div>
-          <button onClick={() => seekBy(-10)} className="w-8 h-8 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
+          <button onClick={() => seekBy(-10)} className="w-11 h-11 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
             style={transportBtnStyle} aria-label="Rewind 10 seconds">
             <Rewind size={12} />
           </button>
-          <button onClick={prevTrack} className="w-8 h-8 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
+          <button onClick={prevTrack} className="w-11 h-11 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
             style={transportBtnStyle} aria-label="Previous track">
             <SkipBack size={13} />
           </button>
-          <button onClick={togglePlay} className="w-9 h-9 flex items-center justify-center border-2 border-border hover:border-primary hover:text-primary transition-colors shrink-0"
+          <button onClick={togglePlay} className="w-11 h-11 flex items-center justify-center border-2 border-border hover:border-primary hover:text-primary transition-colors shrink-0"
             style={{ background: playing ? "linear-gradient(180deg, hsl(210,100%,15%), hsl(210,100%,8%))" : "linear-gradient(180deg, hsl(0,0%,14%), hsl(0,0%,6%))", boxShadow: playing ? "inset 0 0 12px hsl(210 100% 50% / 0.15)" : "none" }}
             aria-label={playing ? "Pause" : "Play"}>
             {playing ? <Pause size={15} /> : <Play size={15} />}
           </button>
-          <button onClick={nextTrack} className="w-8 h-8 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
+          <button onClick={nextTrack} className="w-11 h-11 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
             style={transportBtnStyle} aria-label="Next track">
             <SkipForward size={13} />
           </button>
-          <button onClick={() => seekBy(10)} className="w-8 h-8 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
+          <button onClick={() => seekBy(10)} className="w-11 h-11 flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors shrink-0"
             style={transportBtnStyle} aria-label="Forward 10 seconds">
             <FastForward size={12} />
           </button>
