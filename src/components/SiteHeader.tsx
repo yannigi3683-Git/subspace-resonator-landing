@@ -39,7 +39,18 @@ const SiteHeader = () => {
       observers.push(obs);
     });
 
-    return () => observers.forEach((o) => o.disconnect());
+    const handleScrollBottom = () => {
+      const nearBottom =
+        window.scrollY + window.innerHeight >= document.documentElement.scrollHeight - 80;
+      if (nearBottom) setActiveSection("connect");
+    };
+
+    window.addEventListener("scroll", handleScrollBottom, { passive: true });
+
+    return () => {
+      observers.forEach((o) => o.disconnect());
+      window.removeEventListener("scroll", handleScrollBottom);
+    };
   }, []);
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
