@@ -45,7 +45,6 @@ export default function App() {
           'foundingDate': '1998',
           'url': 'https://subspaceresonator.com/',
           'image': 'https://subspaceresonator.com/og-image.jpg',
-          'logo': 'https://subspaceresonator.com/og-image.jpg',
           'description': 'Goa & Psychedelic Trance producer active since 1998. Releases on Goa Records, Timewarp Records, and Geomagnetic. Debut album in production.',
           'member': {
             '@type': 'Person',
@@ -89,7 +88,6 @@ export default function App() {
               'datePublished': '2025',
               'recordLabel': { '@type': 'Organization', 'name': 'Goa Records' },
               'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              'url': 'https://open.spotify.com/track/0ahaMCHJhaLhwBF6oit9Uo',
             },
             {
               '@type': 'MusicAlbum',
