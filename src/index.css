@@ -33,6 +33,13 @@
 
   html { scroll-behavior: smooth; }
 
+  button,
+  a,
+  [role="button"],
+  [role="slider"] {
+    touch-action: manipulation;
+  }
+
   body {
     @apply bg-background text-foreground;
     font-family: 'JetBrains Mono', monospace;

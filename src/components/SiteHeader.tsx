@@ -14,11 +14,32 @@ const navItems = [
 
 const SiteHeader = () => {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [activeSection, setActiveSection] = useState("music");
 
   useEffect(() => {
     const close = () => { if (window.innerWidth >= 768) setMenuOpen(false); };
     window.addEventListener("resize", close);
     return () => window.removeEventListener("resize", close);
+  }, []);
+
+  useEffect(() => {
+    const sectionIds = navItems.map((item) => item.href.slice(1));
+    const observers: IntersectionObserver[] = [];
+
+    sectionIds.forEach((id) => {
+      const el = document.getElementById(id);
+      if (!el) return;
+      const obs = new IntersectionObserver(
+        ([entry]) => {
+          if (entry.isIntersecting) setActiveSection(id);
+        },
+        { rootMargin: "-30% 0px -65% 0px", threshold: 0 }
+      );
+      obs.observe(el);
+      observers.push(obs);
+    });
+
+    return () => observers.forEach((o) => o.disconnect());
   }, []);
 
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
@@ -52,7 +73,7 @@ const SiteHeader = () => {
               key={item.href}
               href={item.href}
               onClick={(e) => handleNav(e, item.href)}
-              className="nav-link"
+              className={`nav-link${item.href.slice(1) === activeSection ? " active" : ""}`}
             >
               {item.label}
             </a>
@@ -89,7 +110,7 @@ const SiteHeader = () => {
                 key={item.href}
                 href={item.href}
                 onClick={(e) => handleNav(e, item.href)}
-                className="nav-link w-full text-left px-6"
+                className={`nav-link w-full text-left px-6${item.href.slice(1) === activeSection ? " active" : ""}`}
               >
                 {item.label}
               </a>
