@@ -336,7 +336,10 @@ const MusicPlayer = () => {
               return (
                 <button key={tab.key} onClick={() => {
                   setActiveTab(tab.key);
-                  if (tab.key === "playlist") setPlaylistMounted(true);
+                  if (tab.key === "playlist" && !playlistMounted) {
+                    setPlaylistMounted(true);
+                    setPlaylistLoading(true);
+                  }
                 }}
                   className={`px-4 py-2 text-[10px] sm:text-xs tracking-[0.25em] uppercase border-r border-border last:border-r-0 transition-colors min-h-[44px] ${
                     isActive ? "text-primary bg-secondary/40" : "text-muted-foreground hover:text-primary"
