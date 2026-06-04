@@ -70,6 +70,74 @@ export default function App() {
             'contactType': 'Booking',
           },
         })}</script>
+<script type="application/ld+json">{JSON.stringify({
+          '@context': 'https://schema.org',
+          '@graph': [
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'StudioAlbum',
+              'name': 'The Subspace Theory',
+              'numTracks': 4,
+              'datePublished': '2025-12-26',
+              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              'url': 'https://yannig.bandcamp.com/album/the-subspace-theory',
+            },
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'SingleAlbum',
+              'name': 'Galaxy 604',
+              'datePublished': '2025',
+              'recordLabel': { '@type': 'Organization', 'name': 'Goa Records' },
+              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              'url': 'https://open.spotify.com/track/0ahaMCHJhaLhwBF6oit9Uo',
+            },
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'SingleAlbum',
+              'name': 'Nightmare In Heaven',
+              'datePublished': '2025-10-31',
+              'recordLabel': { '@type': 'Organization', 'name': 'Timewarp Records' },
+              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              'url': 'https://beatspace-timewarp.bandcamp.com/album/nightmare-in-heaven',
+            },
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'CompilationAlbum',
+              'name': 'The Call Of Goa, Vol. 5',
+              'datePublished': '2026',
+              'recordLabel': { '@type': 'Organization', 'name': 'Timewarp Records' },
+              'track': {
+                '@type': 'MusicRecording',
+                'name': 'Subspace Disturbance',
+                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              },
+            },
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'CompilationAlbum',
+              'name': 'Psychedelic Goa Trance 2026 100 Aliens',
+              'datePublished': '2026-01-09',
+              'recordLabel': { '@type': 'Organization', 'name': 'Fresh Frequencies' },
+              'track': {
+                '@type': 'MusicRecording',
+                'name': 'Galaxy 604',
+                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              },
+            },
+            {
+              '@type': 'MusicAlbum',
+              'albumProductionType': 'CompilationAlbum',
+              'name': 'Psy Trance 2026 Space DJ',
+              'datePublished': '2026',
+              'recordLabel': { '@type': 'Organization', 'name': 'Fresh Frequencies' },
+              'track': {
+                '@type': 'MusicRecording',
+                'name': 'Galaxy 604',
+                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
+              },
+            },
+          ],
+        })}</script>
       </Helmet>
 
       <div className="min-h-screen pb-40 md:pb-20 relative">
