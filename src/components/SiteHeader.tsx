@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
 import heroLogo from "@/assets/bio-watermark.jpg";
@@ -15,11 +15,20 @@ const navItems = [
 const SiteHeader = () => {
   const [menuOpen, setMenuOpen] = useState(false);
 
+  useEffect(() => {
+    const close = () => { if (window.innerWidth >= 768) setMenuOpen(false); };
+    window.addEventListener("resize", close);
+    return () => window.removeEventListener("resize", close);
+  }, []);
+
   const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
     e.preventDefault();
     setMenuOpen(false);
-    const el = document.querySelector(href);
-    el?.scrollIntoView({ behavior: "smooth" });
+    const el = document.querySelector<HTMLElement>(href);
+    if (!el) return;
+    const headerH = 56;
+    const top = el.getBoundingClientRect().top + window.scrollY - headerH;
+    window.scrollTo({ top, behavior: "smooth" });
   };
 
   return (

@@ -36,14 +36,18 @@ const GallerySection = () => {
     lastFocusedRef.current?.focus();
   }, []);
 
-  // Move focus into lightbox when it opens
+  // Move focus into lightbox when it opens + lock body scroll
   useEffect(() => {
     if (selected !== null) {
       closeBtnRef.current?.focus();
+      document.body.style.overflow = "hidden";
+    } else {
+      document.body.style.overflow = "";
     }
+    return () => { document.body.style.overflow = ""; };
   }, [selected]);
 
-  // Keyboard nav inside lightbox
+  // Keyboard nav + Tab trap inside lightbox
   useEffect(() => {
     if (selected === null) return;
     const handler = (e: KeyboardEvent) => {
@@ -55,6 +59,23 @@ const GallerySection = () => {
         setSelected((s) => (s === null ? null : (s - 1 + galleryImages.length) % galleryImages.length));
       } else if (e.key === "Escape") {
         closeSelected();
+      } else if (e.key === "Tab") {
+        // Trap focus inside the dialog
+        const dialog = document.querySelector('[role="dialog"]');
+        if (!dialog) return;
+        const focusable = Array.from(
+          dialog.querySelectorAll<HTMLElement>(
+            'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+          )
+        ).filter((el) => !el.hasAttribute("disabled"));
+        if (focusable.length === 0) return;
+        const first = focusable[0];
+        const last = focusable[focusable.length - 1];
+        if (e.shiftKey) {
+          if (document.activeElement === first) { e.preventDefault(); last.focus(); }
+        } else {
+          if (document.activeElement === last) { e.preventDefault(); first.focus(); }
+        }
       }
     };
     window.addEventListener("keydown", handler);

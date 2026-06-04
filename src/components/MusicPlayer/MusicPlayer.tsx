@@ -213,11 +213,25 @@ const MusicPlayer = () => {
     });
   }, [activePlaylistKey, activeSource, volume, refillPlaylistTracks]);
 
+  const scPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const scPlaylistPollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (scPollRef.current) clearInterval(scPollRef.current);
+      if (scPlaylistPollRef.current) clearInterval(scPlaylistPollRef.current);
+    };
+  }, []);
+
   const handleIframeLoad = useCallback(() => {
     if ((window as any).SC) { initWidget(); }
     else {
-      const interval = setInterval(() => {
-        if ((window as any).SC) { clearInterval(interval); initWidget(); }
+      scPollRef.current = setInterval(() => {
+        if ((window as any).SC) {
+          clearInterval(scPollRef.current!);
+          scPollRef.current = null;
+          initWidget();
+        }
       }, 200);
     }
   }, [initWidget]);
@@ -225,8 +239,12 @@ const MusicPlayer = () => {
   const handlePlaylistIframeLoad = useCallback(() => {
     if ((window as any).SC) { initPlaylistWidget(); }
     else {
-      const interval = setInterval(() => {
-        if ((window as any).SC) { clearInterval(interval); initPlaylistWidget(); }
+      scPlaylistPollRef.current = setInterval(() => {
+        if ((window as any).SC) {
+          clearInterval(scPlaylistPollRef.current!);
+          scPlaylistPollRef.current = null;
+          initPlaylistWidget();
+        }
       }, 200);
     }
   }, [initPlaylistWidget]);
@@ -474,7 +492,7 @@ const MusicPlayer = () => {
               {["CH-L", "CH-R"].map((label) => (
                 <div key={label} className="hidden lg:flex flex-col items-center"
                   style={{ background: "hsl(0,0%,2%)", padding: "3px 4px 2px" }}>
-                  <SpectrumAnalyzer playing={playing} label="" trackIndex={currentTrack} volume={volume} />
+                  <SpectrumAnalyzer playing={playing} label={label} trackIndex={currentTrack} volume={volume} />
                   <div className="w-full mt-1 flex items-center justify-center"
                     style={{ background: "linear-gradient(180deg, hsl(0,0%,7%), hsl(0,0%,4%))", border: "1px solid hsl(0,0%,10%)", padding: "2px 6px" }}>
                     <span style={{ fontSize: "9px", color: "hsl(0,0%,35%)", fontFamily: "monospace", letterSpacing: "0.2em", textTransform: "uppercase" }}>{label}</span>
