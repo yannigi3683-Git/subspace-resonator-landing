@@ -48,7 +48,9 @@ Note: Defying Gravity, Quantum Mechanics, and Interstellar Future are unreleased
 <link rel="apple-touch-icon" href="/og-image.jpg" />
 ```
 
-The `og-image.jpg` (1200x630) already exists in `public/`. It is serviceable as the Apple touch icon — browsers scale it down automatically.
+The `og-image.jpg` (1200x630) already exists in `public/`. It is serviceable as the Apple touch icon — iOS scales it to 180x180 and center-crops the landscape image. If the logo is centered in the og-image, the result is acceptable.
+
+**Ideal future state:** Create a dedicated `apple-touch-icon.png` at 180x180 (square) from the logo asset. This is a follow-up task, not a blocker.
 
 ---
 
@@ -56,17 +58,21 @@ The `og-image.jpg` (1200x630) already exists in `public/`. It is serviceable as 
 
 **File:** `src/App.tsx`
 
-Four tags missing from the existing `<Helmet>` block. Add them directly after the existing `<meta name="theme-color">` tag:
+Six tags missing from the existing `<Helmet>` block. Add them directly after the existing `<meta name="theme-color">` tag:
 
 ```html
 <meta property="og:locale" content="en_US" />
 <meta property="og:site_name" content="Subspace Resonator" />
+<meta property="og:image:alt" content="Subspace Resonator — Goa &amp; Psychedelic Trance" />
+<meta property="og:image:secure_url" content="https://subspaceresonator.com/og-image.jpg" />
 <meta name="twitter:image:alt" content="Subspace Resonator — Goa &amp; Psychedelic Trance" />
 <meta name="robots" content="index, follow" />
 ```
 
 - `og:locale` — required by Facebook and LinkedIn for correct content classification
 - `og:site_name` — shown in the link preview header on most platforms
+- `og:image:alt` — OG accessibility field; displayed by some platforms and required for WCAG-compliant link previews
+- `og:image:secure_url` — Facebook's crawlers prefer the explicit HTTPS variant; without it some old crawlers may reject the image even on HTTPS pages
 - `twitter:image:alt` — accessibility text for the Twitter card image
 - `robots` — explicit is cleaner; removes ambiguity for any non-standard crawler
 
@@ -89,9 +95,10 @@ Four platforms present in SocialMatrix but absent from the existing `sameAs` arr
 'https://linktr.ee/yanni_subspace_resonator',
 ```
 
-### 3b — Add `logo` and `member` to MusicGroup
+### 3b — Add `@id`, `logo`, and `member` to MusicGroup
 
 ```js
+'@id': 'https://subspaceresonator.com/#artist',
 'logo': 'https://subspaceresonator.com/og-image.jpg',
 'member': {
   '@type': 'Person',
@@ -99,6 +106,8 @@ Four platforms present in SocialMatrix but absent from the existing `sameAs` arr
   'url': 'https://subspaceresonator.com/',
 },
 ```
+
+The `@id` is critical. It gives the MusicGroup entity a stable IRI identifier. Without it, Google cannot reliably link the `byArtist` references in the releases block back to this entity — the two JSON-LD blocks are effectively disconnected in the knowledge graph.
 
 ### 3c — Update MusicGroup `description`
 
@@ -114,6 +123,8 @@ This seeds Google's entity knowledge with the upcoming album without making a fa
 
 Add a separate `<script type="application/ld+json">` block (keep it separate from MusicGroup to maintain schema clarity) containing an array of six release objects:
 
+All `byArtist` fields use `{ "@id": "https://subspaceresonator.com/#artist" }` — a direct reference to the MusicGroup entity defined in the first JSON-LD block. This is the correct linked-data pattern and is what enables Google to resolve the connection.
+
 **EP:**
 ```json
 {
@@ -122,7 +133,7 @@ Add a separate `<script type="application/ld+json">` block (keep it separate fro
   "albumProductionType": "StudioAlbum",
   "numTracks": 4,
   "datePublished": "2025-12-26",
-  "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator", "url": "https://subspaceresonator.com/" },
+  "byArtist": { "@id": "https://subspaceresonator.com/#artist" },
   "url": "https://yannig.bandcamp.com/album/the-subspace-theory"
 }
 ```
@@ -137,7 +148,8 @@ Note: schema.org has no `EPAlbum` type. `StudioAlbum` is the correct closest val
   "name": "Galaxy 604",
   "datePublished": "2025",
   "recordLabel": { "@type": "Organization", "name": "Goa Records" },
-  "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator", "url": "https://subspaceresonator.com/" }
+  "byArtist": { "@id": "https://subspaceresonator.com/#artist" },
+  "url": "https://open.spotify.com/track/0ahaMCHJhaLhwBF6oit9Uo"
 }
 ```
 ```json
@@ -147,7 +159,8 @@ Note: schema.org has no `EPAlbum` type. `StudioAlbum` is the correct closest val
   "name": "Nightmare In Heaven",
   "datePublished": "2025-10-31",
   "recordLabel": { "@type": "Organization", "name": "Timewarp Records" },
-  "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator", "url": "https://subspaceresonator.com/" }
+  "byArtist": { "@id": "https://subspaceresonator.com/#artist" },
+  "url": "https://beatspace-timewarp.bandcamp.com/album/nightmare-in-heaven"
 }
 ```
 
@@ -162,7 +175,7 @@ Note: schema.org has no `EPAlbum` type. `StudioAlbum` is the correct closest val
   "track": {
     "@type": "MusicRecording",
     "name": "Subspace Disturbance",
-    "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator" }
+    "byArtist": { "@id": "https://subspaceresonator.com/#artist" }
   }
 }
 ```
@@ -176,7 +189,7 @@ Note: schema.org has no `EPAlbum` type. `StudioAlbum` is the correct closest val
   "track": {
     "@type": "MusicRecording",
     "name": "Galaxy 604",
-    "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator" }
+    "byArtist": { "@id": "https://subspaceresonator.com/#artist" }
   }
 }
 ```
@@ -190,7 +203,7 @@ Note: schema.org has no `EPAlbum` type. `StudioAlbum` is the correct closest val
   "track": {
     "@type": "MusicRecording",
     "name": "Galaxy 604",
-    "byArtist": { "@type": "MusicGroup", "name": "Subspace Resonator" }
+    "byArtist": { "@id": "https://subspaceresonator.com/#artist" }
   }
 }
 ```
@@ -238,3 +251,10 @@ All six objects are wrapped in a single `@graph` array inside one `<script>` tag
 - No link additions or removals in the UI
 - Structured data uses only publicly confirmed release information
 - Unreleased tracks intentionally excluded
+- After implementation, update `public/sitemap.xml` `lastmod` to the deploy date
+
+## Follow-up Tasks (not in this sprint)
+
+- Create a dedicated 180x180 `apple-touch-icon.png` from the logo asset
+- L1 WebP image conversion (separate build-tooling sprint)
+- Add structured data for debut album once it is released
