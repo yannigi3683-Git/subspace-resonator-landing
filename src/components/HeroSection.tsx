@@ -23,7 +23,7 @@ const HeroSection = () => {
         <p className="mt-8 text-sm tracking-[0.3em] text-muted-foreground uppercase text-center">
           Goa Trance · Psychedelic Trance
         </p>
-        <p className="mt-2 text-xs tracking-[0.25em] text-foreground/55 uppercase text-center">
+        <p className="mt-2 text-sm tracking-[0.25em] text-muted-foreground uppercase text-center">
           Est. 1998 · Reborn 2024
         </p>
         <a
