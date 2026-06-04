@@ -39,12 +39,19 @@ export default function App() {
 <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',
           '@type': 'MusicGroup',
+          '@id': 'https://subspaceresonator.com/#artist',
           'name': 'Subspace Resonator',
           'genre': ['Goa Trance', 'Psychedelic Trance'],
           'foundingDate': '1998',
           'url': 'https://subspaceresonator.com/',
           'image': 'https://subspaceresonator.com/og-image.jpg',
-          'description': 'Goa & Psychedelic Trance producer active since 1998. Releases on Geomagnetic, Goa Records, Timewarp and Spiral Trax.',
+          'logo': 'https://subspaceresonator.com/og-image.jpg',
+          'description': 'Goa & Psychedelic Trance producer active since 1998. Releases on Goa Records, Timewarp Records, and Geomagnetic. Debut album in production.',
+          'member': {
+            '@type': 'Person',
+            'name': 'Yanni',
+            'url': 'https://subspaceresonator.com/',
+          },
           'sameAs': [
             'https://soundcloud.com/subspaceresonance',
             'https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk',
@@ -52,6 +59,10 @@ export default function App() {
             'https://www.youtube.com/@SubspaceResonator',
             'https://www.instagram.com/subspace_resonator',
             'https://www.discogs.com/artist/15101171-Subspace-Resonator',
+            'https://www.facebook.com/profile.php?id=61559198105695',
+            'https://www.tiktok.com/@subspace.resonato',
+            'https://www.beatport.com/artist/subspace-resonator/1354950',
+            'https://linktr.ee/yanni_subspace_resonator',
           ],
           'contactPoint': {
             '@type': 'ContactPoint',
