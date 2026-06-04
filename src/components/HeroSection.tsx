@@ -23,6 +23,9 @@ const HeroSection = () => {
         <p className="mt-8 text-xs tracking-[0.3em] text-muted-foreground uppercase text-center">
           Goa Trance · Psychedelic Trance
         </p>
+        <p className="mt-2 text-[10px] tracking-[0.25em] text-muted-foreground/60 uppercase text-center">
+          Est. 1998 · Reborn 2024
+        </p>
         <a
           href="#music"
           onClick={handleScroll}
