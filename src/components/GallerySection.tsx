@@ -1,164 +1,177 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { ChevronLeft, ChevronRight, X } from 'lucide-react';
-import { useGallery } from '../lib/siteContent';
+import { useState, useEffect, useRef, useCallback } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { useGallery } from "@/lib/siteContent";
 
-export default function GallerySection() {
-  const images = useGallery();
-  const looped = [...images, ...images];
-  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-  const closeButtonRef = useRef<HTMLButtonElement>(null);
-  const triggerRefs = useRef<(HTMLButtonElement | null)[]>([]);
-  const scrollPos = useRef(0);
-  const rafId = useRef<number | undefined>(undefined);
+const GallerySection = () => {
+  const galleryImages = useGallery();
+  const [selected, setSelected] = useState<number | null>(null);
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [isPaused, setIsPaused] = useState(false);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const lastFocusedRef = useRef<HTMLElement | null>(null);
 
-  const prefersReduced =
-    typeof window !== 'undefined' &&
-    window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-
-  // Auto-scroll rAF
   useEffect(() => {
-    if (prefersReduced) return;
-    const container = containerRef.current;
-    if (!container) return;
-    let paused = false;
+    const el = scrollRef.current;
+    if (!el || isPaused) return;
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) return;
 
-    const onMouseEnter = () => { paused = true; };
-    const onMouseLeave = () => { paused = false; };
-    container.addEventListener('mouseenter', onMouseEnter);
-    container.addEventListener('mouseleave', onMouseLeave);
+    const speed = 0.5;
+    let raf: number;
 
-    function frame() {
-      if (!paused && container) {
-        scrollPos.current += 0.5;
-        const half = container.scrollWidth / 2;
-        if (scrollPos.current >= half) scrollPos.current = 0;
-        container.scrollLeft = scrollPos.current;
+    const scroll = () => {
+      el.scrollLeft += speed;
+      if (el.scrollLeft >= el.scrollWidth / 2) {
+        el.scrollLeft = 0;
       }
-      rafId.current = requestAnimationFrame(frame);
-    }
-    rafId.current = requestAnimationFrame(frame);
-
-    return () => {
-      cancelAnimationFrame(rafId.current!);
-      container.removeEventListener('mouseenter', onMouseEnter);
-      container.removeEventListener('mouseleave', onMouseLeave);
+      raf = requestAnimationFrame(scroll);
     };
-  }, [prefersReduced]);
 
-  const closeLightbox = useCallback(() => {
-    const idx = lightboxIndex;
-    setLightboxIndex(null);
-    if (idx !== null) {
-      setTimeout(() => triggerRefs.current[idx % images.length]?.focus(), 0);
-    }
-  }, [lightboxIndex, images.length]);
+    raf = requestAnimationFrame(scroll);
+    return () => cancelAnimationFrame(raf);
+  }, [isPaused]);
 
-  // Keyboard nav for lightbox
+  const closeSelected = useCallback(() => {
+    setSelected(null);
+    lastFocusedRef.current?.focus();
+  }, []);
+
+  // Move focus into lightbox when it opens
   useEffect(() => {
-    if (lightboxIndex === null) return;
-    setTimeout(() => closeButtonRef.current?.focus(), 0);
-
-    function onKey(e: KeyboardEvent) {
-      if (e.key === 'Escape') closeLightbox();
-      if (e.key === 'ArrowRight') setLightboxIndex((i) => i !== null ? (i + 1) % images.length : null);
-      if (e.key === 'ArrowLeft')  setLightboxIndex((i) => i !== null ? (i - 1 + images.length) % images.length : null);
+    if (selected !== null) {
+      closeBtnRef.current?.focus();
     }
-    document.addEventListener('keydown', onKey);
-    return () => document.removeEventListener('keydown', onKey);
-  }, [lightboxIndex, closeLightbox, images.length]);
+  }, [selected]);
 
-  const openLightbox = useCallback((realIndex: number) => {
-    setLightboxIndex(realIndex % images.length);
-  }, [images.length]);
+  // Keyboard nav inside lightbox
+  useEffect(() => {
+    if (selected === null) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "ArrowRight") {
+        e.preventDefault();
+        setSelected((s) => (s === null ? null : (s + 1) % galleryImages.length));
+      } else if (e.key === "ArrowLeft") {
+        e.preventDefault();
+        setSelected((s) => (s === null ? null : (s - 1 + galleryImages.length) % galleryImages.length));
+      } else if (e.key === "Escape") {
+        closeSelected();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [selected, galleryImages.length, closeSelected]);
+
+  const scrollBy = (dir: number) => {
+    scrollRef.current?.scrollBy({ left: dir * 320, behavior: "smooth" });
+  };
+
+  const loopImages = [...galleryImages, ...galleryImages];
 
   return (
-    <section id="gallery" aria-label="Gallery" className="py-20 border-t border-border overflow-hidden">
-      <div className="container mb-8">
-        <p className="text-xs font-mono tracking-widest text-primary">// ARCHIVE</p>
+    <section id="gallery" aria-label="Gallery" className="py-10 md:py-20 border-t border-border">
+      <div className="container">
+        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+          // VISUAL ARCHIVE
+        </h2>
       </div>
 
-      {/* Scrolling strip */}
-      <div ref={containerRef} className="flex gap-3 overflow-x-hidden">
-        {looped.map((img, i) => {
-          const realIndex = i % images.length;
-          return (
+      <div
+        className="relative group"
+        onMouseEnter={() => setIsPaused(true)}
+        onMouseLeave={() => setIsPaused(false)}
+      >
+        <button
+          onClick={() => scrollBy(-1)}
+          className="absolute left-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center bg-background/80 border border-border text-foreground hover:text-primary transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100"
+          aria-label="Scroll left"
+        >
+          <ChevronLeft size={18} />
+        </button>
+        <button
+          onClick={() => scrollBy(1)}
+          className="absolute right-2 top-1/2 -translate-y-1/2 z-10 w-10 h-10 flex items-center justify-center bg-background/80 border border-border text-foreground hover:text-primary transition-opacity opacity-100 md:opacity-0 md:group-hover:opacity-100"
+          aria-label="Scroll right"
+        >
+          <ChevronRight size={18} />
+        </button>
+
+        <div
+          ref={scrollRef}
+          className="flex gap-2 overflow-x-hidden"
+          style={{ scrollbarWidth: "none" }}
+        >
+          {loopImages.map((img, i) => (
             <button
-              key={`loop-${i}`}
-              ref={(el) => { if (i < images.length) triggerRefs.current[i] = el; }}
-              onClick={() => openLightbox(realIndex)}
-              className="flex-shrink-0 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 focus:ring-offset-background"
-              aria-label={`Open ${img.alt}`}
+              key={i}
+              onClick={(e) => {
+                lastFocusedRef.current = e.currentTarget;
+                setSelected(i % galleryImages.length);
+              }}
+              aria-label={`View image: ${img.alt}`}
+              className="shrink-0 border border-border overflow-hidden h-56 md:h-72 w-80 md:w-96 hover:border-primary/50 transition-colors"
             >
               <img
                 src={img.src}
                 alt={img.alt}
-                loading={i < 4 ? 'eager' : 'lazy'}
-                className="h-48 w-auto object-cover"
+                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                loading="lazy"
               />
             </button>
-          );
-        })}
+          ))}
+        </div>
       </div>
 
-      {/* Lightbox */}
       <AnimatePresence>
-        {lightboxIndex !== null && images[lightboxIndex] && (
+        {selected !== null && (
           <motion.div
             role="dialog"
             aria-modal="true"
             aria-label="Image viewer"
-            className="fixed inset-0 z-50 bg-black/90 flex items-center justify-center"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
-            onClick={closeLightbox}
+            className="fixed inset-0 z-[60] bg-background/95 flex items-center justify-center p-4"
+            onClick={closeSelected}
           >
-            <motion.div
-              className="relative max-w-4xl w-full mx-4"
-              onClick={(e) => e.stopPropagation()}
-              initial={{ scale: 0.95 }}
-              animate={{ scale: 1 }}
-              exit={{ scale: 0.95 }}
+            <button
+              ref={closeBtnRef}
+              className="absolute top-4 right-4 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:text-primary"
+              onClick={closeSelected}
+              aria-label="Close lightbox"
             >
-              <button
-                ref={closeButtonRef}
-                onClick={closeLightbox}
-                aria-label="Close image viewer"
-                className="absolute -top-12 right-0 w-11 h-11 flex items-center justify-center text-white hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-              >
-                <X size={24} />
-              </button>
+              <X size={24} />
+            </button>
 
-              <img
-                src={images[lightboxIndex].src}
-                alt={images[lightboxIndex].alt}
-                className="w-full h-auto max-h-[80vh] object-contain"
-              />
+            <button
+              className="absolute left-4 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:text-primary bg-background/60 border border-border"
+              onClick={(e) => { e.stopPropagation(); setSelected((s) => (s === null ? null : (s - 1 + galleryImages.length) % galleryImages.length)); }}
+              aria-label="Previous image"
+            >
+              <ChevronLeft size={24} />
+            </button>
 
-              <div className="absolute inset-y-0 left-0 flex items-center">
-                <button
-                  onClick={() => setLightboxIndex((i) => i !== null ? (i - 1 + images.length) % images.length : null)}
-                  aria-label="Previous image"
-                  className="w-11 h-11 flex items-center justify-center bg-black/50 text-white hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <ChevronLeft size={24} />
-                </button>
-              </div>
-              <div className="absolute inset-y-0 right-0 flex items-center">
-                <button
-                  onClick={() => setLightboxIndex((i) => i !== null ? (i + 1) % images.length : null)}
-                  aria-label="Next image"
-                  className="w-11 h-11 flex items-center justify-center bg-black/50 text-white hover:text-primary transition-colors focus:outline-none focus:ring-2 focus:ring-primary"
-                >
-                  <ChevronRight size={24} />
-                </button>
-              </div>
-            </motion.div>
+            <button
+              className="absolute right-4 top-1/2 -translate-y-1/2 min-w-[44px] min-h-[44px] flex items-center justify-center text-foreground hover:text-primary bg-background/60 border border-border"
+              onClick={(e) => { e.stopPropagation(); setSelected((s) => (s === null ? null : (s + 1) % galleryImages.length)); }}
+              aria-label="Next image"
+            >
+              <ChevronRight size={24} />
+            </button>
+
+            <motion.img
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              src={galleryImages[selected].src}
+              alt={galleryImages[selected].alt}
+              className="max-w-full max-h-[85vh] object-contain"
+              onClick={(e) => e.stopPropagation()}
+            />
           </motion.div>
         )}
       </AnimatePresence>
     </section>
   );
-}
+};
+
+export default GallerySection;

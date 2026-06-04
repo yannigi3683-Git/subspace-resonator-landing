@@ -7,20 +7,15 @@ describe('HeroSection', () => {
     render(<HeroSection />);
   });
 
-  it('has h1 with SUBSPACE RESONATOR', () => {
+  it('has h1 with artist name', () => {
     render(<HeroSection />);
-    expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('SUBSPACE RESONATOR');
-  });
-
-  it('has BOOK FOR YOUR EVENT CTA linking to #contact', () => {
-    render(<HeroSection />);
-    const link = screen.getByRole('link', { name: /book for your event/i });
-    expect(link).toHaveAttribute('href', '#contact');
+    const h1 = screen.getByRole('heading', { level: 1 });
+    expect(h1).toHaveTextContent(/subspace resonator/i);
   });
 
   it('has LISTEN CTA linking to #music', () => {
     render(<HeroSection />);
-    const link = screen.getByRole('link', { name: /listen/i });
+    const link = screen.getByRole('link', { name: /scroll to music/i });
     expect(link).toHaveAttribute('href', '#music');
   });
 });

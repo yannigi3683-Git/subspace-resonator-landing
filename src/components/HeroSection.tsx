@@ -1,49 +1,39 @@
-import bioWatermark from '../assets/bio-watermark.jpg';
+import bioWatermark from '@/assets/bio-watermark.jpg';
 import HeroVisualizer from './HeroVisualizer';
 
-export default function HeroSection() {
+const HeroSection = () => {
+  const handleScroll = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    e.preventDefault();
+    document.querySelector("#music")?.scrollIntoView({ behavior: "smooth" });
+  };
+
   return (
-    <section className="min-h-screen flex flex-col items-center justify-center pt-20 pb-12 px-4">
-      {/* Visualizer + logo */}
-      <div className="relative w-56 h-56 md:w-72 md:h-72">
-        <div className="absolute inset-0">
-          <HeroVisualizer />
-        </div>
-        <div className="absolute inset-0 flex items-center justify-center">
+    <section id="hero" className="flex items-center justify-center pt-14">
+      <div className="container flex flex-col items-center py-2 md:py-8 lg:py-12">
+        <div className="relative w-72 h-72 md:w-[420px] md:h-[420px]">
+          <HeroVisualizer bpm={140} className="absolute inset-0 w-full h-full" />
           <img
             src={bioWatermark}
-            alt="Subspace Resonator"
+            alt="Subspace Resonator logo"
+            className="relative w-full h-full object-contain logo-glitch-idle"
             loading="eager"
-            className="w-24 h-24 md:w-32 md:h-32 rounded-full object-cover border border-border"
           />
         </div>
-      </div>
-
-      {/* H1 */}
-      <h1 className="mt-6 text-xl md:text-2xl font-bold tracking-widest text-center uppercase font-display">
-        SUBSPACE RESONATOR
-      </h1>
-
-      {/* Tagline */}
-      <p className="mt-2 text-xs tracking-widest text-muted-foreground uppercase text-center">
-        Goa Trance · Psychedelic Trance · Tel Aviv
-      </p>
-
-      {/* CTAs */}
-      <div className="mt-8 flex gap-4 flex-wrap justify-center">
-        <a
-          href="#contact"
-          className="border border-primary text-primary text-xs tracking-widest uppercase px-6 min-h-[44px] inline-flex items-center hover:bg-primary hover:text-primary-foreground transition-colors"
-        >
-          BOOK FOR YOUR EVENT
-        </a>
+        <h1 className="sr-only">Subspace Resonator — Goa &amp; Psychedelic Trance</h1>
+        <p className="mt-8 text-xs tracking-[0.3em] text-muted-foreground uppercase text-center">
+          Goa Trance · Psychedelic Trance
+        </p>
         <a
           href="#music"
-          className="text-xs tracking-widest uppercase text-muted-foreground hover:text-primary transition-colors inline-flex items-center min-h-[44px] px-2"
+          onClick={handleScroll}
+          className="mt-6 text-[10px] tracking-[0.35em] text-primary uppercase border border-primary/40 px-6 py-2 hover:border-primary hover:bg-primary/5 transition-colors"
+          aria-label="Scroll to music player"
         >
-          LISTEN →
+          LISTEN ↓
         </a>
       </div>
     </section>
   );
-}
+};
+
+export default HeroSection;

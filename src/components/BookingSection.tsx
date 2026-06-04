@@ -1,92 +1,77 @@
-import { motion } from 'framer-motion';
-import liveAlpha from '../assets/live-alpha.jpg';
+import { motion } from "framer-motion";
+import liveAlpha from "@/assets/live-alpha.jpg";
 
-export default function BookingSection() {
+const BookingSection = () => {
   return (
-    <section id="contact" aria-label="Booking" className="py-20 border-t border-border">
+    <section id="contact" aria-label="Booking" className="pt-10 pb-4 md:pt-20 md:pb-8">
       <div className="container">
-        <p className="text-xs font-mono tracking-widest text-primary mb-12">// BOOKING — A DIRECT SIGNAL PATH</p>
+        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+          // BOOKING - A DIRECT SIGNAL PATH
+        </h2>
 
-        <div className="grid lg:grid-cols-2 gap-12 items-start">
-          {/* Left: live photo */}
-          <div className="hidden lg:block">
-            <img
-              src={liveAlpha}
-              alt="Subspace Resonator live performance"
-              className="w-full aspect-[4/3] object-cover border border-border"
-            />
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+          {/* Image with scanlines */}
+          <div className="scanline-overlay section-border overflow-hidden">
+            <div className="overflow-hidden h-64 lg:h-full" style={{ margin: "-8px", padding: "8px" }}>
+              <img
+                src={liveAlpha}
+                alt="Subspace Resonator performing live"
+                className="w-full h-full object-cover scale-110"
+                style={{ objectPosition: "50% 30%" }}
+                loading="lazy"
+              />
+            </div>
           </div>
 
-          {/* Right: copy + buttons */}
-          <div>
-            <p className="text-base text-muted-foreground mb-8">
-              Available for festivals, club nights, and private events. Full live set or DJ set, 60 to 180 minutes.
-              Technical rider on request. Direct booking — no agency fees. Based in Tel Aviv, touring internationally.
+          {/* Copy */}
+          <div className="section-border p-6 md:p-10 flex flex-col justify-center">
+            <p className="text-sm leading-relaxed text-foreground mb-6">
+              Subspace Resonator operates on a Direct-contact model, ensuring creative alignment and access to exclusive music available nowhere else.
             </p>
 
-            {/* Live dates */}
-            <div className="mb-6 pb-6 border-b border-border">
-              <p className="text-xs tracking-widest text-muted-foreground uppercase mb-3">// LIVE DATES</p>
-              <p className="text-sm text-muted-foreground mb-3">
-                Upcoming shows and festival dates posted on Instagram and Facebook.
-              </p>
-              <div className="flex gap-4">
-                <a
-                  href="https://www.instagram.com/subspace_resonator"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs tracking-widest uppercase text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-1.5 min-h-[44px]"
-                >
-                  ↗ INSTAGRAM
-                </a>
-                <a
-                  href="https://facebook.com/profile.php?id=61559198105695"
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-xs tracking-widest uppercase text-primary hover:text-primary/80 transition-colors inline-flex items-center gap-1.5 min-h-[44px]"
-                >
-                  ↗ FACEBOOK
-                </a>
-              </div>
-            </div>
-
-            {/* Contact buttons */}
-            <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+            <div className="flex flex-col sm:flex-row gap-3">
               <motion.a
                 href="mailto:subspaceresonator@gmail.com"
-                aria-label="Initiate Contact"
-                className="border border-primary text-primary text-xs tracking-widest uppercase px-6 min-h-[44px] inline-flex items-center hover:bg-primary hover:text-primary-foreground transition-colors"
-                whileHover={{ boxShadow: '0 0 20px hsl(var(--primary) / 0.4)' }}
+                className="inline-flex items-center justify-center border border-primary text-primary text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-fit"
+                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.4)" }}
               >
                 INITIATE CONTACT
               </motion.a>
+
               <motion.a
                 href="tel:+972507974184"
-                aria-label="Fast Channel · Call"
-                className="border border-border text-muted-foreground text-xs tracking-widest uppercase px-6 min-h-[44px] inline-flex items-center hover:border-primary hover:text-primary transition-colors"
-                whileHover={{ boxShadow: '0 0 20px hsl(var(--primary) / 0.4)' }}
+                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
+                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
               >
                 FAST CHANNEL · CALL
               </motion.a>
+
               <motion.a
                 href="https://wa.me/972507974184"
                 target="_blank"
                 rel="noopener noreferrer"
-                aria-label="WhatsApp · Chat"
-                className="border border-border text-muted-foreground text-xs tracking-widest uppercase px-6 min-h-[44px] inline-flex items-center hover:border-primary hover:text-primary transition-colors"
-                whileHover={{ boxShadow: '0 0 20px hsl(var(--primary) / 0.4)' }}
+                className="inline-flex items-center justify-center border border-border text-foreground text-xs tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-fit"
+                whileHover={{ boxShadow: "0 0 20px hsl(210 100% 50% / 0.25)" }}
               >
                 WHATSAPP · CHAT
               </motion.a>
             </div>
 
-            <div className="mt-4 flex gap-6 text-xs text-muted-foreground">
-              <span>subspaceresonator@gmail.com</span>
-              <span>+972507974184</span>
+            <div className="mt-4 space-y-1">
+              <p className="text-sm text-muted-foreground tracking-wider">
+                subspaceresonator@gmail.com
+              </p>
+              <p className="text-sm text-muted-foreground tracking-wider">
+                <a href="tel:+972507974184" className="hover:text-primary transition-colors">
+                  +972-50-7974184
+                </a>
+              </p>
             </div>
           </div>
         </div>
       </div>
     </section>
   );
-}
+};
+
+export default BookingSection;

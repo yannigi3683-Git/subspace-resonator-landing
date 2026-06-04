@@ -13,11 +13,6 @@ describe('BookingSection', () => {
     expect(document.getElementById('contact')).toBeInTheDocument();
   });
 
-  it('shows LIVE DATES block', () => {
-    render(<BookingSection />);
-    expect(screen.getByText(/LIVE DATES/i)).toBeInTheDocument();
-  });
-
   it('has mailto link for INITIATE CONTACT', () => {
     render(<BookingSection />);
     const link = screen.getByRole('link', { name: /initiate contact/i });

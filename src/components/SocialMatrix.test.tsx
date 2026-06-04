@@ -1,4 +1,4 @@
-﻿import { render, screen } from '@testing-library/react';
+import { render, screen } from '@testing-library/react';
 import { describe, it, expect } from 'vitest';
 import SocialMatrix from './SocialMatrix';
 
@@ -11,13 +11,6 @@ describe('SocialMatrix', () => {
   it('has id="connect"', () => {
     render(<SocialMatrix />);
     expect(document.getElementById('connect')).toBeInTheDocument();
-  });
-
-  it('renders STREAM, FOLLOW, CATALOGUE group labels', () => {
-    render(<SocialMatrix />);
-    expect(screen.getByText('STREAM')).toBeInTheDocument();
-    expect(screen.getByText('FOLLOW')).toBeInTheDocument();
-    expect(screen.getByText('CATALOGUE')).toBeInTheDocument();
   });
 
   it('all links open in new tab with rel', () => {

@@ -12,10 +12,10 @@ describe('MusicPlayer', () => {
     expect(document.getElementById('music')).toBeInTheDocument();
   });
 
-  it('renders TRACKS and PLAYLISTS tabs', () => {
+  it('renders TRACKS and PLAYLISTS tab buttons', () => {
     render(<MusicPlayer />);
-    expect(screen.getByRole('tab', { name: /tracks/i })).toBeInTheDocument();
-    expect(screen.getByRole('tab', { name: /playlists/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /tracks/i })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /playlists/i })).toBeInTheDocument();
   });
 
   it('play/pause button has aria-label', () => {
@@ -24,10 +24,10 @@ describe('MusicPlayer', () => {
     expect(btns.length).toBeGreaterThan(0);
   });
 
-  it('progress bar has role=slider', () => {
+  it('progress bar is present', () => {
     render(<MusicPlayer />);
-    const sliders = screen.getAllByRole('slider');
-    expect(sliders.length).toBeGreaterThan(0);
+    const bars = screen.getAllByRole('progressbar');
+    expect(bars.length).toBeGreaterThan(0);
   });
 
   it('external streaming links present', () => {

@@ -1,49 +1,48 @@
-import { motion } from 'framer-motion';
-import geoImg from '../assets/label-geomagnetic-official.png';
-import timewarpImg from '../assets/label-timewarp-official.png';
-import goaImg from '../assets/label-goa-records-official.png';
-import spiralImg from '../assets/label-spiral-trax-official.png';
+import { motion } from "framer-motion";
+import labelGeomagnetic from "@/assets/label-geomagnetic-official.png";
+import labelTimewarp from "@/assets/label-timewarp-official.png";
+import labelGoaRecords from "@/assets/label-goa-records-official.png";
+import labelSpiralTrax from "@/assets/label-spiral-trax-official.png";
 
 const labels = [
-  { name: 'Geomagnetic', url: 'https://geodistro.bandcamp.com/',       releases: 3, years: '2001–2024', img: geoImg     },
-  { name: 'Timewarp',    url: 'https://timewarprecords.bandcamp.com/', releases: 2, years: '2003–2006', img: timewarpImg },
-  { name: 'Goa Records', url: 'https://goarecords.bandcamp.com/',      releases: 1, years: '2023',      img: goaImg      },
-  { name: 'Spiral Trax', url: 'https://spiraltrax.bandcamp.com/',      releases: 2, years: '1999–2002', img: spiralImg   },
+  { name: "Geomagnetic", url: "https://geodistro.bandcamp.com/", logo: labelGeomagnetic },
+  { name: "Timewarp", url: "https://timewarprecords.bandcamp.com/", logo: labelTimewarp },
+  { name: "Goa Records", url: "https://goarecords.bandcamp.com/", logo: labelGoaRecords },
+  { name: "Spiral Trax", url: "https://spiraltrax.bandcamp.com/", logo: labelSpiralTrax },
 ];
 
-export default function LabelPedigree() {
+const LabelPedigree = () => {
   return (
-    <section id="labels" aria-label="Labels" className="py-20 border-t border-border">
+    <section id="labels" aria-label="Labels" className="py-10 md:py-16 border-t border-border">
       <div className="container">
-        <p className="text-xs font-mono tracking-widest text-primary mb-1">// RESONANCE NETWORK</p>
-        <p className="text-xs tracking-widest text-muted-foreground uppercase mb-12">RELEASED ON</p>
-
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-          {labels.map((label) => (
+        <h2 className="text-xs tracking-[0.3em] text-primary mb-8 uppercase">
+          // RESONANCE NETWORK
+        </h2>
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 md:gap-6">
+          {labels.map((label, i) => (
             <motion.a
-              key={label.name}
+              key={i}
               href={label.url}
               target="_blank"
               rel="noopener noreferrer"
-              aria-label={`${label.name} Records on Bandcamp`}
-              className="flex flex-col items-center gap-4 p-6 border border-border hover:border-primary transition-colors"
+              className="group flex items-center justify-center border border-border p-2 md:p-3 hover:border-primary transition-all duration-300 aspect-square hover:shadow-[0_0_24px_hsl(var(--primary)/0.5),inset_0_0_24px_hsl(var(--primary)/0.15)]"
+              style={{ background: "hsl(0,0%,3%)" }}
               whileHover={{ y: -2 }}
             >
               <img
-                src={label.img}
+                src={label.logo}
                 alt={label.name}
-                width={120}
-                height={120}
-                className="object-contain aspect-square"
+                width={1024}
+                height={1024}
+                className="w-full h-full object-contain opacity-95 group-hover:opacity-100 transition-opacity duration-300"
+                loading="lazy"
               />
-              <div className="text-center">
-                <p className="text-xs tracking-widest uppercase font-display font-medium">{label.name}</p>
-                <p className="text-xs text-muted-foreground mt-1">{label.releases} releases · {label.years}</p>
-              </div>
             </motion.a>
           ))}
         </div>
       </div>
     </section>
   );
-}
+};
+
+export default LabelPedigree;

@@ -7,29 +7,38 @@ import BioSection from './components/BioSection';
 import BookingSection from './components/BookingSection';
 import GallerySection from './components/GallerySection';
 import SocialMatrix from './components/SocialMatrix';
-import Footer from './components/Footer';
+import liveAlpha from './assets/live-alpha.jpg';
+import AccessibilityMenu from './components/AccessibilityMenu';
 
 export default function App() {
   return (
     <HelmetProvider>
       <Helmet>
         <title>Subspace Resonator | Goa &amp; Psychedelic Trance</title>
-        <meta name="description" content="Subspace Resonator — Goa & psychedelic trance. Stream music, hear the labels, book direct. Based in Tel Aviv, touring internationally." />
+        <meta name="description" content="Subspace Resonator — Goa &amp; Psychedelic Trance producer. Stream releases on SoundCloud, Spotify &amp; Bandcamp. Direct booking available." />
         <link rel="canonical" href="https://subspaceresonator.com/" />
-        <meta property="og:title" content="Subspace Resonator | Goa & Psychedelic Trance" />
-        <meta property="og:description" content="Stream music, see live dates, book direct." />
+        <meta name="keywords" content="Subspace Resonator, Goa Trance, Psychedelic Trance, Goa Records, Timewarp, Geomagnetic, Spiral Trax, psytrance DJ, psytrance live act" />
+        <meta property="og:title" content="Subspace Resonator | Goa &amp; Psychedelic Trance" />
+        <meta property="og:description" content="Goa &amp; Psychedelic Trance producer. Stream releases, view the visual archive, book direct." />
         <meta property="og:url" content="https://subspaceresonator.com/" />
-        <meta property="og:type" content="website" />
+        <meta property="og:type" content="music.musician" />
         <meta property="og:image" content="https://subspaceresonator.com/og-image.jpg" />
+        <meta property="og:image:width" content="1200" />
+        <meta property="og:image:height" content="630" />
         <meta name="twitter:card" content="summary_large_image" />
-        <meta name="theme-color" content="#0E0E10" />
-        <script type="application/ld+json">{JSON.stringify({
+        <meta name="twitter:title" content="Subspace Resonator | Goa &amp; Psychedelic Trance" />
+        <meta name="twitter:description" content="Goa &amp; Psychedelic Trance producer. Stream releases, book direct." />
+        <meta name="twitter:image" content="https://subspaceresonator.com/og-image.jpg" />
+        <meta name="theme-color" content="#030303" />
+<script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',
           '@type': 'MusicGroup',
           'name': 'Subspace Resonator',
           'genre': ['Goa Trance', 'Psychedelic Trance'],
           'foundingDate': '1998',
           'url': 'https://subspaceresonator.com/',
+          'image': 'https://subspaceresonator.com/og-image.jpg',
+          'description': 'Goa & Psychedelic Trance producer active since 1998. Releases on Geomagnetic, Goa Records, Timewarp and Spiral Trax.',
           'sameAs': [
             'https://soundcloud.com/subspaceresonance',
             'https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk',
@@ -46,18 +55,50 @@ export default function App() {
         })}</script>
       </Helmet>
 
-      <div className="min-h-screen bg-background pb-32 md:pb-24">
-        <SiteHeader />
-        <main>
-          <HeroSection />
-          <MusicPlayer />
-          <LabelPedigree />
-          <BioSection />
-          <BookingSection />
-          <GallerySection />
-          <SocialMatrix />
-        </main>
-        <Footer />
+      <div className="min-h-screen pb-40 md:pb-20 relative">
+        {/* Full-page background: single composited layer (image + overlay merged via ::before avoids double GPU layer) */}
+        <div
+          className="fixed inset-0 z-0 bg-cover bg-center bg-no-repeat"
+          style={{
+            backgroundImage: `url(${liveAlpha})`,
+            willChange: "transform",
+          }}
+        >
+          <div className="absolute inset-0 bg-background/85" />
+        </div>
+
+        <a href="#main-content" className="skip-link">Skip to main content</a>
+        <AccessibilityMenu />
+        <div className="relative z-10">
+          <SiteHeader />
+          <main id="main-content">
+            <HeroSection />
+            <MusicPlayer />
+            <LabelPedigree />
+            <BioSection />
+            <BookingSection />
+            <GallerySection />
+            <SocialMatrix />
+          </main>
+
+          <footer className="border-t border-border py-8">
+            <div className="container text-center">
+              <p className="text-[12px] text-muted-foreground tracking-[0.3em]">
+                © 2026 SUBSPACE RESONATOR — ALL FREQUENCIES RESERVED
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-2">
+                BOOKING:{' '}
+                <a href="mailto:subspaceresonator@gmail.com" className="hover:text-primary transition-colors">
+                  subspaceresonator@gmail.com
+                </a>{' '}
+                ·{' '}
+                <a href="tel:+972507974184" className="hover:text-primary transition-colors">
+                  +972-50-7974184
+                </a>
+              </p>
+            </div>
+          </footer>
+        </div>
       </div>
     </HelmetProvider>
   );

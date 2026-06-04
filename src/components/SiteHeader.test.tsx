@@ -14,13 +14,8 @@ describe('SiteHeader', () => {
     expect(screen.getByRole('link', { name: /LABELS/i })).toHaveAttribute('href', '#labels');
     expect(screen.getByRole('link', { name: /BIO/i })).toHaveAttribute('href', '#bio');
     expect(screen.getByRole('link', { name: /ARCHIVE/i })).toHaveAttribute('href', '#gallery');
-    expect(screen.getByRole('link', { name: /SOCIAL/i })).toHaveAttribute('href', '#connect');
-  });
-
-  it('has BOOK button linking to #contact', () => {
-    render(<SiteHeader />);
-    const bookLink = screen.getByRole('link', { name: /BOOK/i });
-    expect(bookLink).toHaveAttribute('href', '#contact');
+    expect(screen.getByRole('link', { name: /CONNECT/i })).toHaveAttribute('href', '#connect');
+    expect(screen.getByRole('link', { name: /BOOKING/i })).toHaveAttribute('href', '#contact');
   });
 
   it('hamburger button has aria-expanded', () => {

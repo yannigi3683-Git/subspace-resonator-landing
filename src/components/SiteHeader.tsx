@@ -1,88 +1,95 @@
-import { useState, useCallback } from 'react';
-import { AnimatePresence, motion } from 'framer-motion';
-import { Menu, X } from 'lucide-react';
-import bioWatermark from '../assets/bio-watermark.jpg';
+import { useState } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import { Menu, X } from "lucide-react";
+import heroLogo from "@/assets/bio-watermark.jpg";
 
 const navItems = [
-  { label: 'MUSIC',   href: '#music'   },
-  { label: 'LABELS',  href: '#labels'  },
-  { label: 'BIO',     href: '#bio'     },
-  { label: 'ARCHIVE', href: '#gallery' },
-  { label: 'SOCIAL',  href: '#connect' },
+  { label: "MUSIC",   href: "#music" },
+  { label: "LABELS",  href: "#labels" },
+  { label: "BIO",     href: "#bio" },
+  { label: "BOOKING", href: "#contact" },
+  { label: "ARCHIVE", href: "#gallery" },
+  { label: "CONNECT", href: "#connect" },
 ];
 
-export default function SiteHeader() {
-  const [open, setOpen] = useState(false);
-  const toggle = useCallback(() => setOpen((v) => !v), []);
+const SiteHeader = () => {
+  const [menuOpen, setMenuOpen] = useState(false);
+
+  const handleNav = (e: React.MouseEvent<HTMLAnchorElement>, href: string) => {
+    e.preventDefault();
+    setMenuOpen(false);
+    const el = document.querySelector(href);
+    el?.scrollIntoView({ behavior: "smooth" });
+  };
 
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 glass-header">
-      <div className="container flex items-center justify-between h-14">
-        <a href="#" aria-label="Subspace Resonator — home">
-          <img src={bioWatermark} alt="Subspace Resonator logo" className="h-8 w-8 rounded-full object-cover" />
+    <header className="glass-header fixed top-0 left-0 right-0 z-50">
+      <div className="container flex items-center h-14 gap-2">
+        <a
+          href="#hero"
+          onClick={(e) => handleNav(e, "#hero")}
+          aria-label="Subspace Resonator — back to top"
+          className="min-h-[44px] flex items-center shrink-0"
+        >
+          <img src={heroLogo} alt="" aria-hidden="true" className="h-8 w-8 object-contain" />
         </a>
 
+        <div className="flex-1" />
+
         {/* Desktop nav */}
-        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-1">
+        <nav aria-label="Main navigation" className="hidden md:flex items-center gap-0">
           {navItems.map((item) => (
-            <a key={item.href} href={item.href} className="nav-link">
+            <a
+              key={item.href}
+              href={item.href}
+              onClick={(e) => handleNav(e, item.href)}
+              className="nav-link"
+            >
               {item.label}
             </a>
           ))}
-          <a
-            href="#contact"
-            className="ml-4 px-4 min-h-[44px] flex items-center border border-primary text-primary text-xs tracking-widest uppercase hover:bg-primary hover:text-primary-foreground transition-colors"
-          >
-            BOOK
-          </a>
         </nav>
 
         {/* Mobile hamburger */}
         <button
-          className="md:hidden p-2 min-h-[44px] min-w-[44px] flex items-center justify-center text-muted-foreground hover:text-primary"
-          aria-label={open ? 'Close menu' : 'Open menu'}
-          aria-expanded={open}
-          aria-controls="mobile-menu"
-          onClick={toggle}
+          className="md:hidden min-h-[44px] min-w-[44px] flex items-center justify-center text-foreground"
+          onClick={() => setMenuOpen(!menuOpen)}
+          aria-label="Toggle navigation menu"
+          aria-expanded={menuOpen}
+          aria-controls="mobile-nav"
         >
-          {open ? <X size={20} /> : <Menu size={20} />}
+          {menuOpen ? <X size={20} /> : <Menu size={20} />}
         </button>
       </div>
 
       {/* Mobile menu */}
       <AnimatePresence>
-        {open && (
+        {menuOpen && (
           <motion.nav
-            id="mobile-menu"
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden md:hidden border-t border-border"
+            id="mobile-nav"
             aria-label="Mobile navigation"
+            initial={{ height: 0, opacity: 0 }}
+            animate={{ height: "auto", opacity: 1 }}
+            exit={{ height: 0, opacity: 0 }}
+            transition={{ duration: 0.2, ease: "easeOut" }}
+            className="md:hidden overflow-hidden border-t border-border"
+            style={{ background: "hsla(0,0%,1%,0.95)" }}
           >
-            <div className="container py-2 flex flex-col">
-              {navItems.map((item) => (
-                <a
-                  key={item.href}
-                  href={item.href}
-                  className="nav-link py-3"
-                  onClick={() => setOpen(false)}
-                >
-                  {item.label}
-                </a>
-              ))}
+            {navItems.map((item) => (
               <a
-                href="#contact"
-                className="mt-2 mb-3 px-4 min-h-[44px] flex items-center border border-primary text-primary text-xs tracking-widest uppercase"
-                onClick={() => setOpen(false)}
+                key={item.href}
+                href={item.href}
+                onClick={(e) => handleNav(e, item.href)}
+                className="nav-link w-full text-left px-6"
               >
-                BOOK
+                {item.label}
               </a>
-            </div>
+            ))}
           </motion.nav>
         )}
       </AnimatePresence>
     </header>
   );
-}
+};
+
+export default SiteHeader;

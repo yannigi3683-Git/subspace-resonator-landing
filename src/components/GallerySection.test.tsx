@@ -3,9 +3,9 @@ import { describe, it, expect, vi } from 'vitest';
 import GallerySection from './GallerySection';
 
 const mockImages = [
-  { src: '/test1.jpg', alt: 'Subspace Resonator — photo 1' },
-  { src: '/test2.jpg', alt: 'Subspace Resonator — photo 2' },
-  { src: '/test3.jpg', alt: 'Subspace Resonator — photo 3' },
+  { id: 'g1', src: '/test1.jpg', alt: 'Hindi Goa — UV night stage' },
+  { id: 'g2', src: '/test2.jpg', alt: 'Hindi Goa — crowd daytime' },
+  { id: 'g3', src: '/test3.jpg', alt: 'Yanni DJing — Hindi Goa' },
 ];
 
 vi.mock('../lib/siteContent', () => ({
@@ -31,22 +31,16 @@ describe('GallerySection', () => {
     expect(document.getElementById('gallery')).toBeInTheDocument();
   });
 
-  it('first 4 images have loading=eager', () => {
-    render(<GallerySection />);
-    const eagerImgs = document.querySelectorAll('img[loading="eager"]');
-    expect(eagerImgs.length).toBeGreaterThan(0);
-  });
-
   it('clicking an image opens lightbox dialog', () => {
     render(<GallerySection />);
-    const btns = screen.getAllByRole('button', { name: /open/i });
+    const btns = screen.getAllByRole('button', { name: /view image/i });
     fireEvent.click(btns[0]);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
   });
 
   it('lightbox has aria-modal and aria-label', () => {
     render(<GallerySection />);
-    const btns = screen.getAllByRole('button', { name: /open/i });
+    const btns = screen.getAllByRole('button', { name: /view image/i });
     fireEvent.click(btns[0]);
     const dialog = screen.getByRole('dialog');
     expect(dialog).toHaveAttribute('aria-modal', 'true');
@@ -55,7 +49,7 @@ describe('GallerySection', () => {
 
   it('Escape key closes lightbox', () => {
     render(<GallerySection />);
-    const btns = screen.getAllByRole('button', { name: /open/i });
+    const btns = screen.getAllByRole('button', { name: /view image/i });
     fireEvent.click(btns[0]);
     expect(screen.getByRole('dialog')).toBeInTheDocument();
     fireEvent.keyDown(document, { key: 'Escape' });

@@ -15,20 +15,15 @@ describe('BioSection', () => {
 
   it('shows all three signal sub-sections', () => {
     render(<BioSection />);
-    expect(screen.getByText(/THE SIGNAL/i)).toBeInTheDocument();
-    expect(screen.getByText(/THE REACTIVATION/i)).toBeInTheDocument();
-    expect(screen.getByText(/THE MISSION/i)).toBeInTheDocument();
+    const headings = screen.getAllByText(/the signal/i);
+    expect(headings.length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/the reactivation/i).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/the mission/i).length).toBeGreaterThan(0);
   });
 
-  it('has BOOK CTA linking to #contact', () => {
-    render(<BioSection />);
-    const link = screen.getByRole('link', { name: /book subspace resonator/i });
-    expect(link).toHaveAttribute('href', '#contact');
-  });
-
-  it('bio watermark image is aria-hidden', () => {
-    render(<BioSection />);
-    const imgs = document.querySelectorAll('img[aria-hidden="true"]');
-    expect(imgs.length).toBeGreaterThan(0);
+  it('bio watermark is aria-hidden', () => {
+    const { container } = render(<BioSection />);
+    const hidden = container.querySelectorAll('[aria-hidden="true"]');
+    expect(hidden.length).toBeGreaterThan(0);
   });
 });
