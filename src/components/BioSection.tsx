@@ -17,14 +17,14 @@ const BioSection = () => {
         <div className="section-border p-6 md:p-10 max-w-3xl">
           <p className="text-xs tracking-[0.2em] text-primary mb-3 uppercase">The Signal</p>
           <p className="text-sm leading-relaxed text-foreground mb-4">
-            Emerging from the late '90s Goa Trance movement, I operated when the underground was a guarded frequency — no stage names, no digital footprints. If you knew the coordinates, you were part of the resonance.
+            Emerging from the late '90s Goa Trance movement, I operated when the underground was a guarded frequency. No stage names, no digital footprints. If you knew the coordinates, you were part of the resonance.
           </p>
           <p className="text-sm leading-relaxed text-foreground mb-6">
-            Israel, 1998. outdoor underground gatherings in the Judean hills, the Galilee, and the Negev desert. That's the signal I carry.
+            Israel, 1998. Outdoor underground gatherings in the Judean hills, the Galilee, and the Negev desert. That's the signal I carry.
           </p>
           <p className="text-xs tracking-[0.2em] text-primary mb-3 uppercase">The Reactivation</p>
           <p className="text-sm leading-relaxed text-foreground mb-6">
-            Back after 2 decades off the radar — driving basslines, cosmic synths, and hypnotic rhythms engineered for pure dancefloor ignition. Transmissions that blend Goa-inspired grooves with multidimensional textures and alien frequencies. Sharp production, zero compromise on authenticity.
+            Back after 2 decades off the radar. Goa-inspired grooves, multidimensional textures, alien frequencies. Sharp production, engineered for the underground, not the algorithm.
           </p>
           <p className="text-xs tracking-[0.2em] text-primary mb-3 uppercase">The Mission</p>
           <p className="text-sm leading-relaxed text-foreground">
