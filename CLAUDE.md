@@ -1,0 +1,230 @@
+# Subspace Resonator — Landing Page
+
+Artist landing page for **Subspace Resonator** (Goa / Psychedelic Trance producer).
+Production URL: https://subspaceresonator.com/
+GitHub: https://github.com/yannigi3683-Git/subspace-resonator-landing
+
+---
+
+## Tech Stack
+
+- **React 18** + **TypeScript** + **Vite 5**
+- **Tailwind CSS v3** (not v4)
+- **Framer Motion** — animations and hover effects
+- **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
+- **lucide-react** — icons (never use emoji as icons)
+- **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
+- **Test runner:** Vitest — 15 test files, 57 tests, all must pass before publishing
+
+---
+
+## Commands
+
+```
+npm run dev       # dev server at localhost:5173
+npm run build     # tsc -b && vite build  (TypeScript + bundle)
+npm run test      # vitest (57 tests)
+npm run lint      # eslint
+npm run preview   # preview production build
+```
+
+Always run `npm run build` and `npm test` before pushing. Both must exit clean.
+
+---
+
+## Page Structure
+
+`src/App.tsx` assembles sections in this order:
+
+```
+<SiteHeader />       fixed nav, scroll-spy active state
+<HeroSection />      hero with logo + visualizer
+<MusicPlayer />      SoundCloud iframe player (see below)
+<LabelPedigree />    label logos: Goa Records, Timewarp, Geomagnetic, Spiral Trax
+<BioSection />       artist bio (3 blocks: Signal, Reactivation, Mission)
+<BookingSection />   contact / booking CTAs
+<GallerySection />   photo archive, rAF auto-scroll + lightbox
+<SocialMatrix />     all platform links
+<Footer />
+<AccessibilityMenu />  floating accessibility controls
+```
+
+---
+
+## Component Map
+
+| File | Responsibility |
+|------|---------------|
+| `src/App.tsx` | Root layout + all Helmet SEO tags + both JSON-LD blocks |
+| `src/components/SiteHeader.tsx` | Fixed header, IntersectionObserver scroll-spy nav |
+| `src/components/HeroSection.tsx` | Hero with HeroVisualizer |
+| `src/components/HeroVisualizer.tsx` | Canvas-based visualizer |
+| `src/components/MusicPlayer/MusicPlayer.tsx` | Full music player (desktop rack + mobile bar) |
+| `src/components/MusicPlayer/SpectrumAnalyzer.tsx` | Spectrum bars (desktop only) |
+| `src/components/MusicPlayer/FloodlightSet.tsx` | VU-meter floodlights (desktop only) |
+| `src/components/MusicPlayer/Knob.tsx` | Volume knob (role=slider, keyboard/wheel/drag) |
+| `src/components/LabelPedigree.tsx` | Label logo grid |
+| `src/components/BioSection.tsx` | Bio (watermark bg) |
+| `src/components/BookingSection.tsx` | Booking image + 3 CTAs |
+| `src/components/GallerySection.tsx` | Gallery, lightbox |
+| `src/components/SocialMatrix.tsx` | Social links grid |
+| `src/components/Footer.tsx` | Footer |
+| `src/components/AccessibilityMenu.tsx` | A11y floating panel |
+| `src/components/LatestRelease.tsx` | Latest release highlight |
+
+Each component has a matching `.test.tsx` file in the same folder.
+
+---
+
+## Music Player Details
+
+Two SoundCloud iframes — tracks iframe (always mounted) and playlist iframe (lazy-mounted on first PLAYLISTS tab click via `playlistMounted` state).
+
+**Track filter** — these tracks are deliberately excluded from the track list by regex in `initWidget()`:
+- `/return to goa/i`
+- `/old school night/i`
+- `/al\s*titosh|sukkot\s*2024/i`
+
+**Playlists defined:**
+- 1998-2025 playlist
+- DJ SETS playlist
+- GEOMAGNETIC label playlist
+
+Mobile bar buttons: all `w-11 h-11` (44px, meets touch-target minimum). Desktop uses `min-w-[34-48px]` range.
+
+---
+
+## Artist Identity
+
+- **Artist name:** Subspace Resonator
+- **Real name:** Yanni
+- **Genre:** Goa Trance, Psychedelic Trance
+- **Active since:** 1998 (Israeli underground scene)
+- **Booking email:** subspaceresonator@gmail.com
+- **Production email / contact:** yannigi3683@gmail.com
+
+**Voice rules for copy:**
+- No em dashes (—) in any user-visible text. Use periods, commas, or hyphens. Em dashes read as AI-generated.
+- Copy is terse, technical, underground — not mainstream-friendly or algorithm-chasing.
+
+---
+
+## Confirmed Discography
+
+All structured data must match this list exactly. Do not add unreleased tracks.
+
+**Solo releases:**
+| Title | Type | Label | Date |
+|-------|------|-------|------|
+| The Subspace Theory | EP (4 tracks) | Independent | 2025-12-26 |
+| Galaxy 604 | Single | Goa Records | 2025 |
+| Nightmare In Heaven | Single | Timewarp Records | 2025-10-31 |
+
+**Compilation appearances:**
+| Compilation | Label | Track | Date |
+|-------------|-------|-------|------|
+| The Call Of Goa, Vol. 5 | Timewarp Records | Subspace Disturbance | 2026 |
+| Psychedelic Goa Trance 2026 100 Aliens | Fresh Frequencies | Galaxy 604 | 2026-01-09 |
+| Psy Trance 2026 Space DJ | Fresh Frequencies | Galaxy 604 | 2026 |
+
+**Unreleased (debut album in production) — DO NOT add to structured data:**
+- Defying Gravity
+- Quantum Mechanics
+- Interstellar Future
+
+---
+
+## Social URLs (exact — verify before editing)
+
+| Platform | URL |
+|----------|-----|
+| SoundCloud | https://soundcloud.com/subspaceresonance |
+| Bandcamp | https://yannig.bandcamp.com/ |
+| Spotify | https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk |
+| Beatport | https://www.beatport.com/artist/subspace-resonator/1354950 |
+| YouTube | https://www.youtube.com/@SubspaceResonator |
+| Facebook | https://www.facebook.com/profile.php?id=61559198105695 |
+| Instagram | https://www.instagram.com/subspace_resonator |
+| TikTok | https://www.tiktok.com/@subspace.resonato (note: no trailing 'r') |
+| Discogs | https://www.discogs.com/artist/15101171-Subspace-Resonator |
+| Linktree | https://linktr.ee/yanni_subspace_resonator |
+| Live Events | https://soundcloudevents.velvetcake.live/ |
+
+---
+
+## SEO
+
+### Meta tags (in App.tsx Helmet)
+All standard OG, Twitter Card, og:locale, og:site_name, og:image:alt, og:image:secure_url, og:image:secure_url, robots:index,follow.
+
+### JSON-LD — Block 1: MusicGroup
+Entity IRI (critical — used for cross-block linking): `https://subspaceresonator.com/#artist`
+
+All `byArtist` fields in the releases block use `{ "@id": "https://subspaceresonator.com/#artist" }` to link back to this entity. Do not inline the artist name in byArtist — always use the `@id` reference.
+
+### JSON-LD — Block 2: Releases @graph
+Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` type — The Subspace Theory EP uses `StudioAlbum` (closest available). Compilation appearances use `byArtist` on the `track` (MusicRecording), not on the album.
+
+### Known JSON-LD limitations (intentional)
+- **Galaxy 604** has no `url` field — the Spotify track URL was removed because it's a track URL, not a release URL. A Spotify album URL was not available. Restore when confirmed.
+- **`logo` field removed** from MusicGroup — og-image.jpg is 1200x630 landscape. Google Knowledge Panel requires near-square. Do not add back until a square logo asset exists.
+
+### Static fallback (index.html)
+`index.html` has a static title, description, and apple-touch-icon for non-JS crawlers (Twitterbot, LinkedIn, Slack). The `apple-touch-icon` currently points to og-image.jpg (landscape, acceptable as stopgap).
+
+### After each deploy
+1. Update `public/sitemap.xml` `lastmod` to the deploy date.
+2. Submit sitemap to Google Search Console: https://search.google.com/search-console
+3. Run Google Rich Results Test on the live URL.
+
+---
+
+## Assets
+
+| File | Notes |
+|------|-------|
+| `public/og-image.jpg` | 1200x630, used for OG and as apple-touch-icon fallback |
+| `public/favicon.svg` | SVG favicon |
+| `public/robots.txt` | Allow all, sitemap pointer |
+| `public/sitemap.xml` | Single-page sitemap, update lastmod after each deploy |
+| `src/assets/bio-watermark.jpg` | Watermark overlay in BioSection + nav logo |
+| `src/assets/live-alpha.jpg` | Live performance photo in BookingSection |
+| `src/assets/art-subspace-theory.jpg` | EP artwork, used as MusicPlayer art fallback |
+| `src/assets/label-*.png` | Official label logos (Goa Records, Timewarp, Geomagnetic, Spiral Trax) |
+| `src/assets/gallery-01..23.jpg` | Gallery photos (23 images, all JPG) |
+
+---
+
+## Coding Conventions
+
+- **No comments** unless the WHY is non-obvious. Never comment WHAT the code does.
+- **No abstractions beyond task scope.** Fix the bug, don't refactor the file.
+- **Tailwind for layout/spacing/color.** Inline styles only for dynamic values (e.g., computed positions, CSS variables via `hsl(var(--primary))`).
+- **Framer Motion** for meaningful transitions. No decorative-only animation. `transform`/`opacity` only — never animate `width`, `height`, `box-shadow` directly (use `filter: drop-shadow()` instead).
+- **touch-action: manipulation** is already set globally on buttons, anchors, sliders in `index.css`.
+- **Minimum touch target:** 44px (`w-11 h-11` or `min-h-[44px]`). Never go below this on interactive elements.
+- **Text floor:** 10px minimum in all UI. Never use `text-[7px]` or `text-[8px]` in production UI.
+- **`section-border`** is the project's standard bordered box class (defined in index.css).
+- **`glass-header`** is the fixed nav backdrop class.
+- TypeScript strict mode. No `any` unless wrapping a third-party API (SoundCloud SC widget).
+
+---
+
+## Known Future Tasks (not yet built)
+
+- **Dedicated apple-touch-icon.png** — 180x180 square PNG from the logo asset. Currently og-image.jpg is used (landscape, acceptable stopgap).
+- **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
+- **Debut album JSON-LD** — add structured data once the album is released.
+- **WebP image conversion (L1)** — convert gallery + asset JPGs to WebP for performance. Deferred as a separate build-tooling sprint.
+- **Transmission Log component** — a terminal-style discography table (`// TRANSMISSION LOG` or `// MUSIC ARCHIVE`). Plan exists at `docs/superpowers/plans/sunny-prancing-sunset.md` (Items 4 and 5: Bio Expansion + Transmission Log).
+
+---
+
+## Docs
+
+- `docs/superpowers/specs/` — design specs from brainstorming sessions
+- `docs/superpowers/plans/` — implementation plans
+
+Key specs on record:
+- `2026-06-04-seo-optimization-design.md` — full SEO sweep spec (implemented)
+- `2026-06-04-uxaudit-fixes-design.md` — 13-finding UX audit (implemented)
