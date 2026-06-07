@@ -38,7 +38,7 @@ const socials = [
   { icon: SpotifyIcon,    name: "Spotify",    url: "https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk" },
   { icon: BeatportIcon,   name: "Beatport",   url: "https://www.beatport.com/artist/subspace-resonator/1354950" },
   { icon: YouTubeIcon,    name: "YouTube",    url: "https://www.youtube.com/@SubspaceResonator" },
-  { icon: FacebookIcon,   name: "Facebook",   url: "https://facebook.com/profile.php?id=61559198105695" },
+  { icon: FacebookIcon,   name: "Facebook",   url: "https://www.facebook.com/profile.php?id=61559198105695" },
   { icon: InstagramIcon,  name: "Instagram",  url: "https://www.instagram.com/subspace_resonator" },
   { icon: TikTokIcon,     name: "TikTok",     url: "https://www.tiktok.com/@subspace.resonato" },
   { icon: DiscogsIcon,    name: "Discogs",    url: "https://www.discogs.com/artist/15101171-Subspace-Resonator" },

@@ -68,9 +68,8 @@ Always run `npm run build` and `npm test` before pushing. Both must exit clean.
 | `src/components/BookingSection.tsx` | Booking image + 3 CTAs |
 | `src/components/GallerySection.tsx` | Gallery, lightbox |
 | `src/components/SocialMatrix.tsx` | Social links grid |
-| `src/components/Footer.tsx` | Footer |
+| `src/components/Footer.tsx` | Footer — rendered inline in App.tsx; this file exists but is not imported (dead code) |
 | `src/components/AccessibilityMenu.tsx` | A11y floating panel |
-| `src/components/LatestRelease.tsx` | Latest release highlight |
 
 Each component has a matching `.test.tsx` file in the same folder.
 
