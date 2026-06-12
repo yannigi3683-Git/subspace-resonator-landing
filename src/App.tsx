@@ -10,6 +10,7 @@ import GallerySection from './components/GallerySection';
 import SocialMatrix from './components/SocialMatrix';
 import liveAlpha from './assets/live-alpha.webp';
 import AccessibilityMenu from './components/AccessibilityMenu';
+import AdminPanel from './components/admin/AdminPanel';
 
 export default function App() {
   return (
@@ -153,6 +154,7 @@ export default function App() {
 
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <AccessibilityMenu />
+        <AdminPanel />
         <div className="relative z-10">
           <SiteHeader />
           <main id="main-content">
