@@ -32,6 +32,18 @@ Always run `npm run build` and `npm test` before pushing. Both must exit clean.
 
 ---
 
+## Deployment
+
+Hosted on **Vercel**. Production URL: https://subspaceresonator.com/
+
+- **Auto-deploy is connected** (as of 2026-06-12): GitHub repo `yannigi3683-Git/subspace-resonator-landing` is linked in Vercel. Pushing to **`master`** auto-builds and deploys to production. Production branch is `master` (Vercel Settings -> Environments -> Production -> Branch Tracking).
+- **Manual deploy** (if ever needed): `npx vercel --prod` from the project root (CLI is linked via `.vercel/project.json`, authed as `yannigi3683-git`). Do not use `--prebuilt` (ships stale local `.vercel/output`).
+- **Verify a deploy shipped:** `curl -s "https://subspaceresonator.com/?cb=$(date +%s)" | grep -c "og:"` — a healthy production HTML has ~12 `og:` tags. Zero means a stale/old build is being served.
+- **History / caution:** before 2026-06-12, this project was deployed only via the Vercel CLI and pushes did NOT deploy. Production silently served a stale build for ~5 commits (OG tags, GA4, WebP all appeared "broken" but were simply never shipped). If a change is not showing live, suspect the deploy before re-editing code. See the `debugging-stale-deployments` skill.
+- The Vercel MCP/automation is signed into a different Vercel account (returns 404/403 for this project); use the CLI as the owner, not the MCP, to deploy.
+
+---
+
 ## Page Structure
 
 `src/App.tsx` assembles sections in this order:
