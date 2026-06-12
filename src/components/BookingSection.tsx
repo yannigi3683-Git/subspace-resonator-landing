@@ -1,5 +1,5 @@
 import { motion } from "framer-motion";
-import liveAlpha from "@/assets/live-alpha.jpg";
+import liveAlpha from "@/assets/live-alpha.webp";
 
 const BookingSection = () => {
   return (

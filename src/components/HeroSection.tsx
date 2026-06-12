@@ -1,4 +1,4 @@
-import bioWatermark from '@/assets/bio-watermark.jpg';
+import bioWatermark from '@/assets/bio-watermark.webp';
 import HeroVisualizer from './HeroVisualizer';
 
 const HeroSection = () => {

@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Menu, X } from "lucide-react";
-import heroLogo from "@/assets/bio-watermark.jpg";
+import heroLogo from "@/assets/bio-watermark.webp";
 
 const navItems = [
   { label: "MUSIC",   href: "#music" },

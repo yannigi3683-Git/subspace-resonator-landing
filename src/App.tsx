@@ -7,7 +7,7 @@ import BioSection from './components/BioSection';
 import BookingSection from './components/BookingSection';
 import GallerySection from './components/GallerySection';
 import SocialMatrix from './components/SocialMatrix';
-import liveAlpha from './assets/live-alpha.jpg';
+import liveAlpha from './assets/live-alpha.webp';
 import AccessibilityMenu from './components/AccessibilityMenu';
 
 export default function App() {

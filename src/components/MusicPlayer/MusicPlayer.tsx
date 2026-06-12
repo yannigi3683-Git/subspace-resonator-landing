@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { Play, Pause, SkipForward, SkipBack, ExternalLink, Rewind, FastForward } from "lucide-react";
-import artFallback from "@/assets/art-subspace-theory.jpg";
+import artFallback from "@/assets/art-subspace-theory.webp";
 import SpectrumAnalyzer from "./SpectrumAnalyzer";
 import FloodlightSet from "./FloodlightSet";
 import Knob from "./Knob";
