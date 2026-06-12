@@ -10,7 +10,7 @@ GitHub: https://github.com/yannigi3683-Git/subspace-resonator-landing
 
 - **React 19** + **TypeScript 6** + **Vite 8** (Rolldown-based; MPA build with two entries: `index.html` landing + `radio.html` radio)
 - **Tailwind CSS v3** (not v4)
-- **Supabase** (`@supabase/supabase-js`, client in `src/lib/supabase.ts`, null-safe when env vars absent) — used by the Radio feature; project `mswpvgfjtfxpcldozcvc`
+- **Supabase** (`@supabase/supabase-js`, client in `src/lib/supabase.ts`, null-safe when env vars absent) — used by the Radio feature; project `lgcmbmlapksmdbkhkyyv`
 - **Framer Motion** — animations and hover effects
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)

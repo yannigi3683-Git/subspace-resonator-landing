@@ -16,7 +16,7 @@ One link: subspaceresonator.com/radio. Yanni presses GO LIVE on his own device (
 ## Architecture
 
 - `/radio` = second Vite MPA entry (`radio.html`), landing bundle untouched; vercel.json rewrite + security headers (CSP, HSTS, frame-ancestors, nosniff, Permissions-Policy).
-- Supabase (existing project `mswpvgfjtfxpcldozcvc`): Postgres (station singleton, scheduled_shows, bans, kicks, chat_messages, admin_audit) + Realtime private channel `room:main` (presence + postgres_changes) + Auth.
+- Supabase (project `lgcmbmlapksmdbkhkyyv`): Postgres (station singleton, scheduled_shows, bans, kicks, chat_messages, admin_audit) + Realtime private channel `room:main` (presence + postgres_changes) + Auth.
 - Identity: listeners are Turnstile-gated anonymous Supabase sessions (invisible captcha at TUNE IN; no registration). Host = Yanni's account with TOTP MFA; all admin writes require `aal2` enforced in RLS.
 - RTC: Cloudflare Realtime SFU, brokered by `api/rtc-session.ts` (Vercel function holding the app secret). Host JWT (admin+aal2) → publish session; anon session JWT → subscribe-only. Publish quality: stereo Opus ~256kbps, voice processing disabled, DTX off.
 - Host console sources, mixed in Web Audio: audio input device (Traktor master routed in), local-file deck (files played from disk, never uploaded), microphone. Per-source gains, master meter.
