@@ -3,6 +3,7 @@ import SiteHeader from './components/SiteHeader';
 import HeroSection from './components/HeroSection';
 import MusicPlayer from './components/MusicPlayer/MusicPlayer';
 import LabelPedigree from './components/LabelPedigree';
+import SignalLog from './components/SignalLog';
 import BioSection from './components/BioSection';
 import BookingSection from './components/BookingSection';
 import GallerySection from './components/GallerySection';
@@ -158,6 +159,7 @@ export default function App() {
             <HeroSection />
             <MusicPlayer />
             <LabelPedigree />
+            <SignalLog />
             <BioSection />
             <BookingSection />
             <GallerySection />
