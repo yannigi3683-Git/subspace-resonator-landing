@@ -1,0 +1,4 @@
+Contact: mailto:yannigi3683@gmail.com
+Expires: 2027-06-30T00:00:00.000Z
+Preferred-Languages: en, he
+Canonical: https://subspaceresonator.com/.well-known/security.txt
