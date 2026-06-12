@@ -1,3 +1,5 @@
+import { trackEvent } from "@/lib/analytics";
+
 const SoundCloudIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M1 18V11h1v7H1zm2.5-8.5V18h1V9.5h-1zM6 7v11h1V7H6zm2.5 2v9h1V9h-1zM11 5v13h1.5c0 0 0-13 0-13H11zm3 0c3.53 0 6.41 2.61 6.92 6H21c1.66 0 3 1.34 3 3s-1.34 3-3 3h-7V5z"/></svg>
 );
@@ -62,6 +64,7 @@ const SocialMatrix = () => {
                 href={s.url}
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => trackEvent("social_click", { platform: s.name })}
                 className="section-border px-3 sm:px-5 min-h-[44px] flex items-center gap-2.5 text-[10px] sm:text-xs tracking-[0.15em] text-foreground hover:text-primary hover:border-primary transition-colors font-medium"
               >
                 <Icon />

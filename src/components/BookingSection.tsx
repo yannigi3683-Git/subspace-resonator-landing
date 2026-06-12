@@ -1,5 +1,6 @@
 import { motion } from "framer-motion";
 import liveAlpha from "@/assets/live-alpha.webp";
+import { trackEvent } from "@/lib/analytics";
 
 const BookingSection = () => {
   return (
@@ -34,6 +35,7 @@ const BookingSection = () => {
             <div className="flex flex-col sm:flex-row gap-3">
               <motion.a
                 href="mailto:subspaceresonator@gmail.com"
+                onClick={() => trackEvent("booking_click", { method: "email" })}
                 className="inline-flex items-center justify-center border border-primary text-primary text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 16px hsl(210 100% 50% / 0.5))", transition: { duration: 0.2 } }}
               >
@@ -42,6 +44,7 @@ const BookingSection = () => {
 
               <motion.a
                 href="tel:+972507974184"
+                onClick={() => trackEvent("booking_click", { method: "phone" })}
                 className="inline-flex items-center justify-center border border-border text-foreground text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))", transition: { duration: 0.2 } }}
               >
@@ -52,6 +55,7 @@ const BookingSection = () => {
                 href="https://wa.me/972507974184"
                 target="_blank"
                 rel="noopener noreferrer"
+                onClick={() => trackEvent("booking_click", { method: "whatsapp" })}
                 aria-label="Contact via WhatsApp (opens in new tab)"
                 className="inline-flex items-center justify-center border border-border text-foreground text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))", transition: { duration: 0.2 } }}

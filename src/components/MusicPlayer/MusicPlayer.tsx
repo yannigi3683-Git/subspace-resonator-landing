@@ -4,6 +4,7 @@ import artFallback from "@/assets/art-subspace-theory.webp";
 import SpectrumAnalyzer from "./SpectrumAnalyzer";
 import FloodlightSet from "./FloodlightSet";
 import Knob from "./Knob";
+import { trackEvent } from "@/lib/analytics";
 
 type Track = {
   title: string;
@@ -135,6 +136,7 @@ const MusicPlayer = () => {
         if (scPlaylistWidgetRef.current) scPlaylistWidgetRef.current.pause();
         setActiveSource("tracks");
         setPlaying(true);
+        trackEvent("music_play", { source: "tracks" });
         widget.getCurrentSoundIndex((idx: number) => {
           if (typeof idx !== "number") return;
           const displayIdx = trackIndexMapRef.current.indexOf(idx);
@@ -182,6 +184,7 @@ const MusicPlayer = () => {
         if (scWidgetRef.current) scWidgetRef.current.pause();
         setActiveSource("playlist");
         setPlaying(true);
+        trackEvent("music_play", { source: "playlist" });
         widget.getCurrentSoundIndex((idx: number) => {
           if (typeof idx === "number") setCurrentPlaylistTrack(idx);
         });
