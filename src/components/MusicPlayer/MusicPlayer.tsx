@@ -47,6 +47,7 @@ const MusicPlayer = () => {
   const scWidgetRef = useRef<any>(null);
   const scPlaylistWidgetRef = useRef<any>(null);
   const trackIndexMapRef = useRef<number[]>([]);
+  const navDirectionRef = useRef<'forward' | 'backward'>('forward');
   const progressInterval = useRef<ReturnType<typeof setInterval> | undefined>(undefined);
 
   const getActiveWidget = useCallback(() => {
@@ -129,7 +130,24 @@ const MusicPlayer = () => {
             });
           });
           trackIndexMapRef.current = map;
-          if (list.length) setTracks(list);
+          if (list.length) {
+            setTracks(list);
+            list.forEach((t, i) => {
+              if (t.art !== artFallback) return;
+              fetch(`https://soundcloud.com/oembed?url=${encodeURIComponent(t.permalink_url)}&format=json`)
+                .then(r => r.json())
+                .then((data: any) => {
+                  if (!data?.thumbnail_url) return;
+                  setTracks(prev => {
+                    if (prev[i]?.art !== artFallback) return prev;
+                    const next = [...prev];
+                    next[i] = { ...next[i], art: upgradeArt(data.thumbnail_url) };
+                    return next;
+                  });
+                })
+                .catch(() => {});
+            });
+          }
         }
       });
       widget.bind(SC.Widget.Events.PLAY, () => {
@@ -140,14 +158,18 @@ const MusicPlayer = () => {
         widget.getCurrentSoundIndex((idx: number) => {
           if (typeof idx !== "number") return;
           const displayIdx = trackIndexMapRef.current.indexOf(idx);
-          if (displayIdx === -1) { widget.next(); return; }
+          if (displayIdx === -1) { navDirectionRef.current === 'backward' ? widget.prev() : widget.next(); return; }
           setCurrentTrack(displayIdx);
         });
       });
       widget.bind(SC.Widget.Events.PAUSE, () => {
         if (scWidgetRef.current === getActiveWidgetRef()) setPlaying(false);
       });
-      widget.bind(SC.Widget.Events.FINISH, () => widget.next());
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        navDirectionRef.current = 'forward';
+        setProgress(0); setPosition(0); setDuration(0);
+        widget.next();
+      });
     });
   }, [volume]);
 
@@ -165,6 +187,21 @@ const MusicPlayer = () => {
             permalink_url: s.permalink_url,
           }));
         setPlaylistTracks(list);
+        list.forEach((t, i) => {
+          if (t.art !== artFallback) return;
+          fetch(`https://soundcloud.com/oembed?url=${encodeURIComponent(t.permalink_url)}&format=json`)
+            .then(r => r.json())
+            .then((data: any) => {
+              if (!data?.thumbnail_url) return;
+              setPlaylistTracks(prev => {
+                if (prev[i]?.art !== artFallback) return prev;
+                const next = [...prev];
+                next[i] = { ...next[i], art: upgradeArt(data.thumbnail_url) };
+                return next;
+              });
+            })
+            .catch(() => {});
+        });
       } else {
         setPlaylistTracks([]);
       }
@@ -192,7 +229,11 @@ const MusicPlayer = () => {
       widget.bind(SC.Widget.Events.PAUSE, () => {
         if (scPlaylistWidgetRef.current === getActiveWidgetRef()) setPlaying(false);
       });
-      widget.bind(SC.Widget.Events.FINISH, () => widget.next());
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        navDirectionRef.current = 'forward';
+        setProgress(0); setPosition(0); setDuration(0);
+        widget.next();
+      });
     });
   }, [volume, refillPlaylistTracks]);
 
@@ -260,8 +301,10 @@ const MusicPlayer = () => {
   }, [playing, getActiveWidget]);
 
   const selectTrack = useCallback((index: number) => {
+    navDirectionRef.current = 'forward';
     setCurrentTrack(index);
     setActiveSource("tracks");
+    setProgress(0); setPosition(0); setDuration(0);
     if (scPlaylistWidgetRef.current) scPlaylistWidgetRef.current.pause();
     if (scWidgetRef.current) {
       const scIdx = trackIndexMapRef.current[index] ?? index;
@@ -272,8 +315,10 @@ const MusicPlayer = () => {
   }, []);
 
   const selectPlaylistTrack = useCallback((index: number) => {
+    navDirectionRef.current = 'forward';
     setCurrentPlaylistTrack(index);
     setActiveSource("playlist");
+    setProgress(0); setPosition(0); setDuration(0);
     if (scWidgetRef.current) scWidgetRef.current.pause();
     if (scPlaylistWidgetRef.current) {
       scPlaylistWidgetRef.current.skip(index);
@@ -283,15 +328,28 @@ const MusicPlayer = () => {
   }, []);
 
   const nextTrack = useCallback(() => {
+    navDirectionRef.current = 'forward';
     const widget = getActiveWidget();
-    if (widget) widget.next();
+    if (!widget) return;
+    setProgress(0); setPosition(0); setDuration(0);
+    widget.next();
     setPlaying(true);
   }, [getActiveWidget]);
 
   const prevTrack = useCallback(() => {
+    navDirectionRef.current = 'backward';
     const widget = getActiveWidget();
-    if (widget) widget.prev();
-    setPlaying(true);
+    if (!widget) return;
+    widget.getPosition((pos: number) => {
+      setProgress(0); setPosition(0);
+      if (pos > 3000) {
+        widget.seekTo(0);
+        widget.play();
+      } else {
+        setDuration(0);
+        widget.prev();
+      }
+    });
   }, [getActiveWidget]);
 
   const seekBy = useCallback((seconds: number) => {
@@ -402,6 +460,7 @@ const MusicPlayer = () => {
                         <div className="relative w-8 h-8 sm:w-9 sm:h-9 shrink-0 border border-border overflow-hidden" style={{ background: "hsl(0,0%,4%)" }}>
                           <img src={track.art} alt={track.title}
                             className={`w-full h-full object-cover transition-all duration-300 ${isCurrent ? "opacity-100" : "opacity-50 grayscale"}`}
+                            onError={(e) => { (e.target as HTMLImageElement).src = artFallback; }}
                           />
                           {isCurrent && playing && (
                             <div className="absolute inset-0 flex items-center justify-center" style={{ background: "hsl(210 100% 50% / 0.15)" }}>
@@ -471,7 +530,7 @@ const MusicPlayer = () => {
               <a href={current.permalink_url} target="_blank" rel="noopener noreferrer"
                 className="relative shrink-0 border border-border hover:border-primary transition-all group overflow-hidden"
                 style={{ width: 44, height: 44 }} aria-label="View on SoundCloud">
-                <img src={current.art} alt={current.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" />
+                <img src={current.art} alt={current.title} className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110" onError={(e) => { (e.target as HTMLImageElement).src = artFallback; }} />
                 <div className="absolute inset-0 pointer-events-none" style={{ background: playing ? "linear-gradient(135deg, hsl(210 100% 50% / 0.12), hsl(210 100% 50% / 0.04))" : "hsl(0 0% 0% / 0.3)" }} />
               </a>
               <div className="min-w-0 border border-border p-2 flex-1" style={{ background: "hsl(0,0%,2%)" }}>
@@ -536,7 +595,7 @@ const MusicPlayer = () => {
         {/* Controls */}
         <div className="flex items-center gap-0.5 px-3"
           style={{ minHeight: 68, paddingBottom: "calc(env(safe-area-inset-bottom, 0px) + 8px)" }}>
-          <img src={current.art} alt={current.title} className="w-8 h-8 object-cover border border-border shrink-0" />
+          <img src={current.art} alt={current.title} className="w-8 h-8 object-cover border border-border shrink-0" onError={(e) => { (e.target as HTMLImageElement).src = artFallback; }} />
           <div className="flex-1 min-w-0 px-1">
             <p className="text-[10px] text-primary truncate font-medium">{current.title}</p>
             <p className="text-[10px] text-muted-foreground tracking-widest truncate">SUBSPACE RESONATOR</p>

@@ -1,9 +1,67 @@
+import { useState, useEffect } from 'react';
+import { createClient } from '@supabase/supabase-js';
+import AdminGate from './admin/AdminGate';
+import AdminConsole from './admin/AdminConsole';
+import type { SupabaseClient } from '@supabase/supabase-js';
+
+function makeSupabase() {
+  const url = import.meta.env.VITE_SUPABASE_URL as string;
+  const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+  if (!url || !key) return null;
+  return createClient(url, key);
+}
+
+const supabaseClient = makeSupabase();
+
 export default function RadioApp() {
+  const isAdminRoute = typeof window !== 'undefined' && window.location.hash === '#admin';
+  const [authedClient, setAuthedClient] = useState<SupabaseClient | null>(null);
+
+  // Refresh hash detection after mount (SSR guard)
+  const [isAdmin, setIsAdmin] = useState(isAdminRoute);
+  useEffect(() => {
+    setIsAdmin(window.location.hash === '#admin');
+  }, []);
+
+  if (isAdmin) {
+    if (!supabaseClient) {
+      return (
+        <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+          <p className="font-mono text-xs text-destructive">
+            Supabase env vars not configured. Check .env.
+          </p>
+        </main>
+      );
+    }
+
+    if (!authedClient) {
+      return (
+        <AdminGate
+          supabase={supabaseClient}
+          onAuthenticated={(client) => setAuthedClient(client)}
+        />
+      );
+    }
+
+    return (
+      <AdminConsole
+        supabase={authedClient}
+        authToken={() => {
+          // Supabase-js manages the session token; this facade lets GoLivePanel
+          // stay decoupled from the global client while api/rtc-session
+          // receives the Bearer token from the Authorization header.
+          // The actual value is read in api/rtc-session.ts from req.headers.
+          return '';
+        }}
+      />
+    );
+  }
+
   return (
     <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
       <section className="section-border max-w-md w-full p-8 text-center">
         <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground">
-          // SUBSPACE RADIO
+          // SUBSPACE RADIO LIVE
         </p>
         <h1 className="font-display text-3xl mt-4">SIGNAL OFFLINE</h1>
         <p className="font-mono text-xs mt-4 leading-relaxed text-muted-foreground">
