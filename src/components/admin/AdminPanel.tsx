@@ -1,12 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { Lock, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import GalleryAdmin from './GalleryAdmin';
 
 type PanelState = 'checking' | 'sign-in' | 'not-admin' | 'ready';
 
 const AdminPanel = () => {
   const [open, setOpen]   = useState(false);
   const [panel, setPanel] = useState<PanelState>('checking');
+  const [editor, setEditor] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [pass,  setPass]  = useState('');
   const [error, setError] = useState('');
@@ -166,11 +168,24 @@ const AdminPanel = () => {
           </div>
         )}
 
-        {panel === 'ready' && (
+        {panel === 'ready' && editor === 'GALLERY' && (
+          <GalleryAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && !editor && (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               <div className="text-[10px] tracking-[0.2em] text-primary uppercase">EDITORS</div>
-              {(['GIGS', 'GALLERY', 'BIO', 'BOOKING', 'SOCIALS', 'DISCOGRAPHY'] as const).map((name) => (
+              {(['GALLERY'] as const).map((name) => (
+                <button
+                  key={name}
+                  onClick={() => setEditor(name)}
+                  className="w-full border border-border px-3 py-2 text-[10px] tracking-[0.2em] text-foreground uppercase text-left hover:border-primary hover:text-primary transition-colors"
+                >
+                  {name}
+                </button>
+              ))}
+              {(['GIGS', 'BIO', 'BOOKING', 'SOCIALS', 'DISCOGRAPHY'] as const).map((name) => (
                 <div
                   key={name}
                   className="border border-border px-3 py-2 text-[10px] tracking-[0.2em] text-muted-foreground uppercase"

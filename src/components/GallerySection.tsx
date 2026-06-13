@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { X, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { useGallery } from "@/lib/siteContent";
 
 const GallerySection = () => {
@@ -131,12 +131,23 @@ const GallerySection = () => {
               aria-label={`View image: ${img.alt}`}
               className="shrink-0 border border-border overflow-hidden h-56 md:h-72 w-80 md:w-96 hover:border-primary/50 transition-colors"
             >
-              <img
-                src={img.src}
-                alt={img.alt}
-                className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
-                loading="lazy"
-              />
+              {img.src ? (
+                <img
+                  src={img.src}
+                  alt={img.alt}
+                  className="w-full h-full object-cover transition-transform duration-500 hover:scale-105"
+                  loading="lazy"
+                />
+              ) : (
+                <div className="w-full h-full bg-border/20 flex items-center justify-center">
+                  <Play size={32} className="text-primary" fill="currentColor" />
+                </div>
+              )}
+              {img.mediaType === 'video' && img.src && (
+                <div className="absolute inset-0 flex items-center justify-center bg-background/30 pointer-events-none">
+                  <Play size={24} className="text-primary" fill="currentColor" />
+                </div>
+              )}
             </button>
           ))}
         </div>
@@ -179,15 +190,33 @@ const GallerySection = () => {
               <ChevronRight size={24} />
             </button>
 
-            <motion.img
-              initial={{ scale: 0.9, opacity: 0 }}
-              animate={{ scale: 1, opacity: 1 }}
-              exit={{ scale: 0.9, opacity: 0 }}
-              src={galleryImages[selected].src}
-              alt={galleryImages[selected].alt}
-              className="max-w-full max-h-[85vh] object-contain"
-              onClick={(e) => e.stopPropagation()}
-            />
+            {galleryImages[selected].mediaType === 'video' && galleryImages[selected].videoEmbedUrl ? (
+              <motion.div
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                className="w-full max-w-3xl aspect-video"
+                onClick={(e) => e.stopPropagation()}
+              >
+                <iframe
+                  src={galleryImages[selected].videoEmbedUrl}
+                  className="w-full h-full"
+                  allow="autoplay; fullscreen"
+                  allowFullScreen
+                  title={galleryImages[selected].alt}
+                />
+              </motion.div>
+            ) : (
+              <motion.img
+                initial={{ scale: 0.9, opacity: 0 }}
+                animate={{ scale: 1, opacity: 1 }}
+                exit={{ scale: 0.9, opacity: 0 }}
+                src={galleryImages[selected].src}
+                alt={galleryImages[selected].alt}
+                className="max-w-full max-h-[85vh] object-contain"
+                onClick={(e) => e.stopPropagation()}
+              />
+            )}
           </motion.div>
         )}
       </AnimatePresence>

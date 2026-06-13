@@ -26,7 +26,7 @@ import liveAlpha from "@/assets/live-alpha.webp";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type GalleryItem  = { id: string; src: string; alt: string };
+export type GalleryItem  = { id: string; src: string; alt: string; mediaType?: 'image' | 'video'; videoEmbedUrl?: string };
 export type EventItem    = { id: string; date: string; title: string; location: string; link?: string };
 export type SocialItem   = { name: string; url: string };
 export type BioContent   = { signal: string; reactivation: string; mission: string };
@@ -202,7 +202,10 @@ function validateGalleryOverrides(raw: unknown): GalleryOverrides {
     try {
       const src = sanitizeUrl(it.src);
       if (!src) continue;
-      added.push({ id: sanitizeId(it.id) || `u-${added.length}`, src, alt: sanitizeText(it.alt, LIMITS.MAX_SHORT_TEXT) || 'Untitled' });
+      const mediaType = it.mediaType === 'video' ? 'video' : 'image';
+      let videoEmbedUrl: string | undefined;
+      try { videoEmbedUrl = it.videoEmbedUrl ? sanitizeUrl(it.videoEmbedUrl) : undefined; } catch { videoEmbedUrl = undefined; }
+      added.push({ id: sanitizeId(it.id) || `u-${added.length}`, src, alt: sanitizeText(it.alt, LIMITS.MAX_SHORT_TEXT) || 'Untitled', mediaType, videoEmbedUrl });
     } catch { /* skip malformed */ }
   }
   return { order, deleted, alt, added };
@@ -359,6 +362,7 @@ export function useGallery(): GalleryItem[] {
   return out.slice(0, LIMITS.MAX_GALLERY_ITEMS);
 }
 
+export function useGalleryOverrides(): GalleryOverrides { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).gallery; }
 export function useEvents():   EventItem[]     { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).events; }
 export function useBio():      BioContent      { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).bio; }
 export function useSocials():  SocialItem[]    { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).socials; }
