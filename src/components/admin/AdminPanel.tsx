@@ -52,8 +52,8 @@ const AdminPanel = () => {
     setError('');
     setBusy(true);
     try {
-      const url = import.meta.env.VITE_SUPABASE_URL as string;
       // Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars
+      const url = (import.meta.env.VITE_SUPABASE_URL as string).replace(/[^\x20-\x7E]/g, '');
       const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string).replace(/[^\x20-\x7E]/g, '');
       const body = await new Promise<{ status: number; data: Record<string, string> }>(
         (resolve, reject) => {
