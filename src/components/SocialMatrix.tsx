@@ -34,21 +34,24 @@ const BeatportIcon = () => (
   <svg viewBox="0 0 24 24" className="w-4 h-4 fill-current"><path d="M12 0C5.373 0 0 5.373 0 12s5.373 12 12 12 12-5.373 12-12S18.627 0 12 0zm0 4.5c4.142 0 7.5 3.358 7.5 7.5s-3.358 7.5-7.5 7.5S4.5 16.142 4.5 12 7.858 4.5 12 4.5zm0 2.5c-2.761 0-5 2.239-5 5s2.239 5 5 5 5-2.239 5-5-2.239-5-5-5zm0 2.5c1.381 0 2.5 1.119 2.5 2.5s-1.119 2.5-2.5 2.5-2.5-1.119-2.5-2.5 1.119-2.5 2.5-2.5z"/></svg>
 );
 
-const socials = [
-  { icon: SoundCloudIcon, name: "SoundCloud", url: "https://soundcloud.com/subspaceresonance" },
-  { icon: BandcampIcon,   name: "Bandcamp",   url: "https://yannig.bandcamp.com/" },
-  { icon: SpotifyIcon,    name: "Spotify",    url: "https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk" },
-  { icon: BeatportIcon,   name: "Beatport",   url: "https://www.beatport.com/artist/subspace-resonator/1354950" },
-  { icon: YouTubeIcon,    name: "YouTube",    url: "https://www.youtube.com/@SubspaceResonator" },
-  { icon: FacebookIcon,   name: "Facebook",   url: "https://www.facebook.com/profile.php?id=61559198105695" },
-  { icon: InstagramIcon,  name: "Instagram",  url: "https://www.instagram.com/subspace_resonator" },
-  { icon: TikTokIcon,     name: "TikTok",     url: "https://www.tiktok.com/@subspace.resonato" },
-  { icon: DiscogsIcon,    name: "Discogs",    url: "https://www.discogs.com/artist/15101171-Subspace-Resonator" },
-  { icon: CalendarIcon,   name: "Live Events", url: "https://soundcloudevents.velvetcake.live/" },
-  { icon: LinktreeIcon,   name: "Linktree",   url: "https://linktr.ee/yanni_subspace_resonator" },
-];
+import { useSocials } from "@/lib/siteContent";
+
+const ICONS: Record<string, React.FC> = {
+  SoundCloud:   SoundCloudIcon,
+  Bandcamp:     BandcampIcon,
+  Spotify:      SpotifyIcon,
+  Beatport:     BeatportIcon,
+  YouTube:      YouTubeIcon,
+  Facebook:     FacebookIcon,
+  Instagram:    InstagramIcon,
+  TikTok:       TikTokIcon,
+  Discogs:      DiscogsIcon,
+  "Live Events":CalendarIcon,
+  Linktree:     LinktreeIcon,
+};
 
 const SocialMatrix = () => {
+  const socials = useSocials();
   return (
     <section id="connect" aria-label="Social" className="py-10 md:py-16 border-t border-border">
       <div className="container">
@@ -57,7 +60,8 @@ const SocialMatrix = () => {
         </h2>
         <div className="flex flex-wrap gap-2 sm:gap-3">
           {socials.map((s) => {
-            const Icon = s.icon;
+            const Icon = ICONS[s.name];
+            if (!Icon || !s.url) return null;
             return (
               <a
                 key={s.name}

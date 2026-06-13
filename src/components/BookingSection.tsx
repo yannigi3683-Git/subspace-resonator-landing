@@ -1,8 +1,11 @@
 import { motion } from "framer-motion";
 import liveAlpha from "@/assets/live-alpha.webp";
 import { trackEvent } from "@/lib/analytics";
+import { useBooking } from "@/lib/siteContent";
 
 const BookingSection = () => {
+  const booking = useBooking();
+  const waPhone = booking.phone.replace(/[^0-9]/g, '');
   return (
     <section id="contact" aria-label="Booking" className="pt-10 pb-4 md:pt-20 md:pb-8">
       <div className="container">
@@ -34,7 +37,7 @@ const BookingSection = () => {
 
             <div className="flex flex-col sm:flex-row gap-3">
               <motion.a
-                href="mailto:subspaceresonator@gmail.com"
+                href={`mailto:${booking.email}`}
                 onClick={() => trackEvent("booking_click", { method: "email" })}
                 className="inline-flex items-center justify-center border border-primary text-primary text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:bg-primary hover:text-primary-foreground transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 16px hsl(210 100% 50% / 0.5))", transition: { duration: 0.2 } }}
@@ -43,7 +46,7 @@ const BookingSection = () => {
               </motion.a>
 
               <motion.a
-                href="tel:+972507974184"
+                href={`tel:${booking.phone}`}
                 onClick={() => trackEvent("booking_click", { method: "phone" })}
                 className="inline-flex items-center justify-center border border-border text-foreground text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))", transition: { duration: 0.2 } }}
@@ -52,7 +55,7 @@ const BookingSection = () => {
               </motion.a>
 
               <motion.a
-                href="https://wa.me/972507974184"
+                href={`https://wa.me/${waPhone}`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => trackEvent("booking_click", { method: "whatsapp" })}
@@ -66,11 +69,11 @@ const BookingSection = () => {
 
             <div className="mt-4 space-y-1">
               <p className="text-sm text-muted-foreground tracking-wider">
-                subspaceresonator@gmail.com
+                {booking.email}
               </p>
               <p className="text-sm text-muted-foreground tracking-wider">
-                <a href="tel:+972507974184" className="hover:text-primary transition-colors">
-                  +972-50-7974184
+                <a href={`tel:${booking.phone}`} className="hover:text-primary transition-colors">
+                  {booking.phone}
                 </a>
               </p>
             </div>
