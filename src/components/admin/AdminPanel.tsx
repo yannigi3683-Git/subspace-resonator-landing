@@ -51,9 +51,38 @@ const AdminPanel = () => {
     if (!supabase) return;
     setError('');
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password: pass });
-    setBusy(false);
-    if (error) setError(error.message);
+    try {
+      const url = import.meta.env.VITE_SUPABASE_URL as string;
+      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const res = await fetch(`${url}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'apikey': key,
+          'Authorization': `Bearer ${key}`,
+        },
+        body: JSON.stringify({ email: email.trim(), password: pass }),
+      });
+      const body = await res.json();
+      if (!res.ok) {
+        setError(body.error_description || body.msg || body.message || `Error ${res.status}`);
+        return;
+      }
+      const { error: sessionError } = await supabase.auth.setSession({
+        access_token: body.access_token,
+        refresh_token: body.refresh_token,
+      });
+      if (sessionError) setError(sessionError.message);
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('ISO-8859-1') || msg.includes('headers')) {
+        setError('Browser extension may be blocking this request. Try incognito mode.');
+      } else {
+        setError(msg || 'Network error');
+      }
+    } finally {
+      setBusy(false);
+    }
   };
 
   const signOut = async () => {
