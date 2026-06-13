@@ -92,9 +92,14 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
   };
 
   const toggleHide = async (id: string) => {
+    setError('');
     const hidden = overrides.deleted.includes(id);
     const deleted = hidden ? overrides.deleted.filter(d => d !== id) : [...overrides.deleted, id];
-    await saveContent({ gallery: { ...overrides, deleted } });
+    try {
+      await saveContent({ gallery: { ...overrides, deleted } });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Save failed');
+    }
   };
 
   return (
@@ -189,7 +194,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
                   )}
                   <button
                     onClick={() => removeAdded(item)}
-                    className="absolute top-1 right-1 w-7 h-7 bg-background/90 border border-border flex items-center justify-center text-destructive opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 w-7 h-7 bg-background/90 border border-border flex items-center justify-center text-destructive transition-colors"
                     aria-label="Remove"
                   >
                     <Trash2 size={11} />
@@ -211,7 +216,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
                   <img src={item.src} alt={item.alt} className="w-full h-24 object-cover" loading="lazy" />
                   <button
                     onClick={() => toggleHide(item.id)}
-                    className="absolute top-1 right-1 w-7 h-7 bg-background/90 border border-border flex items-center justify-center text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity"
+                    className="absolute top-1 right-1 w-7 h-7 bg-background/90 border border-border flex items-center justify-center text-muted-foreground transition-colors"
                     aria-label={hidden ? 'Show photo' : 'Hide photo'}
                   >
                     {hidden ? <Eye size={11} /> : <EyeOff size={11} />}
