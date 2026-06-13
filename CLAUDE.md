@@ -6,6 +6,20 @@ GitHub: https://github.com/yannigi3683-Git/subspace-resonator-landing
 
 ---
 
+## Git & Branch Safety (read first)
+
+`master` auto-deploys to production, so branch hygiene is not optional here.
+
+1. CHECK BRANCH FIRST. Before the first edit of any task, run `git rev-parse --abbrev-ref HEAD`. If the change is unrelated to that branch's purpose, STOP and do not edit yet.
+2. ONE FEATURE = ONE BRANCH off master. For any new or unrelated change, run `git switch master && git pull --ff-only && git switch -c feat/<slug>` BEFORE touching code. Never commit unrelated work onto an active feature branch (for example, the "quick access links" work must never land on `feat/radio-room`).
+3. CONFIRM WHERE A COMMIT LANDED. After committing, run `git branch --contains HEAD` and `git log --oneline -1`. Work that lives only on one branch is not safe until it is merged to master or backed up elsewhere. When a change "is not showing," suspect branch/git state before re-debugging code.
+4. BEFORE rewinding history (stash, rebase, reset --hard, branch rewind), run `git log --oneline master..HEAD` and rescue any commit unique to that branch first. A rewind silently drops commits from the working tree.
+5. PowerShell 5.1 gotcha: NEVER gate on `if ($?)` after `... 2>&1 | Out-Null` on a native command (git, npm). They write normal status to stderr, which flips `$?` to false and silently skips the block. Gate on `$LASTEXITCODE -eq 0`, or mute one stream with `2>$null`. Never pipe native stderr into the pipeline just to silence it.
+
+Each feature is a first-class isolated unit: its own branch plus its own spec/plan/qa docs under `docs/superpowers/`. Do not interleave two features' code, commits, or docs.
+
+---
+
 ## Tech Stack
 
 - **React 18** + **TypeScript** + **Vite 5**
@@ -77,7 +91,7 @@ Hosted on **Vercel**. Production URL: https://subspaceresonator.com/
 | `src/components/MusicPlayer/FloodlightSet.tsx` | VU-meter floodlights (desktop only) |
 | `src/components/MusicPlayer/Knob.tsx` | Volume knob (role=slider, keyboard/wheel/drag) |
 | `src/components/LabelPedigree.tsx` | Label logo grid |
-| `src/components/SignalLog.tsx` | Discography ledger (// MUSIC ARCHIVE) — date-led monospace grid, `id="archive"` |
+| `src/components/SignalLog.tsx` | Discography ledger (// MUSIC ARCHIVE) — date-led monospace grid, `id="archive"`. Quick access links: each release row is a whole-row link to its Bandcamp/Spotify page (ArrowUpRight hover affordance, focus ring, `release_click` GA4 event). Rows without a url stay non-interactive. |
 | `src/lib/analytics.ts` | `trackEvent()` wrapper for GA4 — no-ops safely without gtag (tests, ad blockers) |
 | `src/components/BioSection.tsx` | Bio (watermark bg) |
 | `src/components/BookingSection.tsx` | Booking image + 3 CTAs |
@@ -233,6 +247,7 @@ Conversion events tracked:
 - `booking_click` — `{ method: "email" | "phone" | "whatsapp" }` (BookingSection.tsx)
 - `social_click` — `{ platform: string }` (SocialMatrix.tsx)
 - `music_play` — `{ source: "tracks" | "playlist" }` (MusicPlayer.tsx)
+- `release_click` — `{ title: string }` (SignalLog.tsx)
 
 To verify events live: GA4 → Realtime → DebugView, then interact on the site. Aggregated data lands in 24-48h.
 
@@ -253,3 +268,4 @@ To verify events live: GA4 → Realtime → DebugView, then interact on the site
 Key specs on record:
 - `2026-06-04-seo-optimization-design.md` — full SEO sweep spec (implemented)
 - `2026-06-04-uxaudit-fixes-design.md` — 13-finding UX audit (implemented)
+- `2026-06-13-quick-access-links-design.md` — clickable Music Archive release rows (implemented)
