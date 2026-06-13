@@ -51,31 +51,33 @@ const AdminPanel = () => {
     if (!supabase) return;
     setError('');
     setBusy(true);
-    const url = import.meta.env.VITE_SUPABASE_URL as string;
-    const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
-    const result = await new Promise<{ status: number; data: Record<string, string> }>(
-      (resolve, reject) => {
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `${url}/auth/v1/token?grant_type=password`);
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.setRequestHeader('apikey', key);
-        xhr.setRequestHeader('Authorization', `Bearer ${key}`);
-        xhr.onload = () => {
-          try { resolve({ status: xhr.status, data: JSON.parse(xhr.responseText) }); }
-          catch { reject(new Error('Invalid JSON response')); }
-        };
-        xhr.onerror = () => reject(new Error('Network error'));
-        xhr.send(JSON.stringify({ email: email.trim(), password: pass }));
-      }
-    );
     try {
-      if (result.status !== 200) {
-        setError(result.data.error_description || result.data.msg || result.data.message || `Error ${result.status}`);
+      const url = import.meta.env.VITE_SUPABASE_URL as string;
+      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      const body = await new Promise<{ status: number; data: Record<string, string> }>(
+        (resolve, reject) => {
+          const xhr = new XMLHttpRequest();
+          xhr.open('POST', `${url}/auth/v1/token?grant_type=password`);
+          xhr.setRequestHeader('Content-Type', 'application/json');
+          xhr.setRequestHeader('apikey', key);
+          xhr.setRequestHeader('Authorization', `Bearer ${key}`);
+          xhr.timeout = 15000;
+          xhr.onload = () => {
+            try { resolve({ status: xhr.status, data: JSON.parse(xhr.responseText) }); }
+            catch { reject(new Error(`Unexpected response (HTTP ${xhr.status})`)); }
+          };
+          xhr.onerror = () => reject(new Error('Network error — check connection'));
+          xhr.ontimeout = () => reject(new Error('Timed out — Supabase project may be paused'));
+          xhr.send(JSON.stringify({ email: email.trim(), password: pass }));
+        }
+      );
+      if (body.status !== 200) {
+        setError(body.data.error_description || body.data.msg || body.data.message || `Error ${body.status}`);
         return;
       }
       const { error: sessionError } = await supabase.auth.setSession({
-        access_token: result.data.access_token,
-        refresh_token: result.data.refresh_token,
+        access_token: body.data.access_token,
+        refresh_token: body.data.refresh_token,
       });
       if (sessionError) setError(sessionError.message);
     } catch (err: unknown) {
