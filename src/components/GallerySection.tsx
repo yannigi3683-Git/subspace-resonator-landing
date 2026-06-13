@@ -198,13 +198,22 @@ const GallerySection = () => {
                 className="w-full max-w-3xl aspect-video"
                 onClick={(e) => e.stopPropagation()}
               >
-                <iframe
-                  src={galleryImages[selected].videoEmbedUrl}
-                  className="w-full h-full"
-                  allow="autoplay; fullscreen"
-                  allowFullScreen
-                  title={galleryImages[selected].alt}
-                />
+                {galleryImages[selected].videoEmbedUrl!.includes('youtube.com/embed') ? (
+                  <iframe
+                    src={galleryImages[selected].videoEmbedUrl}
+                    className="w-full h-full"
+                    allow="autoplay; fullscreen"
+                    allowFullScreen
+                    title={galleryImages[selected].alt}
+                  />
+                ) : (
+                  <video
+                    src={galleryImages[selected].videoEmbedUrl}
+                    className="w-full h-full"
+                    controls
+                    autoPlay
+                  />
+                )}
               </motion.div>
             ) : (
               <motion.img

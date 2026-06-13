@@ -16,9 +16,11 @@ function ytThumb(url: string): string | null {
 
 const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
   const [uploading, setUploading] = useState(false);
+  const [uploadingVideo, setUploadingVideo] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
+  const videoFileRef = useRef<HTMLInputElement>(null);
   const overrides = useGalleryOverrides();
 
   const upload = async (file: File) => {
@@ -55,11 +57,34 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
     }
   };
 
+  const uploadVideoFile = async (file: File) => {
+    if (!supabase) return;
+    if (file.size > 200 * 1024 * 1024) {
+      setError('Video is too large (200 MB max). Use a YouTube link instead for big videos.');
+      return;
+    }
+    setUploadingVideo(true);
+    setError('');
+    try {
+      const ext = file.name.split('.').pop() || 'mp4';
+      const path = `${newId('vid')}.${ext}`;
+      const { error: upErr } = await supabase.storage.from('gallery').upload(path, file);
+      if (upErr) throw upErr;
+      const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(path);
+      const item: GalleryItem = { id: path, src: '', alt: file.name.replace(/\.[^/.]+$/, ''), mediaType: 'video', videoEmbedUrl: publicUrl };
+      await saveContent({ gallery: { ...overrides, added: [...overrides.added, item] } });
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'Upload failed');
+    } finally {
+      setUploadingVideo(false);
+    }
+  };
+
   const removeAdded = async (item: GalleryItem) => {
     if (!supabase) return;
     setError('');
     try {
-      if (item.mediaType !== 'video') await supabase.storage.from('gallery').remove([item.id]);
+      await supabase.storage.from('gallery').remove([item.id]);
       await saveContent({ gallery: { ...overrides, added: overrides.added.filter(a => a.id !== item.id) } });
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Remove failed');
@@ -92,14 +117,31 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
           className="hidden"
           onChange={(e) => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = ''; }}
         />
-        <button
-          onClick={() => fileRef.current?.click()}
-          disabled={uploading}
-          className="w-full border border-primary text-primary py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-primary/10 disabled:opacity-50 flex items-center justify-center gap-2"
-        >
-          <Upload size={12} />
-          {uploading ? 'UPLOADING...' : 'UPLOAD PHOTO'}
-        </button>
+        <input
+          ref={videoFileRef}
+          type="file"
+          accept="video/*"
+          className="hidden"
+          onChange={(e) => { const f = e.target.files?.[0]; if (f) uploadVideoFile(f); e.target.value = ''; }}
+        />
+        <div className="flex gap-2">
+          <button
+            onClick={() => fileRef.current?.click()}
+            disabled={uploading || uploadingVideo}
+            className="flex-1 border border-primary text-primary py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-primary/10 disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <Upload size={12} />
+            {uploading ? 'UPLOADING...' : 'UPLOAD PHOTO'}
+          </button>
+          <button
+            onClick={() => videoFileRef.current?.click()}
+            disabled={uploading || uploadingVideo}
+            className="flex-1 border border-border text-foreground py-2 text-[10px] tracking-[0.2em] uppercase hover:border-primary hover:text-primary disabled:opacity-50 flex items-center justify-center gap-2"
+          >
+            <Play size={12} />
+            {uploadingVideo ? 'UPLOADING...' : 'UPLOAD VIDEO'}
+          </button>
+        </div>
 
         {/* Add video */}
         <div className="space-y-2">
