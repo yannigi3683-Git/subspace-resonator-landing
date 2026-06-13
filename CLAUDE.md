@@ -144,7 +144,7 @@ All structured data must match this list exactly. Do not add unreleased tracks.
 **Solo releases:**
 | Title | Type | Label | Date |
 |-------|------|-------|------|
-| The Subspace Theory | EP (4 tracks) | Independent | 2025-12-26 |
+| The Subspace Theory | EP (4 tracks) | Goa Records | 2025-12-26 |
 | Galaxy 604 | Single | Goa Records | 2025 |
 | Nightmare In Heaven | Single | Timewarp Records | 2025-10-31 |
 

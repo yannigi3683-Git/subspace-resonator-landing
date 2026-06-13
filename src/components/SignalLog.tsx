@@ -12,7 +12,7 @@ const SOLO_RELEASES: Release[] = [
   {
     date: "2025.12.26",
     title: "The Subspace Theory",
-    meta: "EP · 4 Tracks · Independent",
+    meta: "EP · 4 Tracks · Goa Records",
     url: "https://yannig.bandcamp.com/album/the-subspace-theory-ep",
   },
   {

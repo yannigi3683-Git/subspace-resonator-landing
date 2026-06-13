@@ -80,6 +80,7 @@ export default function App() {
               'name': 'The Subspace Theory',
               'numTracks': 4,
               'datePublished': '2025-12-26',
+              'recordLabel': { '@type': 'Organization', 'name': 'Goa Records' },
               'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
               'url': 'https://yannig.bandcamp.com/album/the-subspace-theory',
             },
