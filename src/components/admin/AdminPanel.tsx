@@ -75,11 +75,9 @@ const AdminPanel = () => {
       if (sessionError) setError(sessionError.message);
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (msg.includes('ISO-8859-1') || msg.includes('headers')) {
-        setError('Browser extension may be blocking this request. Try incognito mode.');
-      } else {
-        setError(msg || 'Network error');
-      }
+      setError(msg.includes('ISO-8859-1') || msg.includes('headers')
+        ? `Browser extension blocking request. Try incognito. (${msg})`
+        : (msg || 'Network error'));
     } finally {
       setBusy(false);
     }
