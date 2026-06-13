@@ -17,11 +17,19 @@ function ytThumb(url: string): string | null {
 const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
   const [uploading, setUploading] = useState(false);
   const [uploadingVideo, setUploadingVideo] = useState(false);
+  const [photoSaved, setPhotoSaved] = useState(false);
+  const [videoSaved, setVideoSaved] = useState(false);
+  const [ytSaved, setYtSaved] = useState(false);
   const [videoUrl, setVideoUrl] = useState('');
   const [error, setError] = useState('');
   const fileRef = useRef<HTMLInputElement>(null);
   const videoFileRef = useRef<HTMLInputElement>(null);
   const overrides = useGalleryOverrides();
+
+  const flash = (setter: (v: boolean) => void) => {
+    setter(true);
+    setTimeout(() => setter(false), 2500);
+  };
 
   const upload = async (file: File) => {
     if (!supabase) return;
@@ -35,6 +43,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
       const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(path);
       const item: GalleryItem = { id: path, src: publicUrl, alt: file.name.replace(/\.[^/.]+$/, ''), mediaType: 'image' };
       await saveContent({ gallery: { ...overrides, added: [...overrides.added, item] } });
+      flash(setPhotoSaved);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -52,6 +61,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
       const item: GalleryItem = { id: newId('vid'), src: thumb, alt: 'Video', mediaType: 'video', videoEmbedUrl: embedUrl };
       await saveContent({ gallery: { ...overrides, added: [...overrides.added, item] } });
       setVideoUrl('');
+      flash(setYtSaved);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Failed to add video');
     }
@@ -73,6 +83,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
       const { data: { publicUrl } } = supabase.storage.from('gallery').getPublicUrl(path);
       const item: GalleryItem = { id: path, src: '', alt: file.name.replace(/\.[^/.]+$/, ''), mediaType: 'video', videoEmbedUrl: publicUrl };
       await saveContent({ gallery: { ...overrides, added: [...overrides.added, item] } });
+      flash(setVideoSaved);
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Upload failed');
     } finally {
@@ -136,7 +147,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
             className="flex-1 border border-primary text-primary py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-primary/10 disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <Upload size={12} />
-            {uploading ? 'UPLOADING...' : 'UPLOAD PHOTO'}
+            {uploading ? 'UPLOADING...' : photoSaved ? 'SAVED!' : 'UPLOAD PHOTO'}
           </button>
           <button
             onClick={() => videoFileRef.current?.click()}
@@ -144,7 +155,7 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
             className="flex-1 border border-border text-foreground py-2 text-[10px] tracking-[0.2em] uppercase hover:border-primary hover:text-primary disabled:opacity-50 flex items-center justify-center gap-2"
           >
             <Play size={12} />
-            {uploadingVideo ? 'UPLOADING...' : 'UPLOAD VIDEO'}
+            {uploadingVideo ? 'UPLOADING...' : videoSaved ? 'SAVED!' : 'UPLOAD VIDEO'}
           </button>
         </div>
 
@@ -165,10 +176,10 @@ const GalleryAdmin = ({ onBack }: { onBack: () => void }) => {
             />
             <button
               onClick={addVideo}
-              disabled={!videoUrl.trim()}
-              className="border border-primary text-primary px-3 py-2 text-[10px] hover:bg-primary/10 disabled:opacity-50 flex items-center gap-1"
+              disabled={!videoUrl.trim() || ytSaved}
+              className="border border-primary text-primary px-3 py-2 text-[10px] hover:bg-primary/10 disabled:opacity-50 flex items-center gap-1 min-w-[56px] justify-center"
             >
-              <Plus size={12} />
+              {ytSaved ? 'ADDED!' : <Plus size={12} />}
             </button>
           </div>
         </div>
