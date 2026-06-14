@@ -4,6 +4,7 @@ import HeroSection from './components/HeroSection';
 import MusicPlayer from './components/MusicPlayer/MusicPlayer';
 import LabelPedigree from './components/LabelPedigree';
 import SignalLog from './components/SignalLog';
+import GigManifest from './components/GigManifest';
 import BioSection from './components/BioSection';
 import BookingSection from './components/BookingSection';
 import GallerySection from './components/GallerySection';
@@ -163,6 +164,7 @@ export default function App() {
             <MusicPlayer />
             <LabelPedigree />
             <SignalLog />
+            <GigManifest />
             <BioSection />
             <BookingSection />
             <GallerySection />
