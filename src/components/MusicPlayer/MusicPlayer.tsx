@@ -152,6 +152,8 @@ const MusicPlayer = () => {
         widget.getCurrentSoundIndex((idx: number) => {
           if (typeof idx !== "number") return;
           const displayIdx = trackIndexMapRef.current.indexOf(idx);
+          // An unmapped index is a transient from the widget's own auto-advance onto an
+          // excluded sound; ignore it. FINISH's selectTrack() overrides to the correct track.
           if (displayIdx !== -1) setCurrentTrack(displayIdx);
         });
       });
@@ -292,6 +294,7 @@ const MusicPlayer = () => {
     // First-ever play on the TRACKS tab: start at the first visible track so we
     // never play an excluded sound (e.g. SoundCloud index 0). Otherwise resume.
     if (activeSourceRef.current === "tracks" && !hasStartedRef.current) {
+      if (tracksRef.current.length === 0) return; // list not loaded yet; avoid skip()->excluded SC index 0
       selectTrack(intendedTrackRef.current);
       return;
     }
@@ -299,6 +302,9 @@ const MusicPlayer = () => {
   }, [playing, getActiveWidget, selectTrack]);
 
   const selectPlaylistTrack = useCallback((index: number) => {
+    // index is the position in the title-filtered playlistTracks array. Curated playlists
+    // are all-public so this equals the SC index; a metadata-less sound would diverge
+    // (tracked follow-up: give playlists a trackIndexMap like the TRACKS tab).
     intendedPlaylistTrackRef.current = index;
     setCurrentPlaylistTrack(index);
     setActiveSource("playlist");

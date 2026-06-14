@@ -125,11 +125,24 @@ describe('MusicPlayer TRACKS sequencing', () => {
     expect(lastSkip()).toBe(MAP[0]); // 1 (Alpha) — looped
   });
 
-  it('PLAY landing on an excluded SC index does not trigger widget.next()', () => {
+  it('PLAY landing on an excluded SC index does not trigger widget.next() or change selection', () => {
     const { widget } = setupTracks();
     widget._setCur(3); // SC3 = excluded "Old School Night"
     act(() => { widget._fire('play'); });
     expect(widget._calls.next).toBe(0);
+    // the excluded track never becomes the displayed/current track
+    expect(screen.queryByText('Old School Night Live Mix')).toBeNull();
+  });
+
+  it('does not start playback before the track list has loaded (no skip to excluded SC0)', () => {
+    const widget = makeMock(SOUNDS);
+    installSC(widget);
+    render(<MusicPlayer />);
+    const iframe = document.querySelector('iframe[title="SoundCloud Player"]')!;
+    fireEvent.load(iframe); // widget created, but READY not fired -> tracks still empty
+    fireEvent.click(screen.getAllByRole('button', { name: /^play$/i })[0]);
+    expect(widget._calls.skip.length).toBe(0);
+    expect(widget._calls.play).toBe(0);
   });
 
   it('Next button advances by one and wraps at the end', () => {
