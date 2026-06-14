@@ -26,7 +26,7 @@ describe('SignalLog', () => {
     expect(screen.getAllByText(/galaxy 604/i).length).toBeGreaterThan(0);
     expect(screen.getByText(/100 aliens/i)).toBeInTheDocument();
     expect(screen.getByText(/the call of goa, vol\. 5/i)).toBeInTheDocument();
-    expect(screen.getByText(/psy trance 2026: space dj/i)).toBeInTheDocument();
+    expect(screen.getByText(/psy trance 2026 space dj/i)).toBeInTheDocument();
   });
 
   it('links each release to its release page in a new tab', () => {
@@ -34,12 +34,11 @@ describe('SignalLog', () => {
     const expected: Record<string, string> = {
       'The Subspace Theory': 'https://yannig.bandcamp.com/album/the-subspace-theory-ep',
       'Nightmare In Heaven': 'https://yannig.bandcamp.com/track/nightmare-in-heaven',
-      'Galaxy 604': 'https://yannig.bandcamp.com/track/galaxy-604-goaep604-goa-records',
-      'Psychedelic Goa Trance 2026: 100 Aliens':
+      'Psychedelic Goa Trance 2026 100 Aliens':
         'https://freshfrequencies.bandcamp.com/album/psychedelic-goa-trance-2026-100-aliens',
       'The Call Of Goa, Vol. 5':
         'https://timewarprecords.bandcamp.com/album/the-call-of-goa-vol-5',
-      'Psy Trance 2026: Space DJ':
+      'Psy Trance 2026 Space DJ':
         'https://open.spotify.com/album/73EV8DxuOgSoAhqSXSYhwn?si=NOD-pJajTYKP-Yr6trlgqg',
     };
 
@@ -51,8 +50,14 @@ describe('SignalLog', () => {
     }
   });
 
+  it('renders Galaxy 604 as non-interactive (no URL)', () => {
+    render(<SignalLog />);
+    expect(screen.getAllByText(/galaxy 604/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /galaxy 604, open release/i })).not.toBeInTheDocument();
+  });
+
   it('renders a row without a url as non-interactive (no anchor)', () => {
-    render(<SignalLog rows={{ solo: [{ date: '2099', title: 'Unlinked Test Release', meta: 'Single' }], comps: [] }} />);
+    render(<SignalLog rows={{ solo: [{ id: 'test-1', date: '2099', title: 'Unlinked Test Release', kind: 'Single', label: 'Test Label' }], comps: [] }} />);
     expect(screen.getByText(/unlinked test release/i)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /unlinked test release/i })).not.toBeInTheDocument();
   });

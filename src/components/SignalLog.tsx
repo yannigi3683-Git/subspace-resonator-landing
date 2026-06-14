@@ -1,66 +1,33 @@
 import { ArrowUpRight } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
+import { useReleases } from "../lib/siteContent";
+import type { Release } from "../lib/siteContent";
 
-type Release = {
-  date: string;
-  title: string;
-  meta: string;
-  url?: string;
-};
+function displayDate(d: string): string {
+  return d.replace(/-/g, '.');
+}
 
-const SOLO_RELEASES: Release[] = [
-  {
-    date: "2025.12.26",
-    title: "The Subspace Theory",
-    meta: "EP · 4 Tracks · Goa Records",
-    url: "https://yannig.bandcamp.com/album/the-subspace-theory-ep",
-  },
-  {
-    date: "2025.10.31",
-    title: "Nightmare In Heaven",
-    meta: "Single · Timewarp Records",
-    url: "https://yannig.bandcamp.com/track/nightmare-in-heaven",
-  },
-  {
-    date: "2025",
-    title: "Galaxy 604",
-    meta: "Single · Goa Records",
-    url: "https://yannig.bandcamp.com/track/galaxy-604-goaep604-goa-records",
-  },
-];
-
-const COMPILATION_APPEARANCES: Release[] = [
-  {
-    date: "2026.01.09",
-    title: "Psychedelic Goa Trance 2026: 100 Aliens",
-    meta: '"Galaxy 604" · Fresh Frequencies',
-    url: "https://freshfrequencies.bandcamp.com/album/psychedelic-goa-trance-2026-100-aliens",
-  },
-  {
-    date: "2026",
-    title: "The Call Of Goa, Vol. 5",
-    meta: '"Subspace Disturbance" · Timewarp Records',
-    url: "https://timewarprecords.bandcamp.com/album/the-call-of-goa-vol-5",
-  },
-  {
-    date: "2026",
-    title: "Psy Trance 2026: Space DJ",
-    meta: '"Galaxy 604" · Fresh Frequencies',
-    url: "https://open.spotify.com/album/73EV8DxuOgSoAhqSXSYhwn?si=NOD-pJajTYKP-Yr6trlgqg",
-  },
-];
+function buildMeta(r: Release): string {
+  if (r.kind === 'Compilation') {
+    return r.trackName ? `"${r.trackName}" · ${r.label}` : r.label;
+  }
+  if (r.kind === 'EP') {
+    return r.trackCount ? `EP · ${r.trackCount} Tracks · ${r.label}` : `EP · ${r.label}`;
+  }
+  return `Single · ${r.label}`;
+}
 
 const ROW_GRID =
   "grid grid-cols-[5rem_1fr_auto] sm:grid-cols-[6.5rem_1fr_auto] gap-x-3 sm:gap-x-5 py-3 border-b border-border/40 font-mono";
 
 const RowBody = ({ r }: { r: Release }) => (
   <>
-    <span className="text-primary text-[11px] sm:text-xs pt-px tabular-nums">{r.date}</span>
+    <span className="text-primary text-[11px] sm:text-xs pt-px tabular-nums">{displayDate(r.date)}</span>
     <div className="min-w-0">
       <div className="text-foreground group-hover:text-primary transition-colors text-xs sm:text-sm uppercase tracking-[0.12em]">
         {r.title}
       </div>
-      <div className="text-muted-foreground text-[11px] sm:text-xs mt-1">{r.meta}</div>
+      <div className="text-muted-foreground text-[11px] sm:text-xs mt-1">{buildMeta(r)}</div>
     </div>
   </>
 );
@@ -100,7 +67,7 @@ const LogGroup = ({ label, rows }: { label: string; rows: Release[] }) => (
     </p>
     <div>
       {rows.map((r) => (
-        <LogRow key={r.title} r={r} />
+        <LogRow key={r.id} r={r} />
       ))}
     </div>
   </div>
@@ -111,8 +78,9 @@ type SignalLogProps = {
 };
 
 const SignalLog = ({ rows }: SignalLogProps = {}) => {
-  const solo = rows?.solo ?? SOLO_RELEASES;
-  const comps = rows?.comps ?? COMPILATION_APPEARANCES;
+  const releases = useReleases();
+  const solo = rows?.solo ?? releases.solo;
+  const comps = rows?.comps ?? releases.compilations;
   return (
     <section id="archive" aria-label="Discography" className="py-10 md:py-16 border-t border-border">
       <div className="container">

@@ -12,8 +12,42 @@ import SocialMatrix from './components/SocialMatrix';
 import liveAlpha from './assets/live-alpha.webp';
 import AccessibilityMenu from './components/AccessibilityMenu';
 import AdminPanel from './components/admin/AdminPanel';
+import { useReleases, useSocials } from './lib/siteContent';
+
+const ARTIST_REF = { '@id': 'https://subspaceresonator.com/#artist' };
 
 export default function App() {
+  const releases = useReleases();
+  const socials = useSocials();
+
+  const sameAs = socials.filter(s => s.url).map(s => s.url);
+
+  const releasesGraph = [
+    ...releases.solo.map(r => ({
+      '@type': 'MusicAlbum',
+      'albumProductionType': r.kind === 'EP' ? 'StudioAlbum' : 'SingleAlbum',
+      'name': r.title,
+      ...(r.kind === 'EP' && r.trackCount ? { 'numTracks': r.trackCount } : {}),
+      'datePublished': r.date,
+      'recordLabel': { '@type': 'Organization', 'name': r.label },
+      'byArtist': ARTIST_REF,
+      ...(r.url ? { 'url': r.url } : {}),
+    })),
+    ...releases.compilations.map(r => ({
+      '@type': 'MusicAlbum',
+      'albumProductionType': 'CompilationAlbum',
+      'name': r.title,
+      'datePublished': r.date,
+      'recordLabel': { '@type': 'Organization', 'name': r.label },
+      'track': {
+        '@type': 'MusicRecording',
+        'name': r.trackName || r.title,
+        'byArtist': ARTIST_REF,
+      },
+      ...(r.url ? { 'url': r.url } : {}),
+    })),
+  ];
+
   return (
     <HelmetProvider>
       <Helmet>
@@ -54,18 +88,7 @@ export default function App() {
             'name': 'Yanni',
             'url': 'https://subspaceresonator.com/',
           },
-          'sameAs': [
-            'https://soundcloud.com/subspaceresonance',
-            'https://open.spotify.com/artist/0UQWUdUuQ3NhMCACj4UXlk',
-            'https://yannig.bandcamp.com/',
-            'https://www.youtube.com/@SubspaceResonator',
-            'https://www.instagram.com/subspace_resonator',
-            'https://www.discogs.com/artist/15101171-Subspace-Resonator',
-            'https://www.facebook.com/profile.php?id=61559198105695',
-            'https://www.tiktok.com/@subspace.resonato',
-            'https://www.beatport.com/artist/subspace-resonator/1354950',
-            'https://linktr.ee/yanni_subspace_resonator',
-          ],
+          'sameAs': sameAs,
           'contactPoint': {
             '@type': 'ContactPoint',
             'email': 'subspaceresonator@gmail.com',
@@ -74,71 +97,7 @@ export default function App() {
         })}</script>
 <script type="application/ld+json">{JSON.stringify({
           '@context': 'https://schema.org',
-          '@graph': [
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'StudioAlbum',
-              'name': 'The Subspace Theory',
-              'numTracks': 4,
-              'datePublished': '2025-12-26',
-              'recordLabel': { '@type': 'Organization', 'name': 'Goa Records' },
-              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              'url': 'https://yannig.bandcamp.com/album/the-subspace-theory',
-            },
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'SingleAlbum',
-              'name': 'Galaxy 604',
-              'datePublished': '2025',
-              'recordLabel': { '@type': 'Organization', 'name': 'Goa Records' },
-              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-            },
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'SingleAlbum',
-              'name': 'Nightmare In Heaven',
-              'datePublished': '2025-10-31',
-              'recordLabel': { '@type': 'Organization', 'name': 'Timewarp Records' },
-              'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              'url': 'https://beatspace-timewarp.bandcamp.com/album/nightmare-in-heaven',
-            },
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'CompilationAlbum',
-              'name': 'The Call Of Goa, Vol. 5',
-              'datePublished': '2026',
-              'recordLabel': { '@type': 'Organization', 'name': 'Timewarp Records' },
-              'track': {
-                '@type': 'MusicRecording',
-                'name': 'Subspace Disturbance',
-                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              },
-            },
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'CompilationAlbum',
-              'name': 'Psychedelic Goa Trance 2026 100 Aliens',
-              'datePublished': '2026-01-09',
-              'recordLabel': { '@type': 'Organization', 'name': 'Fresh Frequencies' },
-              'track': {
-                '@type': 'MusicRecording',
-                'name': 'Galaxy 604',
-                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              },
-            },
-            {
-              '@type': 'MusicAlbum',
-              'albumProductionType': 'CompilationAlbum',
-              'name': 'Psy Trance 2026 Space DJ',
-              'datePublished': '2026',
-              'recordLabel': { '@type': 'Organization', 'name': 'Fresh Frequencies' },
-              'track': {
-                '@type': 'MusicRecording',
-                'name': 'Galaxy 604',
-                'byArtist': { '@id': 'https://subspaceresonator.com/#artist' },
-              },
-            },
-          ],
+          '@graph': releasesGraph,
         })}</script>
       </Helmet>
 

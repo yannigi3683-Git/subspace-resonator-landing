@@ -153,14 +153,14 @@ export const DEFAULT_SOCIALS: SocialItem[] = [
 
 export const DEFAULT_RELEASES: ReleasesContent = {
   solo: [
-    { id: 'subspace-theory',    date: '2025-12-26', title: 'The Subspace Theory',  kind: 'EP',     label: 'Independent',      trackCount: 4, url: 'https://yannig.bandcamp.com/album/the-subspace-theory' },
-    { id: 'nightmare-in-heaven',date: '2025-10-31', title: 'Nightmare In Heaven',  kind: 'Single', label: 'Timewarp Records',  url: 'https://beatspace-timewarp.bandcamp.com/album/nightmare-in-heaven' },
+    { id: 'subspace-theory',    date: '2025-12-26', title: 'The Subspace Theory',  kind: 'EP',     label: 'Goa Records',      trackCount: 4, url: 'https://yannig.bandcamp.com/album/the-subspace-theory-ep' },
+    { id: 'nightmare-in-heaven',date: '2025-10-31', title: 'Nightmare In Heaven',  kind: 'Single', label: 'Timewarp Records',  url: 'https://yannig.bandcamp.com/track/nightmare-in-heaven' },
     { id: 'galaxy-604',          date: '2025',       title: 'Galaxy 604',           kind: 'Single', label: 'Goa Records' },
   ],
   compilations: [
-    { id: 'call-of-goa-5',      date: '2026',       title: 'The Call Of Goa, Vol. 5',                 kind: 'Compilation', label: 'Timewarp Records',   trackName: 'Subspace Disturbance' },
-    { id: 'psychedelic-goa-2026',date: '2026-01-09', title: 'Psychedelic Goa Trance 2026 100 Aliens',  kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604' },
-    { id: 'psy-trance-2026',     date: '2026',       title: 'Psy Trance 2026 Space DJ',               kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604' },
+    { id: 'call-of-goa-5',       date: '2026',       title: 'The Call Of Goa, Vol. 5',                kind: 'Compilation', label: 'Timewarp Records',   trackName: 'Subspace Disturbance', url: 'https://timewarprecords.bandcamp.com/album/the-call-of-goa-vol-5' },
+    { id: 'psychedelic-goa-2026', date: '2026-01-09', title: 'Psychedelic Goa Trance 2026 100 Aliens', kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604',           url: 'https://freshfrequencies.bandcamp.com/album/psychedelic-goa-trance-2026-100-aliens' },
+    { id: 'psy-trance-2026',      date: '2026',       title: 'Psy Trance 2026 Space DJ',               kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604',           url: 'https://open.spotify.com/album/73EV8DxuOgSoAhqSXSYhwn?si=NOD-pJajTYKP-Yr6trlgqg' },
   ],
 };
 
