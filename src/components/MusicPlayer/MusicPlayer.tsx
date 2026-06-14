@@ -66,6 +66,9 @@ const MusicPlayer = () => {
   useEffect(() => { tracksRef.current = tracks; }, [tracks]);
   const intendedTrackRef = useRef(0);
   const hasStartedRef = useRef(false);
+  const playlistTracksRef = useRef<Track[]>([]);
+  useEffect(() => { playlistTracksRef.current = playlistTracks; }, [playlistTracks]);
+  const intendedPlaylistTrackRef = useRef(0);
 
   useEffect(() => {
     const widget = getActiveWidget();
@@ -203,7 +206,10 @@ const MusicPlayer = () => {
       widget.bind(SC.Widget.Events.PAUSE, () => {
         if (scPlaylistWidgetRef.current === getActiveWidgetRef()) setPlaying(false);
       });
-      widget.bind(SC.Widget.Events.FINISH, () => widget.next());
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        const n = playlistTracksRef.current.length;
+        if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current + 1) % n);
+      });
     });
   }, [volume, refillPlaylistTracks]);
 
@@ -213,6 +219,7 @@ const MusicPlayer = () => {
     if (!def) return;
     setActivePlaylistKey(key);
     setCurrentPlaylistTrack(0);
+    intendedPlaylistTrackRef.current = 0;
     setPlaylistTracks([]);
     setPlaylistLoading(true);
     if (scPlaylistWidgetRef.current) scPlaylistWidgetRef.current.pause();
@@ -292,6 +299,7 @@ const MusicPlayer = () => {
   }, [playing, getActiveWidget, selectTrack]);
 
   const selectPlaylistTrack = useCallback((index: number) => {
+    intendedPlaylistTrackRef.current = index;
     setCurrentPlaylistTrack(index);
     setActiveSource("playlist");
     if (scWidgetRef.current) scWidgetRef.current.pause();
@@ -308,9 +316,9 @@ const MusicPlayer = () => {
       if (n > 0) selectTrack((intendedTrackRef.current + 1) % n);
       return;
     }
-    const widget = scPlaylistWidgetRef.current;
-    if (widget) { widget.next(); setPlaying(true); }
-  }, [selectTrack]);
+    const n = playlistTracksRef.current.length;
+    if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current + 1) % n);
+  }, [selectTrack, selectPlaylistTrack]);
 
   const prevTrack = useCallback(() => {
     if (activeSourceRef.current === "tracks") {
@@ -318,9 +326,9 @@ const MusicPlayer = () => {
       if (n > 0) selectTrack((intendedTrackRef.current - 1 + n) % n);
       return;
     }
-    const widget = scPlaylistWidgetRef.current;
-    if (widget) { widget.prev(); setPlaying(true); }
-  }, [selectTrack]);
+    const n = playlistTracksRef.current.length;
+    if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current - 1 + n) % n);
+  }, [selectTrack, selectPlaylistTrack]);
 
   const seekBy = useCallback((seconds: number) => {
     const widget = getActiveWidget();

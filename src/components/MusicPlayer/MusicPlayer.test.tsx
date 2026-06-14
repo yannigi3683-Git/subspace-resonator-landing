@@ -159,3 +159,57 @@ describe('MusicPlayer TRACKS sequencing', () => {
     expect(widget._calls.next).toBe(0);
   });
 });
+
+// --- PLAYLISTS sequencing (same double-advance fix on the sibling widget) ----
+
+// A curated playlist: all titled, no exclusions, so array index == SC index.
+const PL_SOUNDS = [
+  { title: 'P0', permalink_url: 'q0' },
+  { title: 'P1', permalink_url: 'q1' },
+  { title: 'P2', permalink_url: 'q2' },
+  { title: 'P3', permalink_url: 'q3' },
+];
+
+function installSCMulti(tracksW: any, playlistW: any) {
+  const Widget: any = (iframe: any) =>
+    iframe && /Playlist/.test(iframe.title) ? playlistW : tracksW;
+  Widget.Events = {
+    READY: 'ready', PLAY: 'play', PAUSE: 'pause', FINISH: 'finish',
+    LOAD_PROGRESS: 'lp', PLAY_PROGRESS: 'pp', SEEK: 'seek', ERROR: 'error',
+  };
+  (window as any).SC = { Widget };
+}
+
+function setupPlaylist() {
+  const tracksW = makeMock(PL_SOUNDS);
+  const playlistW = makeMock(PL_SOUNDS);
+  installSCMulti(tracksW, playlistW);
+  render(<MusicPlayer />);
+  const tIframe = document.querySelector('iframe[title="SoundCloud Player"]')!;
+  fireEvent.load(tIframe);
+  act(() => { tracksW._fire('ready'); });
+  fireEvent.click(screen.getByRole('button', { name: /playlists/i }));
+  const pIframe = document.querySelector('iframe[title="SoundCloud Playlist Player"]')!;
+  fireEvent.load(pIframe);
+  act(() => { playlistW._fire('ready'); });
+  const lastSkip = () => playlistW._calls.skip[playlistW._calls.skip.length - 1];
+  return { playlistW, lastSkip };
+}
+
+describe('MusicPlayer PLAYLISTS sequencing', () => {
+  afterEach(() => { delete (window as any).SC; });
+
+  it('auto-advance on FINISH moves exactly one track and never calls widget.next()', () => {
+    const { playlistW, lastSkip } = setupPlaylist();
+    act(() => { playlistW._fire('finish'); }); // from index 0 -> 1
+    expect(playlistW._calls.next).toBe(0);
+    expect(lastSkip()).toBe(1);
+  });
+
+  it('auto-advance loops to the first track after the last finishes', () => {
+    const { playlistW, lastSkip } = setupPlaylist();
+    fireEvent.click(screen.getByText('P3')); // select last (index 3)
+    act(() => { playlistW._fire('finish'); });
+    expect(lastSkip()).toBe(0); // looped
+  });
+});
