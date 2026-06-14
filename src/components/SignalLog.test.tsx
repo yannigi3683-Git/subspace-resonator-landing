@@ -15,7 +15,7 @@ describe('SignalLog', () => {
 
   it('renders both group labels', () => {
     render(<SignalLog />);
-    expect(screen.getByText(/solo releases/i)).toBeInTheDocument();
+    expect(screen.getByText(/^releases$/i)).toBeInTheDocument();
     expect(screen.getByText(/compilation appearances/i)).toBeInTheDocument();
   });
 

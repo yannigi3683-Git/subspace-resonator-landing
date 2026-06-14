@@ -35,7 +35,7 @@ export type Release = {
   id: string;
   date: string;
   title: string;
-  kind: 'EP' | 'Single' | 'Compilation';
+  kind: 'EP' | 'Single' | 'LP' | 'Remix' | 'Compilation';
   label: string;
   trackCount?: number;
   trackName?: string;
@@ -268,7 +268,7 @@ function validateReleaseArray(arr: unknown[]): Release[] {
     if (out.length >= 100) break;
     if (!item || typeof item !== 'object') continue;
     const it = item as Record<string, unknown>;
-    const kind = it.kind === 'EP' || it.kind === 'Single' || it.kind === 'Compilation' ? it.kind : 'Single';
+    const kind = it.kind === 'EP' || it.kind === 'Single' || it.kind === 'LP' || it.kind === 'Remix' || it.kind === 'Compilation' ? it.kind : 'Single';
     let url = '';
     try { url = it.url ? sanitizeUrl(it.url) : ''; } catch { url = ''; }
     out.push({

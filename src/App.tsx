@@ -25,7 +25,7 @@ export default function App() {
   const releasesGraph = [
     ...releases.solo.map(r => ({
       '@type': 'MusicAlbum',
-      'albumProductionType': r.kind === 'EP' ? 'StudioAlbum' : 'SingleAlbum',
+      'albumProductionType': (r.kind === 'EP' || r.kind === 'LP') ? 'StudioAlbum' : 'SingleAlbum',
       'name': r.title,
       ...(r.kind === 'EP' && r.trackCount ? { 'numTracks': r.trackCount } : {}),
       'datePublished': r.date,

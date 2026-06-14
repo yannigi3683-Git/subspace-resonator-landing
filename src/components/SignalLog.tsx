@@ -4,7 +4,10 @@ import { useReleases } from "../lib/siteContent";
 import type { Release } from "../lib/siteContent";
 
 function displayDate(d: string): string {
-  return d.replace(/-/g, '.');
+  // Full date YYYY-MM-DD → DD.MM.YYYY (EU style); year-only stays as-is
+  const full = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (full) return `${full[3]}.${full[2]}.${full[1]}`;
+  return d;
 }
 
 function buildMeta(r: Release): string {
@@ -13,6 +16,12 @@ function buildMeta(r: Release): string {
   }
   if (r.kind === 'EP') {
     return r.trackCount ? `EP · ${r.trackCount} Tracks · ${r.label}` : `EP · ${r.label}`;
+  }
+  if (r.kind === 'LP') {
+    return r.trackCount ? `LP · ${r.trackCount} Tracks · ${r.label}` : `LP · ${r.label}`;
+  }
+  if (r.kind === 'Remix') {
+    return `Remix · ${r.label}`;
   }
   return `Single · ${r.label}`;
 }
@@ -88,7 +97,7 @@ const SignalLog = ({ rows }: SignalLogProps = {}) => {
           // MUSIC ARCHIVE
         </h2>
         <div className="space-y-10">
-          <LogGroup label="Solo Releases" rows={solo} />
+          <LogGroup label="Releases" rows={solo} />
           <LogGroup label="Compilation Appearances" rows={comps} />
         </div>
       </div>

@@ -3,7 +3,7 @@ import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
 import { useReleases, saveContent, newId } from '@/lib/siteContent';
 import type { Release } from '@/lib/siteContent';
 
-const EMPTY_SOLO = { date: '', title: '', kind: 'Single' as 'EP' | 'Single', label: '', trackCount: '', url: '' };
+const EMPTY_SOLO = { date: '', title: '', kind: 'Single' as 'EP' | 'Single' | 'LP' | 'Remix', label: '', trackCount: '', url: '' };
 const EMPTY_COMP = { date: '', title: '', label: '', trackName: '', url: '' };
 
 const INPUT = "w-full border border-border bg-transparent px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none";
@@ -36,7 +36,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
         title: soloForm.title.trim(),
         kind: soloForm.kind,
         label: soloForm.label.trim(),
-        trackCount: soloForm.kind === 'EP' && soloForm.trackCount ? Number(soloForm.trackCount) : undefined,
+        trackCount: (soloForm.kind === 'EP' || soloForm.kind === 'LP') && soloForm.trackCount ? Number(soloForm.trackCount) : undefined,
         url: soloForm.url.trim() || undefined,
       };
       await saveContent({ releases: { solo: [...releases.solo, item], compilations: releases.compilations } });
@@ -110,7 +110,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
 
         {/* Solo Releases */}
         <div className="space-y-3">
-          <div className="text-[10px] tracking-[0.2em] text-primary uppercase">Solo Releases</div>
+          <div className="text-[10px] tracking-[0.2em] text-primary uppercase">Your Releases</div>
 
           {releases.solo.length > 0 && (
             <div className="space-y-1">
@@ -134,15 +134,17 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
           )}
 
           <div className="border border-border p-3 space-y-2">
-            <div className="text-[10px] tracking-[0.15em] text-muted-foreground uppercase">Add Solo Release</div>
+            <div className="text-[10px] tracking-[0.15em] text-muted-foreground uppercase">Add Your Release</div>
             <input type="text" value={soloForm.title} onChange={e => setSolo('title', e.target.value)} placeholder="Title" className={INPUT} />
             <select value={soloForm.kind} onChange={e => setSolo('kind', e.target.value)} className={INPUT}>
               <option value="Single">Single</option>
               <option value="EP">EP</option>
+              <option value="LP">LP (Album)</option>
+              <option value="Remix">Remix</option>
             </select>
             <input type="text" value={soloForm.label} onChange={e => setSolo('label', e.target.value)} placeholder="Label" className={INPUT} />
             <input type="text" value={soloForm.date} onChange={e => setSolo('date', e.target.value)} placeholder="Date — YYYY or YYYY-MM-DD" className={INPUT} />
-            {soloForm.kind === 'EP' && (
+            {(soloForm.kind === 'EP' || soloForm.kind === 'LP') && (
               <input type="number" value={soloForm.trackCount} onChange={e => setSolo('trackCount', e.target.value)} placeholder="Track count (optional)" min="1" max="99" className={INPUT} />
             )}
             <input type="url" value={soloForm.url} onChange={e => setSolo('url', e.target.value)} placeholder="Release URL (optional)" className={INPUT} />
