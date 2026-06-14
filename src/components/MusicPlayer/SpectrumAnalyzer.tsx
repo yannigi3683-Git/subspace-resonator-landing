@@ -60,6 +60,18 @@ export default function SpectrumAnalyzer({
       };
     });
 
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      const staticLevels = bandProfiles.map((bp) =>
+        Math.round(Math.max(0, Math.min(segments, bp.baseEnergy * segments * volScale)))
+      );
+      smoothRef.current = [...staticLevels];
+      levelsRef.current = staticLevels;
+      peaksRef.current = [...staticLevels];
+      setRenderLevels(staticLevels);
+      setRenderPeaks(staticLevels);
+      return;
+    }
+
     let lastTime = performance.now();
     let beatPhase = 0;
     const bpm = 145 + (seed % 20);
