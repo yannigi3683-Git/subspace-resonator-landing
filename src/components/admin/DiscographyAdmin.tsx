@@ -8,6 +8,18 @@ const EMPTY_COMP = { date: '', title: '', label: '', trackName: '', url: '' };
 
 const INPUT = "w-full border border-border bg-transparent px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:border-primary focus:outline-none";
 
+function parseDate(input: string): string {
+  const s = input.trim();
+  const eu = s.match(/^(\d{2})\.(\d{2})\.(\d{4})$/);
+  if (eu) return `${eu[3]}-${eu[2]}-${eu[1]}`;
+  return s;
+}
+
+function showDate(d: string): string {
+  const m = d.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  return m ? `${m[3]}.${m[2]}.${m[1]}` : d;
+}
+
 const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
   const releases = useReleases();
   const [soloForm, setSoloForm] = useState(EMPTY_SOLO);
@@ -32,7 +44,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
     try {
       const item: Release = {
         id: newId('rel'),
-        date: soloForm.date.trim(),
+        date: parseDate(soloForm.date),
         title: soloForm.title.trim(),
         kind: soloForm.kind,
         label: soloForm.label.trim(),
@@ -58,7 +70,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
     try {
       const item: Release = {
         id: newId('rel'),
-        date: compForm.date.trim(),
+        date: parseDate(compForm.date),
         title: compForm.title.trim(),
         kind: 'Compilation',
         label: compForm.label.trim(),
@@ -117,7 +129,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
               {releases.solo.map(r => (
                 <div key={r.id} className="border border-border p-2 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-primary tracking-[0.1em]">{r.date}</p>
+                    <p className="text-[10px] text-primary tracking-[0.1em]">{showDate(r.date)}</p>
                     <p className="text-xs text-foreground truncate">{r.title}</p>
                     <p className="text-[10px] text-muted-foreground">{r.kind} · {r.label}</p>
                   </div>
@@ -143,7 +155,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
               <option value="Remix">Remix</option>
             </select>
             <input type="text" value={soloForm.label} onChange={e => setSolo('label', e.target.value)} placeholder="Label" className={INPUT} />
-            <input type="text" value={soloForm.date} onChange={e => setSolo('date', e.target.value)} placeholder="Date — YYYY or YYYY-MM-DD" className={INPUT} />
+            <input type="text" value={soloForm.date} onChange={e => setSolo('date', e.target.value)} placeholder="DD.MM.YYYY or 2025" className={INPUT} />
             {(soloForm.kind === 'EP' || soloForm.kind === 'LP') && (
               <input type="number" value={soloForm.trackCount} onChange={e => setSolo('trackCount', e.target.value)} placeholder="Track count (optional)" min="1" max="99" className={INPUT} />
             )}
@@ -168,7 +180,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
               {releases.compilations.map(r => (
                 <div key={r.id} className="border border-border p-2 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-primary tracking-[0.1em]">{r.date}</p>
+                    <p className="text-[10px] text-primary tracking-[0.1em]">{showDate(r.date)}</p>
                     <p className="text-xs text-foreground truncate">{r.title}</p>
                     <p className="text-[10px] text-muted-foreground truncate">"{r.trackName}" · {r.label}</p>
                   </div>
@@ -189,7 +201,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
             <input type="text" value={compForm.title} onChange={e => setComp('title', e.target.value)} placeholder="Compilation title" className={INPUT} />
             <input type="text" value={compForm.label} onChange={e => setComp('label', e.target.value)} placeholder="Label" className={INPUT} />
             <input type="text" value={compForm.trackName} onChange={e => setComp('trackName', e.target.value)} placeholder="Your track name on this compilation" className={INPUT} />
-            <input type="text" value={compForm.date} onChange={e => setComp('date', e.target.value)} placeholder="Date — YYYY or YYYY-MM-DD" className={INPUT} />
+            <input type="text" value={compForm.date} onChange={e => setComp('date', e.target.value)} placeholder="DD.MM.YYYY or 2025" className={INPUT} />
             <input type="url" value={compForm.url} onChange={e => setComp('url', e.target.value)} placeholder="Release URL (optional)" className={INPUT} />
             <button
               onClick={addComp}
