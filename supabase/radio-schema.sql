@@ -186,7 +186,16 @@ drop policy if exists room_presence_write on realtime.messages;
 create policy room_presence_write on realtime.messages for insert to authenticated
   with check (realtime.topic() = 'room:main' and extension = 'presence');
 
--- 10. TTL cleanup (pg_cron when available; admin console runs a fallback cleanup)
+-- 10. Table-level grants (newer Supabase does not auto-grant on new tables)
+grant select on station, scheduled_shows, chat_messages to anon, authenticated;
+grant select on bans, kicks to authenticated;
+grant select on admin_audit to authenticated;
+grant all on station, scheduled_shows, bans, kicks, chat_messages, admin_audit to service_role;
+grant execute on function get_server_time() to anon, authenticated;
+grant execute on function chat_allowed(text, boolean) to authenticated;
+grant execute on function is_admin_aal2() to authenticated;
+
+-- 11. TTL cleanup (pg_cron when available; admin console runs a fallback cleanup)
 do $$ begin
   begin
     create extension if not exists pg_cron;
