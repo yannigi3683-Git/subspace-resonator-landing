@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 
-export default function FloodlightSet({ playing = false, side = "left" }: { playing?: boolean; side?: "left" | "right" }) {
+export default function FloodlightSet({ playing = false, side = "left", compact = false }: { playing?: boolean; side?: "left" | "right"; compact?: boolean }) {
   const [wobble, setWobble] = useState(0);
   const [hiPulse, setHiPulse] = useState(0);
   const rafRef = useRef<number | undefined>(undefined);
@@ -27,29 +27,34 @@ export default function FloodlightSet({ playing = false, side = "left" }: { play
   const pulse = playing ? wobble * 0.7 : 0;
   const tweeterPulse = playing ? hiPulse * 0.6 : 0;
 
+  const w = compact ? 44 : 56;
+  const hornH = compact ? 16 : 22;
+  const wooferH = compact ? 26 : 34;
+  const stripH = compact ? 8 : 10;
+
   return (
     <div className="flex flex-col items-center gap-0.5" aria-hidden="true">
       <div
         data-cabinet=""
         className="flex flex-col gap-[2px] p-[3px]"
         style={{
-          width: 56,
+          width: w,
           background: "linear-gradient(180deg, hsl(220,20%,18%), hsl(220,18%,10%))",
           border: "1.5px solid hsl(220,15%,28%)",
           boxShadow: "0 2px 10px hsl(0,0%,0%/0.5), inset 0 1px 0 hsl(220,15%,30%)",
         }}
       >
         {/* Horn / HF driver */}
-        <div className="flex items-center justify-center" style={{ height: 22, background: "hsl(0,0%,6%)", border: "1px solid hsl(0,0%,22%)" }}>
-          <svg width="32" height="14" viewBox="0 0 32 14">
+        <div className="flex items-center justify-center" style={{ height: hornH, background: "hsl(0,0%,6%)", border: "1px solid hsl(0,0%,22%)" }}>
+          <svg width={compact ? 24 : 32} height={compact ? 10 : 14} viewBox="0 0 32 14">
             <path d="M8,0 L24,0 L30,14 L2,14 Z" fill={`hsl(0,0%,${10 + tweeterPulse * 18}%)`} stroke="hsl(0,0%,26%)" strokeWidth="0.5" />
             <rect x="12" y="1" width="8" height="4" rx="0.5" fill={`hsl(0,0%,${14 + tweeterPulse * 22}%)`} stroke="hsl(0,0%,28%)" strokeWidth="0.3" />
           </svg>
         </div>
 
         {/* Woofer */}
-        <div className="flex items-center justify-center" style={{ height: 34, background: "hsl(0,0%,6%)", border: "1px solid hsl(0,0%,22%)" }}>
-          <svg width="30" height="30" viewBox="0 0 30 30">
+        <div className="flex items-center justify-center" style={{ height: wooferH, background: "hsl(0,0%,6%)", border: "1px solid hsl(0,0%,22%)" }}>
+          <svg width={compact ? 24 : 30} height={compact ? 24 : 30} viewBox="0 0 30 30">
             <circle cx="15" cy="15" r="13" fill="none" stroke="hsl(0,0%,28%)" strokeWidth="0.8" />
             <defs>
               <radialGradient id={`cone-${side}`} cx="45%" cy="40%">
@@ -75,7 +80,7 @@ export default function FloodlightSet({ playing = false, side = "left" }: { play
         </div>
 
         {/* Brand strip */}
-        <div className="flex items-center justify-center" style={{ height: 10, background: "hsl(220,18%,13%)" }}>
+        <div className="flex items-center justify-center" style={{ height: stripH, background: "hsl(220,18%,13%)" }}>
           <span className="text-[6px] text-foreground/80 tracking-[0.2em] uppercase font-medium">turbosound</span>
         </div>
       </div>
