@@ -464,7 +464,7 @@ const MusicPlayer = () => {
               <button onClick={nextTrack} className="min-w-[34px] min-h-[34px] lg:min-w-[40px] lg:min-h-[40px] flex items-center justify-center border border-border hover:border-primary hover:text-primary transition-colors" style={transportBtnStyle} aria-label="Next track"><SkipForward size={14} /></button>
             </div>
 
-            <div className="hidden lg:block shrink-0"><FloodlightSet playing={playing} side="left" /></div>
+            <div className="hidden md:block shrink-0"><FloodlightSet playing={playing} side="left" /></div>
 
             {/* Track info — fills available space */}
             <div className="flex items-center gap-2 lg:gap-3 flex-1 min-w-0">
@@ -490,7 +490,7 @@ const MusicPlayer = () => {
               </div>
             </div>
 
-            <div className="hidden lg:block shrink-0"><FloodlightSet playing={playing} side="right" /></div>
+            <div className="hidden md:block shrink-0"><FloodlightSet playing={playing} side="right" /></div>
 
             {/* Channel strip — spectrum only on lg+, knob always */}
             <div className="flex items-center shrink-0"
@@ -502,7 +502,7 @@ const MusicPlayer = () => {
 
               {/* Spectrum analyzers — lg+ only */}
               {["CH-L", "CH-R"].map((label) => (
-                <div key={label} className="hidden lg:flex flex-col items-center"
+                <div key={label} className="hidden md:flex flex-col items-center"
                   style={{ background: "hsl(0,0%,2%)", padding: "3px 4px 2px" }}>
                   <SpectrumAnalyzer playing={playing} label={label} trackIndex={currentTrack} volume={volume} />
                   <div className="w-full mt-1 flex items-center justify-center"
