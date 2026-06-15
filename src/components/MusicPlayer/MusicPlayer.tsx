@@ -492,7 +492,7 @@ const MusicPlayer = () => {
 
             <div className="hidden md:block shrink-0"><FloodlightSet playing={playing} side="right" /></div>
 
-            {/* Channel strip — spectrum only on lg+, knob always */}
+            {/* Channel strip — spectrum on md+, knob always */}
             <div className="flex items-center shrink-0"
               style={{ background: "linear-gradient(180deg, hsl(0,0%,6%) 0%, hsl(0,0%,3%) 50%, hsl(0,0%,5%) 100%)", border: "1px solid hsl(0,0%,12%)", boxShadow: "inset 0 1px 3px hsl(0,0%,0%/0.6)", padding: "4px 3px", gap: "2px" }}>
               <div className="hidden lg:flex items-center justify-center shrink-0"
@@ -500,7 +500,7 @@ const MusicPlayer = () => {
                 <span style={{ fontSize: "10px", color: "hsl(0,0%,30%)", fontFamily: "monospace", letterSpacing: "0.05em" }}>1/0</span>
               </div>
 
-              {/* Spectrum analyzers — lg+ only */}
+              {/* Spectrum analyzers — md+ */}
               {["CH-L", "CH-R"].map((label) => (
                 <div key={label} className="hidden md:flex flex-col items-center"
                   style={{ background: "hsl(0,0%,2%)", padding: "3px 4px 2px" }}>
