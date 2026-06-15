@@ -8,6 +8,7 @@ import { transition, initialState, type FsmState, type ConnectionEvent } from '.
 interface Props {
   supabase: SupabaseClient;
   authToken: () => string;
+  listenerCount?: number;
 }
 
 type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
@@ -17,7 +18,7 @@ interface AudioDevice {
   label: string;
 }
 
-export default function GoLivePanel({ supabase, authToken }: Props) {
+export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: Props) {
   const [status, setStatus] = useState<BroadcastStatus>('idle');
   const [title, setTitle] = useState('');
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -27,7 +28,6 @@ export default function GoLivePanel({ supabase, authToken }: Props) {
   const [queue, setQueue] = useState<DeckTrack[]>([]);
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
-  const [listenerCount, setListenerCount] = useState(0);
 
   const mixerRef = useRef<HostMixer | null>(null);
   const publisherRef = useRef<Publisher | null>(null);
@@ -333,13 +333,6 @@ export default function GoLivePanel({ supabase, authToken }: Props) {
         </button>
       )}
 
-      {/* Listener count setter — wired via M5 presence */}
-      <input
-        type="hidden"
-        data-testid="listener-count-setter"
-        value={listenerCount}
-        onChange={(e) => setListenerCount(Number(e.target.value))}
-      />
     </section>
   );
 }

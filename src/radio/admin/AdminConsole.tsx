@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel from './GoLivePanel';
 
@@ -11,6 +11,18 @@ type Tab = 'broadcast' | 'schedule' | 'moderation';
 
 export default function AdminConsole({ supabase, authToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('broadcast');
+  const [listenerCount, setListenerCount] = useState(0);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel('admin-presence-count')
+      .on('presence', { event: 'sync' }, () => {
+        const count = Object.values(channel.presenceState()).flat().length;
+        setListenerCount(count);
+      })
+      .subscribe();
+    return () => { supabase.removeChannel(channel); };
+  }, [supabase]);
 
   return (
     <main className="min-h-screen bg-background text-foreground px-4 py-8 max-w-2xl mx-auto">
@@ -39,7 +51,7 @@ export default function AdminConsole({ supabase, authToken }: Props) {
       </nav>
 
       {activeTab === 'broadcast' && (
-        <GoLivePanel supabase={supabase} authToken={authToken} />
+        <GoLivePanel supabase={supabase} authToken={authToken} listenerCount={listenerCount} />
       )}
 
       {activeTab === 'schedule' && (
