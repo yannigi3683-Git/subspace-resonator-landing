@@ -48,8 +48,7 @@ export function DanceFloor({ presenceList, station, uid }: DanceFloorProps) {
         </div>
       </div>
 
-      {/* Crowd area - bottom 78% */}
-      <div className="absolute left-0 right-0 bottom-0" style={{ top: '22%', height: '78%' }}>
+      <div className="absolute left-0 right-0" style={{ top: '22%', height: '78%' }}>
         {visible.map((entry) => {
           const avatar = getAvatar(entry.avatarId);
           const isSelf = entry.uid === uid;

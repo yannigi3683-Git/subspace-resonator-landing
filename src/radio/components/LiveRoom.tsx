@@ -29,12 +29,10 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
 
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#0a0010]">
-      {/* Dancefloor - takes most space */}
       <div className="flex-1 min-h-[40vh] md:min-h-0">
         <DanceFloor presenceList={presenceList} station={station} uid={uid} />
       </div>
 
-      {/* Chat panel */}
       <div className="w-full md:w-80 flex flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]">
         <div className="px-3 py-2 border-b border-[#1a1a2e]">
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">
