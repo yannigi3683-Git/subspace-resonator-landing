@@ -12,8 +12,8 @@ export function useStation(supabase: SupabaseClient): Station | null {
       .from('station')
       .select('mode, live_title, live_session, slow_mode_s, locked')
       .single()
-      .then(({ data }) => {
-        if (!cancelled && data) setStation(data as Station);
+      .then(({ data, error }) => {
+        if (!cancelled && data && !error) setStation(data as Station);
       });
 
     const channel = supabase

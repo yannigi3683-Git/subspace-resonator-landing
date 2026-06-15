@@ -81,7 +81,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
         setSending(false);
       }
     },
-    [supabase, identity, uid],
+    [supabase, uid, identity.deviceId, identity.name, identity.avatarId],
   );
 
   return { messages, sendMessage, sending, sendError };

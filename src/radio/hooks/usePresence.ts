@@ -67,7 +67,7 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, identity, uid]);
+  }, [supabase, uid, identity.name, identity.avatarId, identity.deviceId, identity.position.x, identity.position.y]);
 
   return { presenceList, count: presenceList.length, isKicked, isBanned };
 }

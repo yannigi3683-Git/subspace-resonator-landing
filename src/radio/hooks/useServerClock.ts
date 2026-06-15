@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 interface Sample { offset: number; rtt: number }
@@ -27,5 +27,6 @@ export function useServerClock(supabase: SupabaseClient): () => Date {
     return () => { cancelled = true; };
   }, [supabase]);
 
-  return () => new Date(Date.now() + offsetRef.current);
+  const getServerTime = useCallback(() => new Date(Date.now() + offsetRef.current), []);
+  return getServerTime;
 }

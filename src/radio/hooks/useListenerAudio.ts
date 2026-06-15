@@ -86,6 +86,8 @@ export function useListenerAudio(
 
     return () => {
       cancelled = true;
+      cleanupRef.current?.();
+      cleanupRef.current = null;
     };
     // volume intentionally excluded: setVolume updates audio.volume directly
     // eslint-disable-next-line react-hooks/exhaustive-deps
