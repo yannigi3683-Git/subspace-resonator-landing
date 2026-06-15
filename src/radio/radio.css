@@ -1,0 +1,14 @@
+@keyframes radio-dance {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-6px) rotate(1.5deg); }
+}
+
+.radio-dance {
+  animation: radio-dance 0.9s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .radio-dance {
+    animation: none;
+  }
+}
