@@ -62,4 +62,21 @@ describe('sortReleasesByDate', () => {
     sortReleasesByDate(input);
     expect(input.map(x => x.id)).toEqual(snapshot);
   });
+
+  it('preserves input order for entries with identical dates (stable)', () => {
+    const out = sortReleasesByDate([
+      r('first', '2026'),
+      r('second', '2026'),
+      r('third', '2026'),
+    ]);
+    expect(out.map(x => x.id)).toEqual(['first', 'second', 'third']);
+  });
+
+  it('ranks a bare year above the final day of the previous year', () => {
+    const out = sortReleasesByDate([
+      r('prevYearEnd', '2025-12-31'),
+      r('bare2026', '2026'),
+    ]);
+    expect(out.map(x => x.id)).toEqual(['bare2026', 'prevYearEnd']);
+  });
 });
