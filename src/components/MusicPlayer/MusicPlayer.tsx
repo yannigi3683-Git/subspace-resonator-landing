@@ -58,6 +58,18 @@ const MusicPlayer = () => {
   const getActiveWidgetRef = () =>
     activeSourceRef.current === "tracks" ? scWidgetRef.current : scPlaylistWidgetRef.current;
 
+  // Own the TRACKS sequence in React: the SoundCloud widget auto-advances on its
+  // own AND walks its internal (unfiltered) order, so we drive next/prev/loop from
+  // the visible `tracks` array instead. intendedTrackRef is mutated ONLY by our own
+  // selectTrack, so it is immune to the widget's auto-advance race.
+  const tracksRef = useRef<Track[]>([]);
+  useEffect(() => { tracksRef.current = tracks; }, [tracks]);
+  const intendedTrackRef = useRef(0);
+  const hasStartedRef = useRef(false);
+  const playlistTracksRef = useRef<Track[]>([]);
+  useEffect(() => { playlistTracksRef.current = playlistTracks; }, [playlistTracks]);
+  const intendedPlaylistTrackRef = useRef(0);
+
   useEffect(() => {
     const widget = getActiveWidget();
     if (playing && widget) {
@@ -129,7 +141,7 @@ const MusicPlayer = () => {
             });
           });
           trackIndexMapRef.current = map;
-          if (list.length) setTracks(list);
+          if (list.length) { setTracks(list); intendedTrackRef.current = 0; }
         }
       });
       widget.bind(SC.Widget.Events.PLAY, () => {
@@ -140,14 +152,18 @@ const MusicPlayer = () => {
         widget.getCurrentSoundIndex((idx: number) => {
           if (typeof idx !== "number") return;
           const displayIdx = trackIndexMapRef.current.indexOf(idx);
-          if (displayIdx === -1) { widget.next(); return; }
-          setCurrentTrack(displayIdx);
+          // An unmapped index is a transient from the widget's own auto-advance onto an
+          // excluded sound; ignore it. FINISH's selectTrack() overrides to the correct track.
+          if (displayIdx !== -1) setCurrentTrack(displayIdx);
         });
       });
       widget.bind(SC.Widget.Events.PAUSE, () => {
         if (scWidgetRef.current === getActiveWidgetRef()) setPlaying(false);
       });
-      widget.bind(SC.Widget.Events.FINISH, () => widget.next());
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        const n = tracksRef.current.length;
+        if (n > 0) selectTrack((intendedTrackRef.current + 1) % n);
+      });
     });
   }, [volume]);
 
@@ -192,7 +208,10 @@ const MusicPlayer = () => {
       widget.bind(SC.Widget.Events.PAUSE, () => {
         if (scPlaylistWidgetRef.current === getActiveWidgetRef()) setPlaying(false);
       });
-      widget.bind(SC.Widget.Events.FINISH, () => widget.next());
+      widget.bind(SC.Widget.Events.FINISH, () => {
+        const n = playlistTracksRef.current.length;
+        if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current + 1) % n);
+      });
     });
   }, [volume, refillPlaylistTracks]);
 
@@ -202,6 +221,7 @@ const MusicPlayer = () => {
     if (!def) return;
     setActivePlaylistKey(key);
     setCurrentPlaylistTrack(0);
+    intendedPlaylistTrackRef.current = 0;
     setPlaylistTracks([]);
     setPlaylistLoading(true);
     if (scPlaylistWidgetRef.current) scPlaylistWidgetRef.current.pause();
@@ -253,13 +273,9 @@ const MusicPlayer = () => {
     }
   }, [initPlaylistWidget]);
 
-  const togglePlay = useCallback(() => {
-    const widget = getActiveWidget();
-    if (!widget) return;
-    if (playing) widget.pause(); else widget.play();
-  }, [playing, getActiveWidget]);
-
   const selectTrack = useCallback((index: number) => {
+    intendedTrackRef.current = index;
+    hasStartedRef.current = true;
     setCurrentTrack(index);
     setActiveSource("tracks");
     if (scPlaylistWidgetRef.current) scPlaylistWidgetRef.current.pause();
@@ -271,7 +287,25 @@ const MusicPlayer = () => {
     setPlaying(true);
   }, []);
 
+  const togglePlay = useCallback(() => {
+    const widget = getActiveWidget();
+    if (!widget) return;
+    if (playing) { widget.pause(); return; }
+    // First-ever play on the TRACKS tab: start at the first visible track so we
+    // never play an excluded sound (e.g. SoundCloud index 0). Otherwise resume.
+    if (activeSourceRef.current === "tracks" && !hasStartedRef.current) {
+      if (tracksRef.current.length === 0) return; // list not loaded yet; avoid skip()->excluded SC index 0
+      selectTrack(intendedTrackRef.current);
+      return;
+    }
+    widget.play();
+  }, [playing, getActiveWidget, selectTrack]);
+
   const selectPlaylistTrack = useCallback((index: number) => {
+    // index is the position in the title-filtered playlistTracks array. Curated playlists
+    // are all-public so this equals the SC index; a metadata-less sound would diverge
+    // (tracked follow-up: give playlists a trackIndexMap like the TRACKS tab).
+    intendedPlaylistTrackRef.current = index;
     setCurrentPlaylistTrack(index);
     setActiveSource("playlist");
     if (scWidgetRef.current) scWidgetRef.current.pause();
@@ -283,16 +317,24 @@ const MusicPlayer = () => {
   }, []);
 
   const nextTrack = useCallback(() => {
-    const widget = getActiveWidget();
-    if (widget) widget.next();
-    setPlaying(true);
-  }, [getActiveWidget]);
+    if (activeSourceRef.current === "tracks") {
+      const n = tracksRef.current.length;
+      if (n > 0) selectTrack((intendedTrackRef.current + 1) % n);
+      return;
+    }
+    const n = playlistTracksRef.current.length;
+    if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current + 1) % n);
+  }, [selectTrack, selectPlaylistTrack]);
 
   const prevTrack = useCallback(() => {
-    const widget = getActiveWidget();
-    if (widget) widget.prev();
-    setPlaying(true);
-  }, [getActiveWidget]);
+    if (activeSourceRef.current === "tracks") {
+      const n = tracksRef.current.length;
+      if (n > 0) selectTrack((intendedTrackRef.current - 1 + n) % n);
+      return;
+    }
+    const n = playlistTracksRef.current.length;
+    if (n > 0) selectPlaylistTrack((intendedPlaylistTrackRef.current - 1 + n) % n);
+  }, [selectTrack, selectPlaylistTrack]);
 
   const seekBy = useCallback((seconds: number) => {
     const widget = getActiveWidget();
