@@ -76,10 +76,11 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
       </div>
 
       <div className="w-full max-w-xs mb-6">
-        <label className="font-mono text-[#888] text-xs uppercase tracking-widest block mb-2">
+        <label htmlFor="entry-name" className="font-mono text-[#888] text-xs uppercase tracking-widest block mb-2">
           Your name
         </label>
         <input
+          id="entry-name"
           type="text"
           maxLength={24}
           value={name}
