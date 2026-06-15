@@ -26,7 +26,6 @@ export function getAvatar(id: string): AvatarDef {
   return AVATAR_MAP.get(id) ?? AVATARS[0];
 }
 
-/** 20 random psy-themed default names for the EntryGate name field */
 export const DEFAULT_NAMES = [
   'NebulaDrifter', 'QuantumPulse', 'VortexRider', 'FractalMind',
   'PulsarBeam', 'WormholeTech', 'GalaxyWalker', 'CosmicWave',
