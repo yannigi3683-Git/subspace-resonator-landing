@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { ArrowLeft, Plus, Trash2 } from 'lucide-react';
-import { useReleases, saveContent, newId } from '@/lib/siteContent';
+import { useReleases, saveContent, newId, sortReleasesByDate } from '@/lib/siteContent';
 import type { Release } from '@/lib/siteContent';
 
 const EMPTY_SOLO = { date: '', title: '', kind: 'Single' as 'EP' | 'Single' | 'LP' | 'Remix', label: '', trackCount: '', url: '' };
@@ -25,10 +25,15 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
   const [soloForm, setSoloForm] = useState(EMPTY_SOLO);
   const [compForm, setCompForm] = useState(EMPTY_COMP);
   const [saving, setSaving] = useState(false);
-  const [saved, setSaved] = useState(false);
+  const [soloSaved, setSoloSaved] = useState(false);
+  const [compSaved, setCompSaved] = useState(false);
   const [error, setError] = useState('');
 
-  const flash = () => { setSaved(true); setTimeout(() => setSaved(false), 2500); };
+  const flashSolo = () => { setSoloSaved(true); setTimeout(() => setSoloSaved(false), 2500); };
+  const flashComp = () => { setCompSaved(true); setTimeout(() => setCompSaved(false), 2500); };
+
+  const soloRows = sortReleasesByDate(releases.solo);
+  const compRows = sortReleasesByDate(releases.compilations);
 
   const setSolo = (k: keyof typeof EMPTY_SOLO, v: string) =>
     setSoloForm(prev => ({ ...prev, [k]: v }));
@@ -53,7 +58,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
       };
       await saveContent({ releases: { solo: [...releases.solo, item], compilations: releases.compilations } });
       setSoloForm(EMPTY_SOLO);
-      flash();
+      flashSolo();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -79,7 +84,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
       };
       await saveContent({ releases: { solo: releases.solo, compilations: [...releases.compilations, item] } });
       setCompForm(EMPTY_COMP);
-      flash();
+      flashComp();
     } catch (e: unknown) {
       setError(e instanceof Error ? e.message : 'Save failed');
     } finally {
@@ -118,31 +123,33 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
       </div>
 
       <div className="flex-1 overflow-y-auto p-4 space-y-6">
-        {error && <p className="text-[10px] text-destructive">{error}</p>}
+        {error && <p role="status" aria-live="polite" className="text-[10px] text-destructive">{error}</p>}
 
         {/* Solo Releases */}
         <div className="space-y-3">
           <div className="text-[10px] tracking-[0.2em] text-primary uppercase">Your Releases</div>
 
-          {releases.solo.length > 0 && (
+          {soloRows.length > 0 ? (
             <div className="space-y-1">
-              {releases.solo.map(r => (
+              {soloRows.map(r => (
                 <div key={r.id} className="border border-border p-2 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-primary tracking-[0.1em]">{showDate(r.date)}</p>
+                    <p className="text-[10px] text-primary tracking-[0.1em] tabular-nums">{showDate(r.date)}</p>
                     <p className="text-xs text-foreground truncate">{r.title}</p>
                     <p className="text-[10px] text-muted-foreground">{r.kind} · {r.label}</p>
                   </div>
                   <button
                     onClick={() => removeSolo(r.id)}
-                    className="shrink-0 w-7 h-7 border border-border flex items-center justify-center text-destructive hover:border-destructive"
+                    className="shrink-0 w-9 h-9 border border-border flex items-center justify-center text-destructive hover:border-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive"
                     aria-label={`Remove ${r.title}`}
                   >
-                    <Trash2 size={11} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               ))}
             </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">No releases yet.</p>
           )}
 
           <div className="border border-border p-3 space-y-2">
@@ -166,7 +173,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
               className="w-full border border-primary text-primary py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-primary/10 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Plus size={12} />
-              {saving ? 'SAVING...' : saved ? 'ADDED!' : 'ADD RELEASE'}
+              {saving ? 'SAVING...' : soloSaved ? 'ADDED!' : 'ADD RELEASE'}
             </button>
           </div>
         </div>
@@ -175,25 +182,27 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
         <div className="space-y-3">
           <div className="text-[10px] tracking-[0.2em] text-primary uppercase">Compilation Appearances</div>
 
-          {releases.compilations.length > 0 && (
+          {compRows.length > 0 ? (
             <div className="space-y-1">
-              {releases.compilations.map(r => (
+              {compRows.map(r => (
                 <div key={r.id} className="border border-border p-2 flex items-start justify-between gap-2">
                   <div className="min-w-0">
-                    <p className="text-[10px] text-primary tracking-[0.1em]">{showDate(r.date)}</p>
+                    <p className="text-[10px] text-primary tracking-[0.1em] tabular-nums">{showDate(r.date)}</p>
                     <p className="text-xs text-foreground truncate">{r.title}</p>
                     <p className="text-[10px] text-muted-foreground truncate">"{r.trackName}" · {r.label}</p>
                   </div>
                   <button
                     onClick={() => removeComp(r.id)}
-                    className="shrink-0 w-7 h-7 border border-border flex items-center justify-center text-destructive hover:border-destructive"
+                    className="shrink-0 w-9 h-9 border border-border flex items-center justify-center text-destructive hover:border-destructive focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-destructive"
                     aria-label={`Remove ${r.title}`}
                   >
-                    <Trash2 size={11} />
+                    <Trash2 size={12} />
                   </button>
                 </div>
               ))}
             </div>
+          ) : (
+            <p className="text-[10px] text-muted-foreground">No compilations yet.</p>
           )}
 
           <div className="border border-border p-3 space-y-2">
@@ -209,7 +218,7 @@ const DiscographyAdmin = ({ onBack }: { onBack: () => void }) => {
               className="w-full border border-primary text-primary py-2 text-[10px] tracking-[0.2em] uppercase hover:bg-primary/10 disabled:opacity-50 flex items-center justify-center gap-2"
             >
               <Plus size={12} />
-              {saving ? 'SAVING...' : saved ? 'ADDED!' : 'ADD COMPILATION'}
+              {saving ? 'SAVING...' : compSaved ? 'ADDED!' : 'ADD COMPILATION'}
             </button>
           </div>
         </div>

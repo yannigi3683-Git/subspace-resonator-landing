@@ -61,4 +61,19 @@ describe('SignalLog', () => {
     expect(screen.getByText(/unlinked test release/i)).toBeInTheDocument();
     expect(screen.queryByRole('link', { name: /unlinked test release/i })).not.toBeInTheDocument();
   });
+
+  it('renders releases newest-first regardless of input order', () => {
+    render(<SignalLog rows={{
+      solo: [
+        { id: 'older', date: '2020-01-01', title: 'Older Release', kind: 'Single', label: 'L', url: 'https://example.com/older' },
+        { id: 'newest', date: '2025-12-26', title: 'Newest Release', kind: 'Single', label: 'L', url: 'https://example.com/newest' },
+        { id: 'mid', date: '2023-06-01', title: 'Middle Release', kind: 'Single', label: 'L', url: 'https://example.com/mid' },
+      ],
+      comps: [],
+    }} />);
+    const order = screen.getAllByRole('link').map(l => l.getAttribute('aria-label'));
+    expect(order[0]).toMatch(/newest release/i);
+    expect(order[1]).toMatch(/middle release/i);
+    expect(order[2]).toMatch(/older release/i);
+  });
 });

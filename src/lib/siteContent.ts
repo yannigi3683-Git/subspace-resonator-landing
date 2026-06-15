@@ -385,3 +385,10 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
 export function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
 }
+
+// Newest-first. A year-only date ("2026") sorts as the earliest point in that
+// year, so a full date within the same year ("2026-01-09") ranks above it.
+export function sortReleasesByDate(releases: Release[]): Release[] {
+  const key = (d: string) => (/^\d{4}$/.test(d) ? `${d}-00-00` : d);
+  return [...releases].sort((a, b) => key(b.date).localeCompare(key(a.date)));
+}

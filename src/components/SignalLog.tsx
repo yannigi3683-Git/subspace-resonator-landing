@@ -1,6 +1,6 @@
 import { ArrowUpRight } from "lucide-react";
 import { trackEvent } from "../lib/analytics";
-import { useReleases } from "../lib/siteContent";
+import { useReleases, sortReleasesByDate } from "../lib/siteContent";
 import type { Release } from "../lib/siteContent";
 
 function displayDate(d: string): string {
@@ -88,8 +88,8 @@ type SignalLogProps = {
 
 const SignalLog = ({ rows }: SignalLogProps = {}) => {
   const releases = useReleases();
-  const solo = rows?.solo ?? releases.solo;
-  const comps = rows?.comps ?? releases.compilations;
+  const solo = sortReleasesByDate(rows?.solo ?? releases.solo);
+  const comps = sortReleasesByDate(rows?.comps ?? releases.compilations);
   return (
     <section id="archive" aria-label="Discography" className="py-10 md:py-16 border-t border-border">
       <div className="container">
