@@ -20,7 +20,7 @@ export class Publisher {
   constructor(
     private readonly callbacks: PublisherCallbacks,
     private readonly apiUrl = '/api/rtc-session',
-    private readonly getAuthToken: () => string,
+    private readonly getAuthToken: () => Promise<string>,
   ) {}
 
   async connect(stream: MediaStream): Promise<void> {
@@ -49,7 +49,7 @@ export class Publisher {
       res = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.getAuthToken()}`,
+          Authorization: `Bearer ${await this.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ phase: 'publish-offer', sdpOffer: offer.sdp }),

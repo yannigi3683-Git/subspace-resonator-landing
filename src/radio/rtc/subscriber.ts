@@ -16,7 +16,7 @@ export class Subscriber {
   constructor(
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
-    private readonly getAuthToken: () => string,
+    private readonly getAuthToken: () => Promise<string>,
   ) {}
 
   async connect(): Promise<void> {
@@ -43,7 +43,7 @@ export class Subscriber {
       pullRes = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.getAuthToken()}`,
+          Authorization: `Bearer ${await this.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ phase: 'subscribe-pull' }),
@@ -72,7 +72,7 @@ export class Subscriber {
       answerRes = await fetch(this.apiUrl, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${this.getAuthToken()}`,
+          Authorization: `Bearer ${await this.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({

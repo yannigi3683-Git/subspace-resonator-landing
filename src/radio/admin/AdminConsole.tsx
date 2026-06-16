@@ -4,7 +4,7 @@ import GoLivePanel from './GoLivePanel';
 
 interface Props {
   supabase: SupabaseClient;
-  authToken: () => string;
+  authToken: () => Promise<string>;
 }
 
 type Tab = 'broadcast' | 'schedule' | 'moderation';

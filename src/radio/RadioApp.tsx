@@ -179,7 +179,10 @@ export default function RadioApp() {
     return (
       <AdminConsole
         supabase={authedClient}
-        authToken={() => ''}
+        authToken={async () => {
+          const { data } = await authedClient!.auth.getSession();
+          return data.session?.access_token ?? '';
+        }}
       />
     );
   }

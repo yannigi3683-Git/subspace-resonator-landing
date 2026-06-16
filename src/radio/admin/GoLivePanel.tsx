@@ -7,7 +7,7 @@ import { transition, initialState, type FsmState, type ConnectionEvent } from '.
 
 interface Props {
   supabase: SupabaseClient;
-  authToken: () => string;
+  authToken: () => Promise<string>;
   listenerCount?: number;
 }
 

@@ -80,14 +80,14 @@ beforeEach(() => {
 
 describe('GoLivePanel', () => {
   it('renders the GO LIVE button initially', async () => {
-    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => {
       expect(screen.getByTestId('go-live-btn')).toBeInTheDocument();
     });
   });
 
   it('shows the device selector populated from enumerateDevices', async () => {
-    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => {
       expect(screen.getByText('Virtual Cable In')).toBeInTheDocument();
     });
@@ -98,7 +98,7 @@ describe('GoLivePanel', () => {
     mockEnumerateDevices.mockResolvedValue([
       { kind: 'audioinput', deviceId: 'dev-1', label: '', groupId: '' },
     ]);
-    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => {
       expect(screen.getByTestId('enable-audio-btn')).toBeInTheDocument();
     });
@@ -115,7 +115,7 @@ describe('GoLivePanel', () => {
     (navigator.mediaDevices as unknown as { getUserMedia: typeof getUserMedia }).getUserMedia =
       getUserMedia;
 
-    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('enable-audio-btn'));
     fireEvent.click(screen.getByTestId('enable-audio-btn'));
 
@@ -134,7 +134,7 @@ describe('GoLivePanel', () => {
       publisherCallbacksRef.current?.onSessionReady('cf-test-123');
     });
 
-    render(<GoLivePanel supabase={sb} authToken={() => 'bearer-token'} />);
+    render(<GoLivePanel supabase={sb} authToken={async () => 'bearer-token'} />);
     await waitFor(() => screen.getByTestId('go-live-btn'));
 
     // Supabase must NOT be updated before GO LIVE
@@ -160,7 +160,7 @@ describe('GoLivePanel', () => {
       publisherCallbacksRef.current?.onSessionReady('cf-test-err');
     });
 
-    render(<GoLivePanel supabase={sb} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={sb} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-btn'));
     fireEvent.click(screen.getByTestId('go-live-btn'));
 
@@ -170,7 +170,7 @@ describe('GoLivePanel', () => {
   });
 
   it('adds files to the deck queue and displays them', async () => {
-    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-panel'));
 
     const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]');

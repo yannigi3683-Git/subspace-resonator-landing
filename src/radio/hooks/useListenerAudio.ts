@@ -67,7 +67,7 @@ export function useListenerAudio(
             },
           },
           '/api/rtc-session',
-          () => sessionTokenRef.current,
+          async () => sessionTokenRef.current,
         );
 
         sub.connect().catch(() => {});
