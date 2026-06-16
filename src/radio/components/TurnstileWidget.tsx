@@ -36,7 +36,16 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
       return;
     }
 
-    const sitekey = import.meta.env.VITE_TURNSTILE_SITE_KEY as string;
+    // Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars. An
+    // invisible char makes turnstile.render() throw "Invalid input for parameter sitekey".
+    const rawKey = (import.meta.env.VITE_TURNSTILE_SITE_KEY as string | undefined) ?? '';
+    let sitekey = '';
+    for (let i = 0; i < rawKey.length; i++) {
+      const code = rawKey.charCodeAt(i);
+      if (code >= 0x20 && code <= 0x7e) sitekey += rawKey[i];
+    }
+    sitekey = sitekey.trim();
+
     if (!divRef.current) return;
     if (!sitekey) {
       onErrorRef.current?.('Captcha is not configured (no site key). Check VITE_TURNSTILE_SITE_KEY.');
@@ -46,19 +55,22 @@ export function TurnstileWidget({ onToken, onError }: TurnstileWidgetProps) {
     const render = () => {
       if (!divRef.current || !window.turnstile) return;
       // A managed (visible) widget runs automatically on render and fires `callback`.
-      // Invisible widgets must be triggered with turnstile.execute(), which silently
-      // left the token empty before — keep this visible so it always produces a token.
-      widgetIdRef.current = window.turnstile.render(divRef.current, {
-        sitekey,
-        theme: 'dark',
-        callback: (token) => onTokenRef.current(token),
-        'error-callback': () => {
-          onErrorRef.current?.(
-            'Captcha failed to load. This web address may not be on the captcha’s allowed-domains list.',
-          );
-        },
-        'expired-callback': () => onTokenRef.current(''),
-      });
+      // Wrap render so an invalid key fails quietly instead of crashing the whole app.
+      try {
+        widgetIdRef.current = window.turnstile.render(divRef.current, {
+          sitekey,
+          theme: 'dark',
+          callback: (token) => onTokenRef.current(token),
+          'error-callback': () => {
+            onErrorRef.current?.(
+              'Captcha failed to load. This web address may not be on the captcha allowed-domains list.',
+            );
+          },
+          'expired-callback': () => onTokenRef.current(''),
+        });
+      } catch (e) {
+        onErrorRef.current?.('Captcha could not start: ' + (e instanceof Error ? e.message : String(e)));
+      }
     };
 
     if (window.turnstile) {
