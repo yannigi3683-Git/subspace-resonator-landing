@@ -36,8 +36,10 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
       }
       await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token ?? '' });
       setPhase('totp');
-    } catch {
-      setErrorMsg('Unexpected error. Try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[AdminGate] password fetch error:', err);
+      setErrorMsg(`Error: ${msg}`);
     } finally {
       setBusy(false);
     }
