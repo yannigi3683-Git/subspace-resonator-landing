@@ -4,14 +4,20 @@
 
 const CF_BASE = 'https://rtc.live.cloudflare.com/v1';
 
+// Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars; such a
+// char in the app id (URL path) or secret (Authorization header) breaks the CF request.
+function cleanEnv(v: string | undefined): string {
+  return (v ?? '').replace(/[^\x20-\x7E]/g, '');
+}
+
 function appId(): string {
-  const id = process.env.CF_REALTIME_APP_ID;
+  const id = cleanEnv(process.env.CF_REALTIME_APP_ID);
   if (!id) throw new Error('CF_REALTIME_APP_ID env var not set');
   return id;
 }
 
 function appSecret(): string {
-  const secret = process.env.CF_REALTIME_APP_SECRET;
+  const secret = cleanEnv(process.env.CF_REALTIME_APP_SECRET);
   if (!secret) throw new Error('CF_REALTIME_APP_SECRET env var not set');
   return secret;
 }

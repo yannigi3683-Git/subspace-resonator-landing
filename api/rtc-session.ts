@@ -3,9 +3,15 @@ import { createCfSession, publishAudioTrack, pullAudioTrack, renegotiate } from 
 
 // ---- Supabase admin client (service-role key; never exposed to browser) ----
 
+// Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars; such a
+// char in a key/header value makes Node's fetch reject the request.
+function cleanEnv(v: string | undefined): string | undefined {
+  return v?.replace(/[^\x20-\x7E]/g, '');
+}
+
 function getSupabaseAdmin() {
-  const url = process.env.SUPABASE_URL;
-  const key = process.env.SUPABASE_SECRET_KEY;
+  const url = cleanEnv(process.env.SUPABASE_URL);
+  const key = cleanEnv(process.env.SUPABASE_SECRET_KEY);
   if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY not set');
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
