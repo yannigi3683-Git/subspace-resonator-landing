@@ -4,18 +4,13 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 // supabase-js sets an X-Client-Info header containing characters outside ISO-8859-1,
 // which browsers reject at the fetch layer. Stripping it has no functional impact —
 // it's telemetry only. Apply once at module load so ALL supabase-js calls are covered.
+// Headers API is case-insensitive, so delete('x-client-info') catches all casing variants.
 if (typeof window !== 'undefined') {
   const _fetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
-    if (
-      init?.headers &&
-      typeof init.headers === 'object' &&
-      !(init.headers instanceof Headers) &&
-      !Array.isArray(init.headers)
-    ) {
-      const h = { ...(init.headers as Record<string, string>) };
-      delete h['x-client-info'];
-      delete h['X-Client-Info'];
+    if (init?.headers) {
+      const h = new Headers(init.headers as HeadersInit);
+      h.delete('x-client-info');
       init = { ...init, headers: h };
     }
     return _fetch(input, init);
