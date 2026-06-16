@@ -1,6 +1,27 @@
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
+// supabase-js sets an X-Client-Info header containing characters outside ISO-8859-1,
+// which browsers reject at the fetch layer. Stripping it has no functional impact —
+// it's telemetry only. Apply once at module load so ALL supabase-js calls are covered.
+if (typeof window !== 'undefined') {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (input, init) => {
+    if (
+      init?.headers &&
+      typeof init.headers === 'object' &&
+      !(init.headers instanceof Headers) &&
+      !Array.isArray(init.headers)
+    ) {
+      const h = { ...(init.headers as Record<string, string>) };
+      delete h['x-client-info'];
+      delete h['X-Client-Info'];
+      init = { ...init, headers: h };
+    }
+    return _fetch(input, init);
+  };
+}
+
 interface Props {
   supabase: SupabaseClient;
   onAuthenticated: (client: SupabaseClient) => void;
@@ -21,24 +42,15 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
     setBusy(true);
     setErrorMsg('');
     try {
-      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? '';
-      const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ?? '';
-      // Use raw fetch without supabase-js to avoid X-Client-Info header encoding error
-      const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'apikey': supabaseKey },
-        body: JSON.stringify({ email, password }),
-      });
-      const data: { access_token?: string; refresh_token?: string; error_description?: string; msg?: string } = await res.json();
-      if (!res.ok || !data.access_token) {
-        setErrorMsg(data.error_description ?? data.msg ?? 'Invalid credentials');
+      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      if (error) {
+        setErrorMsg(error.message);
         return;
       }
-      await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token ?? '' });
       setPhase('totp');
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      console.error('[AdminGate] password fetch error:', err);
+      console.error('[AdminGate] sign-in error:', err);
       setErrorMsg(`Error: ${msg}`);
     } finally {
       setBusy(false);
@@ -59,8 +71,10 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
         return;
       }
       onAuthenticated(supabase);
-    } catch {
-      setErrorMsg('Authenticator error. Try again.');
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error('[AdminGate] TOTP error:', err);
+      setErrorMsg(`Error: ${msg}`);
     } finally {
       setBusy(false);
     }
