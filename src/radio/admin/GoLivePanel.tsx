@@ -351,7 +351,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
         )}
       </div>
 
-      {/* Live status: level meter + listener count */}
+      {/* Pre-live input level: shows as soon as mic access is granted */}
+      {audioReady && status === 'idle' && (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            INPUT LEVEL
+          </span>
+          <PreviewMeter deviceId={selectedDeviceId} />
+        </div>
+      )}
+
+      {/* Live status: output level + listener count */}
       {status === 'live' && (
         <div className="flex flex-col gap-2">
           <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
@@ -386,6 +396,59 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       )}
 
     </section>
+  );
+}
+
+// Pre-broadcast monitor: opens the selected device to show input level before going live.
+// Stops automatically when unmounted (before HostMixer opens the same device).
+function PreviewMeter({ deviceId }: { deviceId: string }) {
+  const [level, setLevel] = useState(0);
+
+  useEffect(() => {
+    if (!deviceId || !navigator.mediaDevices?.getUserMedia) return;
+    let cancelled = false;
+    let raf = 0;
+
+    (async () => {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({
+          audio: { deviceId: { exact: deviceId }, echoCancellation: false, autoGainControl: false, noiseSuppression: false },
+        });
+        if (cancelled || !stream) { stream?.getTracks().forEach((t) => t.stop()); return; }
+        const ctx = new AudioContext();
+        const source = ctx.createMediaStreamSource(stream);
+        const analyser = ctx.createAnalyser();
+        source.connect(analyser);
+        const buf = new Float32Array(analyser.fftSize);
+        const tick = () => {
+          if (cancelled) return;
+          analyser.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          setLevel(Math.min(1, Math.sqrt(sum / buf.length) * 2.5));
+          raf = requestAnimationFrame(tick);
+        };
+        raf = requestAnimationFrame(tick);
+        return () => { cancelAnimationFrame(raf); stream.getTracks().forEach((t) => t.stop()); ctx.close(); };
+      } catch {
+        // getUserMedia blocked or unavailable — show flat bar
+      }
+    })();
+
+    return () => { cancelled = true; cancelAnimationFrame(raf); };
+  }, [deviceId]);
+
+  return (
+    <div
+      className="h-3 w-full bg-muted/30 border border-border rounded overflow-hidden"
+      role="meter"
+      aria-label="Input level"
+      aria-valuenow={Math.round(level * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div className="h-full w-full bg-primary origin-left" style={{ transform: `scaleX(${level})` }} />
+    </div>
   );
 }
 
