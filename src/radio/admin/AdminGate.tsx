@@ -1,19 +1,32 @@
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
-// supabase-js sets an X-Client-Info header containing characters outside ISO-8859-1,
-// which browsers reject at the fetch layer. Stripping it has no functional impact —
-// it's telemetry only. Apply once at module load so ALL supabase-js calls are covered.
-// Headers API is case-insensitive, so delete('x-client-info') catches all casing variants.
+// supabase-js sets an X-Client-Info header value containing characters outside ISO-8859-1,
+// which browsers reject — both when constructing a Headers object and when calling fetch().
+// We read headers via safe paths (forEach / spread) that don't validate, then strip the
+// offending key from a plain object before passing back to fetch. Telemetry-only header;
+// removing it has no functional impact.
 if (typeof window !== 'undefined') {
   const _fetch = window.fetch.bind(window);
   window.fetch = (input, init) => {
-    if (init?.headers) {
-      const h = new Headers(init.headers as HeadersInit);
-      h.delete('x-client-info');
-      init = { ...init, headers: h };
+    if (!init?.headers) return _fetch(input, init);
+
+    // Flatten all three HeadersInit formats into a plain object without touching bad values.
+    let h: Record<string, string>;
+    if (init.headers instanceof Headers) {
+      h = {};
+      // forEach reads values without ISO-8859-1 validation (only writes/construction validates)
+      (init.headers as Headers).forEach((value, name) => { h[name] = value; });
+    } else if (Array.isArray(init.headers)) {
+      h = {};
+      (init.headers as [string, string][]).forEach(([name, value]) => { h[name] = value; });
+    } else {
+      h = { ...(init.headers as Record<string, string>) };
     }
-    return _fetch(input, init);
+
+    delete h['x-client-info'];
+    delete h['X-Client-Info'];
+    return _fetch(input, { ...init, headers: h });
   };
 }
 
