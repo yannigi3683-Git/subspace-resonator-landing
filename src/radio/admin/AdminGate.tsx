@@ -21,11 +21,20 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
     setBusy(true);
     setErrorMsg('');
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
-      if (error) {
-        setErrorMsg(error.message);
+      const supabaseUrl = (import.meta.env.VITE_SUPABASE_URL as string) ?? '';
+      const supabaseKey = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string) ?? '';
+      // Use raw fetch without supabase-js to avoid X-Client-Info header encoding error
+      const res = await fetch(`${supabaseUrl}/auth/v1/token?grant_type=password`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'apikey': supabaseKey },
+        body: JSON.stringify({ email, password }),
+      });
+      const data: { access_token?: string; refresh_token?: string; error_description?: string; msg?: string } = await res.json();
+      if (!res.ok || !data.access_token) {
+        setErrorMsg(data.error_description ?? data.msg ?? 'Invalid credentials');
         return;
       }
+      await supabase.auth.setSession({ access_token: data.access_token, refresh_token: data.refresh_token ?? '' });
       setPhase('totp');
     } catch {
       setErrorMsg('Unexpected error. Try again.');
