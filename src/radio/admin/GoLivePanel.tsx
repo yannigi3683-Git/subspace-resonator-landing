@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { HostMixer } from '../rtc/hostMixer';
+import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
@@ -28,6 +28,10 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
   const [queue, setQueue] = useState<DeckTrack[]>([]);
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
+  // Browsers hide audio-input device names until microphone permission is granted,
+  // so the dropdown is empty until the host unlocks access once.
+  const [audioReady, setAudioReady] = useState(false);
+  const [requestingAccess, setRequestingAccess] = useState(false);
 
   const mixerRef = useRef<HostMixer | null>(null);
   const publisherRef = useRef<Publisher | null>(null);
@@ -40,19 +44,45 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
   const fileSourceIdRef = useRef<string | null>(null);
   const micSourceIdRef = useRef<string | null>(null);
 
+  // Read audio inputs. Before mic permission, entries have a deviceId but a blank label;
+  // returns true if at least one device has a real (non-empty) label.
+  const refreshDevices = useCallback(async (): Promise<boolean> => {
+    if (!navigator.mediaDevices?.enumerateDevices) return false;
+    const infos = await navigator.mediaDevices.enumerateDevices();
+    const audioIn = infos
+      .filter((d) => d.kind === 'audioinput' && d.deviceId)
+      .map((d) => ({ deviceId: d.deviceId, label: d.label || 'Microphone' }));
+    setDevices(audioIn);
+    setSelectedDeviceId((prev) => prev || (audioIn[0]?.deviceId ?? ''));
+    return infos.some((d) => d.kind === 'audioinput' && d.label !== '');
+  }, []);
+
+  async function requestAudioAccess() {
+    setRequestingAccess(true);
+    setErrorMsg('');
+    try {
+      // One getUserMedia call grants permission, which unlocks the real device names.
+      const tmp = await navigator.mediaDevices.getUserMedia({ audio: true });
+      for (const track of tmp.getTracks()) track.stop();
+      await refreshDevices();
+      setAudioReady(true);
+    } catch {
+      setErrorMsg('Microphone access was blocked. Allow it in your browser, then try again.');
+    } finally {
+      setRequestingAccess(false);
+    }
+  }
+
   useEffect(() => {
     audioElRef.current = new Audio();
     // navigator.mediaDevices is undefined in non-secure contexts / some embedded views;
     // guard so a missing API doesn't crash the whole console.
     if (!navigator.mediaDevices?.enumerateDevices) return;
-    navigator.mediaDevices.enumerateDevices().then((infos) => {
-      const audioIn = infos
-        .filter((d) => d.kind === 'audioinput')
-        .map((d) => ({ deviceId: d.deviceId, label: d.label || d.deviceId }));
-      setDevices(audioIn);
-      if (audioIn.length) setSelectedDeviceId(audioIn[0].deviceId);
-    }).catch(() => {});
-  }, []);
+    refreshDevices().then((labelled) => setAudioReady(labelled)).catch(() => {});
+    const onChange = () => { refreshDevices().catch(() => {}); };
+    navigator.mediaDevices.addEventListener?.('devicechange', onChange);
+    return () => navigator.mediaDevices.removeEventListener?.('devicechange', onChange);
+  }, [refreshDevices]);
 
   const dispatchFsm = useCallback((event: ConnectionEvent) => {
     const { next, effects } = transition(fsmRef.current, event);
@@ -240,27 +270,40 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       {/* Device select */}
       <div className="flex flex-col gap-2">
         <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-          AUDIO INPUT (TRAKTOR / REKORDBOX VIRTUAL DEVICE)
+          AUDIO INPUT (YOUR MICROPHONE, OR TRAKTOR / REKORDBOX VIRTUAL DEVICE)
         </span>
-        <div className="flex gap-2">
-          <select
-            value={selectedDeviceId}
-            onChange={(e) => setSelectedDeviceId(e.target.value)}
-            disabled={status === 'live' || isBusy}
-            className="flex-1 bg-transparent border border-border rounded px-3 font-mono text-xs min-h-[44px] disabled:opacity-50"
+        {!audioReady ? (
+          <button
+            type="button"
+            onClick={requestAudioAccess}
+            disabled={requestingAccess}
+            data-testid="enable-audio-btn"
+            className="font-mono text-xs tracking-widest border border-primary px-4 min-h-[44px] hover:bg-primary/10 disabled:opacity-40 transition-colors"
           >
-            {devices.map((d) => (
-              <option key={d.deviceId} value={d.deviceId}>
-                {d.label}
-              </option>
-            ))}
-          </select>
-          <GainSlider
-            label="GAIN"
-            value={deviceGain}
-            onChange={(v) => handleTrackGainChange('device', v)}
-          />
-        </div>
+            {requestingAccess ? 'REQUESTING...' : 'ENABLE AUDIO ACCESS'}
+          </button>
+        ) : (
+          <div className="flex gap-2">
+            <select
+              value={selectedDeviceId}
+              onChange={(e) => setSelectedDeviceId(e.target.value)}
+              disabled={status === 'live' || isBusy}
+              aria-label="Audio input device"
+              className="flex-1 bg-transparent border border-border rounded px-3 font-mono text-xs min-h-[44px] disabled:opacity-50"
+            >
+              {devices.map((d) => (
+                <option key={d.deviceId} value={d.deviceId}>
+                  {d.label}
+                </option>
+              ))}
+            </select>
+            <GainSlider
+              label="GAIN"
+              value={deviceGain}
+              onChange={(v) => handleTrackGainChange('device', v)}
+            />
+          </div>
+        )}
       </div>
 
       {/* File deck */}
@@ -308,11 +351,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
         )}
       </div>
 
-      {/* Listener count */}
+      {/* Live status: level meter + listener count */}
       {status === 'live' && (
-        <p className="font-mono text-xs text-muted-foreground">
-          LISTENERS: {listenerCount}
-        </p>
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            OUTPUT LEVEL
+          </span>
+          <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
+          <p className="font-mono text-xs text-muted-foreground">
+            LISTENERS: {listenerCount}
+          </p>
+        </div>
       )}
 
       {/* GO LIVE / END */}
@@ -337,6 +386,45 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       )}
 
     </section>
+  );
+}
+
+function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }) {
+  const [level, setLevel] = useState(0);
+  const getRef = useRef(getAnalysis);
+  getRef.current = getAnalysis;
+
+  useEffect(() => {
+    let raf = 0;
+    const tick = () => {
+      const analysis = getRef.current();
+      if (analysis) {
+        const data = analysis.getTimeDomainData();
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
+        const rms = Math.sqrt(sum / data.length);
+        setLevel(Math.min(1, rms * 2.5));
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
+  return (
+    <div
+      className="h-3 w-full bg-muted/30 border border-border rounded overflow-hidden"
+      role="meter"
+      aria-label="Output level"
+      aria-valuenow={Math.round(level * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+    >
+      <div
+        className="h-full w-full bg-primary origin-left"
+        style={{ transform: `scaleX(${level})` }}
+      />
+    </div>
   );
 }
 

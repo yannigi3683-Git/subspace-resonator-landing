@@ -93,6 +93,38 @@ describe('GoLivePanel', () => {
     });
   });
 
+  it('shows ENABLE AUDIO ACCESS when device labels are blank (no mic permission yet)', async () => {
+    mockEnumerateDevices.mockReset();
+    mockEnumerateDevices.mockResolvedValue([
+      { kind: 'audioinput', deviceId: 'dev-1', label: '', groupId: '' },
+    ]);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('enable-audio-btn')).toBeInTheDocument();
+    });
+  });
+
+  it('populates the device dropdown after enabling audio access', async () => {
+    mockEnumerateDevices.mockReset();
+    mockEnumerateDevices
+      .mockResolvedValueOnce([{ kind: 'audioinput', deviceId: 'dev-1', label: '', groupId: '' }])
+      .mockResolvedValue([
+        { kind: 'audioinput', deviceId: 'dev-1', label: 'Built-in Microphone', groupId: '' },
+      ]);
+    const getUserMedia = vi.fn().mockResolvedValue({ getTracks: () => [{ stop: vi.fn() }] });
+    (navigator.mediaDevices as unknown as { getUserMedia: typeof getUserMedia }).getUserMedia =
+      getUserMedia;
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={() => 'token'} />);
+    await waitFor(() => screen.getByTestId('enable-audio-btn'));
+    fireEvent.click(screen.getByTestId('enable-audio-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Built-in Microphone')).toBeInTheDocument();
+    });
+    expect(getUserMedia).toHaveBeenCalled();
+  });
+
   it('CRITICAL: station update happens AFTER onSessionReady fires (cfSessionId present)', async () => {
     const sb = makeSupabase();
 
