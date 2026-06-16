@@ -8,8 +8,12 @@ function makeSupabase(overrides: Record<string, unknown> = {}) {
     auth: {
       signInWithPassword: vi.fn().mockResolvedValue({ error: null }),
       mfa: {
-        listFactors: vi.fn().mockResolvedValue({ data: { totp: [{ id: 'factor-1' }] } }),
+        listFactors: vi.fn().mockResolvedValue({ data: { totp: [{ id: 'factor-1' }], all: [] } }),
         challengeAndVerify: vi.fn().mockResolvedValue({ error: null }),
+        enroll: vi.fn().mockResolvedValue({
+          data: { id: 'new-factor', totp: { qr_code: '<svg></svg>', secret: 'ABC123SECRET' } },
+        }),
+        unenroll: vi.fn().mockResolvedValue({ data: null, error: null }),
       },
     },
     ...overrides,
@@ -35,6 +39,24 @@ describe('AdminGate', () => {
     await waitFor(() => {
       expect(screen.getByLabelText(/authenticator code/i)).toBeInTheDocument();
     });
+  });
+
+  it('shows authenticator setup (QR + secret) when no factor is enrolled yet', async () => {
+    const supabase = makeSupabase();
+    (supabase.auth.mfa.listFactors as ReturnType<typeof vi.fn>).mockResolvedValue({
+      data: { totp: [], all: [] },
+    });
+    render(<AdminGate supabase={supabase} onAuthenticated={vi.fn()} />);
+
+    fireEvent.change(screen.getByLabelText(/email/i), { target: { value: 'host@test.com' } });
+    fireEvent.change(screen.getByLabelText(/password/i), { target: { value: 'secret' } });
+    fireEvent.click(screen.getByRole('button', { name: /continue/i }));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('enroll-form')).toBeInTheDocument();
+      expect(screen.getByText('ABC123SECRET')).toBeInTheDocument();
+    });
+    expect(supabase.auth.mfa.enroll).toHaveBeenCalled();
   });
 
   it('shows an error message on wrong password', async () => {
