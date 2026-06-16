@@ -127,7 +127,11 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
                 {errorMsg}
               </p>
             )}
-            <TurnstileWidget key={captchaKey} onToken={setCaptchaToken} />
+            <TurnstileWidget
+              key={captchaKey}
+              onToken={setCaptchaToken}
+              onError={(msg) => setErrorMsg(msg)}
+            />
             <button
               type="submit"
               disabled={busy || !captchaToken}
