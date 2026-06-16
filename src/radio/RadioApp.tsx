@@ -16,7 +16,29 @@ function makeSupabase() {
   const url = import.meta.env.VITE_SUPABASE_URL as string;
   const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
   if (!url || !key) return null;
-  return createClient(url, key);
+
+  // supabase-js captures window.fetch at createClient() time, so module-level patches
+  // applied later are too late. Pass a custom fetch here so supabase stores our
+  // strip-and-forward function instead. X-Client-Info contains non-ISO-8859-1 chars
+  // that browsers reject; stripping it has no functional impact (telemetry only).
+  const strippedFetch = (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+    if (!init?.headers) return fetch(input, init);
+    let h: Record<string, string>;
+    if (init.headers instanceof Headers) {
+      h = {};
+      (init.headers as Headers).forEach((value, name) => { h[name] = value; });
+    } else if (Array.isArray(init.headers)) {
+      h = {};
+      (init.headers as [string, string][]).forEach(([name, value]) => { h[name] = value; });
+    } else {
+      h = { ...(init.headers as Record<string, string>) };
+    }
+    delete h['x-client-info'];
+    delete h['X-Client-Info'];
+    return fetch(input, { ...init, headers: h });
+  };
+
+  return createClient(url, key, { global: { fetch: strippedFetch } });
 }
 
 const supabaseClient = makeSupabase();
