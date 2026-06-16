@@ -127,14 +127,14 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
                 {errorMsg}
               </p>
             )}
-            <TurnstileWidget
-              key={captchaKey}
-              onToken={setCaptchaToken}
-              onError={(msg) => setErrorMsg(msg)}
-            />
+            {/* Best-effort captcha: produces a token where the domain is allow-listed
+                (production). On preview/unlisted domains it can't run, so we never block
+                the button on it. If the project requires captcha, the server returns a
+                clear error; for preview testing, captcha can be disabled in Supabase. */}
+            <TurnstileWidget key={captchaKey} onToken={setCaptchaToken} />
             <button
               type="submit"
-              disabled={busy || !captchaToken}
+              disabled={busy}
               className="mt-2 font-mono text-xs tracking-widest border border-primary px-4 min-h-[44px] hover:bg-primary/10 disabled:opacity-40 transition-colors"
             >
               {busy ? 'CHECKING...' : 'CONTINUE'}

@@ -17,7 +17,10 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const canSubmit = name.trim().length >= 1 && selectedAvatarId !== '' && captchaToken !== '';
+  // Captcha is best-effort: it produces a token only where the domain is allow-listed
+  // (production). On preview/unlisted domains it can't run, so don't block entry on it —
+  // the token is still passed when present, and the server enforces captcha when required.
+  const canSubmit = name.trim().length >= 1 && selectedAvatarId !== '';
 
   const handleTuneIn = useCallback(async () => {
     if (!canSubmit) return;
