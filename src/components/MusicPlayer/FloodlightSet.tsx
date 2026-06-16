@@ -7,6 +7,10 @@ export default function FloodlightSet({ playing = false, side = "left" }: { play
 
   useEffect(() => {
     if (!playing) { setWobble(0); setHiPulse(0); return; }
+    if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+      setWobble(0); setHiPulse(0);
+      return;
+    }
     const offset = side === "right" ? 1.3 : 0;
     const animate = () => {
       const now = performance.now() / 1000;

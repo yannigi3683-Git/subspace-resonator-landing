@@ -26,7 +26,7 @@ import liveAlpha from "@/assets/live-alpha.webp";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 
-export type GalleryItem  = { id: string; src: string; alt: string };
+export type GalleryItem  = { id: string; src: string; alt: string; mediaType?: 'image' | 'video'; videoEmbedUrl?: string };
 export type EventItem    = { id: string; date: string; title: string; location: string; link?: string };
 export type SocialItem   = { name: string; url: string };
 export type BioContent   = { signal: string; reactivation: string; mission: string };
@@ -35,7 +35,7 @@ export type Release = {
   id: string;
   date: string;
   title: string;
-  kind: 'EP' | 'Single' | 'Compilation';
+  kind: 'EP' | 'Single' | 'LP' | 'Remix' | 'Compilation';
   label: string;
   trackCount?: number;
   trackName?: string;
@@ -153,14 +153,14 @@ export const DEFAULT_SOCIALS: SocialItem[] = [
 
 export const DEFAULT_RELEASES: ReleasesContent = {
   solo: [
-    { id: 'subspace-theory',    date: '2025-12-26', title: 'The Subspace Theory',  kind: 'EP',     label: 'Independent',      trackCount: 4, url: 'https://yannig.bandcamp.com/album/the-subspace-theory' },
-    { id: 'nightmare-in-heaven',date: '2025-10-31', title: 'Nightmare In Heaven',  kind: 'Single', label: 'Timewarp Records',  url: 'https://beatspace-timewarp.bandcamp.com/album/nightmare-in-heaven' },
+    { id: 'subspace-theory',    date: '2025-12-26', title: 'The Subspace Theory',  kind: 'EP',     label: 'Goa Records',      trackCount: 4, url: 'https://yannig.bandcamp.com/album/the-subspace-theory-ep' },
+    { id: 'nightmare-in-heaven',date: '2025-10-31', title: 'Nightmare In Heaven',  kind: 'Single', label: 'Timewarp Records',  url: 'https://yannig.bandcamp.com/track/nightmare-in-heaven' },
     { id: 'galaxy-604',          date: '2025',       title: 'Galaxy 604',           kind: 'Single', label: 'Goa Records' },
   ],
   compilations: [
-    { id: 'call-of-goa-5',      date: '2026',       title: 'The Call Of Goa, Vol. 5',                 kind: 'Compilation', label: 'Timewarp Records',   trackName: 'Subspace Disturbance' },
-    { id: 'psychedelic-goa-2026',date: '2026-01-09', title: 'Psychedelic Goa Trance 2026 100 Aliens',  kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604' },
-    { id: 'psy-trance-2026',     date: '2026',       title: 'Psy Trance 2026 Space DJ',               kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604' },
+    { id: 'call-of-goa-5',       date: '2026',       title: 'The Call Of Goa, Vol. 5',                kind: 'Compilation', label: 'Timewarp Records',   trackName: 'Subspace Disturbance', url: 'https://timewarprecords.bandcamp.com/album/the-call-of-goa-vol-5' },
+    { id: 'psychedelic-goa-2026', date: '2026-01-09', title: 'Psychedelic Goa Trance 2026 100 Aliens', kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604',           url: 'https://freshfrequencies.bandcamp.com/album/psychedelic-goa-trance-2026-100-aliens' },
+    { id: 'psy-trance-2026',      date: '2026',       title: 'Psy Trance 2026 Space DJ',               kind: 'Compilation', label: 'Fresh Frequencies',  trackName: 'Galaxy 604',           url: 'https://open.spotify.com/album/73EV8DxuOgSoAhqSXSYhwn?si=NOD-pJajTYKP-Yr6trlgqg' },
   ],
 };
 
@@ -202,7 +202,10 @@ function validateGalleryOverrides(raw: unknown): GalleryOverrides {
     try {
       const src = sanitizeUrl(it.src);
       if (!src) continue;
-      added.push({ id: sanitizeId(it.id) || `u-${added.length}`, src, alt: sanitizeText(it.alt, LIMITS.MAX_SHORT_TEXT) || 'Untitled' });
+      const mediaType = it.mediaType === 'video' ? 'video' : 'image';
+      let videoEmbedUrl: string | undefined;
+      try { videoEmbedUrl = it.videoEmbedUrl ? sanitizeUrl(it.videoEmbedUrl) : undefined; } catch { videoEmbedUrl = undefined; }
+      added.push({ id: sanitizeId(it.id) || `u-${added.length}`, src, alt: sanitizeText(it.alt, LIMITS.MAX_SHORT_TEXT) || 'Untitled', mediaType, videoEmbedUrl });
     } catch { /* skip malformed */ }
   }
   return { order, deleted, alt, added };
@@ -265,7 +268,7 @@ function validateReleaseArray(arr: unknown[]): Release[] {
     if (out.length >= 100) break;
     if (!item || typeof item !== 'object') continue;
     const it = item as Record<string, unknown>;
-    const kind = it.kind === 'EP' || it.kind === 'Single' || it.kind === 'Compilation' ? it.kind : 'Single';
+    const kind = it.kind === 'EP' || it.kind === 'Single' || it.kind === 'LP' || it.kind === 'Remix' || it.kind === 'Compilation' ? it.kind : 'Single';
     let url = '';
     try { url = it.url ? sanitizeUrl(it.url) : ''; } catch { url = ''; }
     out.push({
@@ -359,6 +362,7 @@ export function useGallery(): GalleryItem[] {
   return out.slice(0, LIMITS.MAX_GALLERY_ITEMS);
 }
 
+export function useGalleryOverrides(): GalleryOverrides { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).gallery; }
 export function useEvents():   EventItem[]     { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).events; }
 export function useBio():      BioContent      { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).bio; }
 export function useSocials():  SocialItem[]    { return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).socials; }
@@ -380,4 +384,11 @@ export async function saveContent(patch: Partial<SiteContent>): Promise<void> {
 
 export function newId(prefix: string) {
   return `${prefix}-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
+}
+
+// Newest-first. A year-only date ("2026") sorts as the earliest point in that
+// year, so a full date within the same year ("2026-01-09") ranks above it.
+export function sortReleasesByDate(releases: Release[]): Release[] {
+  const key = (d: string) => (/^\d{4}$/.test(d) ? `${d}-00-00` : d);
+  return [...releases].sort((a, b) => key(b.date).localeCompare(key(a.date)));
 }

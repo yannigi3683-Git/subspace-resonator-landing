@@ -1,12 +1,19 @@
 import { useEffect, useRef, useState } from 'react';
 import { Lock, X } from 'lucide-react';
 import { supabase } from '@/lib/supabase';
+import GalleryAdmin from './GalleryAdmin';
+import BioAdmin from './BioAdmin';
+import BookingAdmin from './BookingAdmin';
+import SocialsAdmin from './SocialsAdmin';
+import GigsAdmin from './GigsAdmin';
+import DiscographyAdmin from './DiscographyAdmin';
 
 type PanelState = 'checking' | 'sign-in' | 'not-admin' | 'ready';
 
 const AdminPanel = () => {
   const [open, setOpen]   = useState(false);
   const [panel, setPanel] = useState<PanelState>('checking');
+  const [editor, setEditor] = useState<string | null>(null);
   const [email, setEmail] = useState('');
   const [pass,  setPass]  = useState('');
   const [error, setError] = useState('');
@@ -52,8 +59,9 @@ const AdminPanel = () => {
     setError('');
     setBusy(true);
     try {
-      const url = import.meta.env.VITE_SUPABASE_URL as string;
-      const key = import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string;
+      // Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars
+      const url = (import.meta.env.VITE_SUPABASE_URL as string).replace(/[^\x20-\x7E]/g, '');
+      const key = (import.meta.env.VITE_SUPABASE_PUBLISHABLE_KEY as string).replace(/[^\x20-\x7E]/g, '');
       const body = await new Promise<{ status: number; data: Record<string, string> }>(
         (resolve, reject) => {
           const xhr = new XMLHttpRequest();
@@ -165,17 +173,42 @@ const AdminPanel = () => {
           </div>
         )}
 
-        {panel === 'ready' && (
+        {panel === 'ready' && editor === 'GALLERY' && (
+          <GalleryAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && editor === 'BIO' && (
+          <BioAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && editor === 'BOOKING' && (
+          <BookingAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && editor === 'SOCIALS' && (
+          <SocialsAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && editor === 'GIGS' && (
+          <GigsAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && editor === 'DISCOGRAPHY' && (
+          <DiscographyAdmin onBack={() => setEditor(null)} />
+        )}
+
+        {panel === 'ready' && !editor && (
           <>
             <div className="flex-1 overflow-y-auto p-4 space-y-3">
               <div className="text-[10px] tracking-[0.2em] text-primary uppercase">EDITORS</div>
-              {(['GIGS', 'GALLERY', 'BIO', 'BOOKING', 'SOCIALS', 'DISCOGRAPHY'] as const).map((name) => (
-                <div
+              {(['GALLERY', 'BIO', 'BOOKING', 'SOCIALS', 'GIGS', 'DISCOGRAPHY'] as const).map((name) => (
+                <button
                   key={name}
-                  className="border border-border px-3 py-2 text-[10px] tracking-[0.2em] text-muted-foreground uppercase"
+                  onClick={() => setEditor(name)}
+                  className="w-full border border-border px-3 py-2 text-[10px] tracking-[0.2em] text-foreground uppercase text-left hover:border-primary hover:text-primary transition-colors"
                 >
-                  {name} — coming soon
-                </div>
+                  {name}
+                </button>
               ))}
             </div>
             <div className="border-t border-border p-3">
