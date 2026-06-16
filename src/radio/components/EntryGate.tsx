@@ -28,7 +28,7 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
     setError('');
     try {
       const { data, error: authError } = await supabase.auth.signInAnonymously({
-        options: { captchaToken },
+        options: captchaToken ? { captchaToken } : {},
       });
       if (authError || !data.user) {
         setError(authError?.message ?? 'Sign-in failed. Try again.');
