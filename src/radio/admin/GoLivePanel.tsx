@@ -41,6 +41,10 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
   const micSourceIdRef = useRef<string | null>(null);
 
   useEffect(() => {
+    audioElRef.current = new Audio();
+    // navigator.mediaDevices is undefined in non-secure contexts / some embedded views;
+    // guard so a missing API doesn't crash the whole console.
+    if (!navigator.mediaDevices?.enumerateDevices) return;
     navigator.mediaDevices.enumerateDevices().then((infos) => {
       const audioIn = infos
         .filter((d) => d.kind === 'audioinput')
@@ -48,7 +52,6 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       setDevices(audioIn);
       if (audioIn.length) setSelectedDeviceId(audioIn[0].deviceId);
     }).catch(() => {});
-    audioElRef.current = new Audio();
   }, []);
 
   const dispatchFsm = useCallback((event: ConnectionEvent) => {

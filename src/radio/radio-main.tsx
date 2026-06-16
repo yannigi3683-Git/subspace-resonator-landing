@@ -8,9 +8,12 @@ import './radio.css';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import RadioApp from './RadioApp.tsx';
+import { ErrorBoundary } from './ErrorBoundary';
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
-    <RadioApp />
+    <ErrorBoundary>
+      <RadioApp />
+    </ErrorBoundary>
   </React.StrictMode>,
 );
