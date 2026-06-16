@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-
+import { TurnstileWidget } from '../components/TurnstileWidget';
 
 interface Props {
   supabase: SupabaseClient;
@@ -16,15 +16,28 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
   const [totpCode, setTotpCode] = useState('');
   const [errorMsg, setErrorMsg] = useState('');
   const [busy, setBusy] = useState(false);
+  const [captchaToken, setCaptchaToken] = useState('');
+  // Turnstile tokens are single-use; bumping this key remounts the widget to get a fresh one after a failed attempt.
+  const [captchaKey, setCaptchaKey] = useState(0);
+
+  function refreshCaptcha() {
+    setCaptchaToken('');
+    setCaptchaKey((k) => k + 1);
+  }
 
   async function handlePasswordSubmit(e: React.FormEvent) {
     e.preventDefault();
     setBusy(true);
     setErrorMsg('');
     try {
-      const { error } = await supabase.auth.signInWithPassword({ email, password });
+      const { error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+        options: { captchaToken },
+      });
       if (error) {
         setErrorMsg(error.message);
+        refreshCaptcha();
         return;
       }
       setPhase('totp');
@@ -32,6 +45,7 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
       const msg = err instanceof Error ? err.message : String(err);
       console.error('[AdminGate] sign-in error:', err);
       setErrorMsg(`Error: ${msg}`);
+      refreshCaptcha();
     } finally {
       setBusy(false);
     }
@@ -113,9 +127,10 @@ export default function AdminGate({ supabase, onAuthenticated }: Props) {
                 {errorMsg}
               </p>
             )}
+            <TurnstileWidget key={captchaKey} onToken={setCaptchaToken} />
             <button
               type="submit"
-              disabled={busy}
+              disabled={busy || !captchaToken}
               className="mt-2 font-mono text-xs tracking-widest border border-primary px-4 min-h-[44px] hover:bg-primary/10 disabled:opacity-40 transition-colors"
             >
               {busy ? 'CHECKING...' : 'CONTINUE'}
