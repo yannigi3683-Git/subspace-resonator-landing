@@ -4,6 +4,7 @@ export interface PublisherCallbacks {
   onSessionReady: (cfSessionId: string) => void;
   onDispatch: (event: ConnectionEvent) => void;
   onQualityChange: (degraded: boolean) => void;
+  onFatal?: (reason: string) => void;
 }
 
 interface PublishOfferResponse {
@@ -60,6 +61,14 @@ export class Publisher {
     }
 
     if (!res.ok) {
+      if (res.status === 403) {
+        this.callbacks.onFatal?.('Permission denied. Verify admin role in Supabase.');
+        return;
+      }
+      if (res.status === 401) {
+        this.callbacks.onFatal?.('Session expired. Refresh the page and log in again.');
+        return;
+      }
       this.callbacks.onDispatch({ type: 'ERROR' });
       return;
     }

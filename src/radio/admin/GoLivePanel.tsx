@@ -123,6 +123,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
 
     const publisher = new Publisher(
       {
+        onFatal: (reason) => {
+          setErrorMsg(reason);
+          setStatus('error');
+          dispatchFsm({ type: 'RESET' });
+        },
         onSessionReady: async (cfSessionId) => {
           // CRITICAL: update station only after CF session exists
           const { error } = await supabase

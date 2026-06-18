@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GoLivePanel from './GoLivePanel';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -167,6 +167,21 @@ describe('GoLivePanel', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert')).toBeInTheDocument();
     }, { timeout: 3000 });
+  });
+
+  it('shows error and resets to GO LIVE when Publisher calls onFatal', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+
+    act(() => {
+      publisherCallbacksRef.current?.onFatal?.('Permission denied. Verify admin role.');
+    });
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Permission denied');
+      expect(screen.getByTestId('go-live-btn')).toHaveTextContent('GO LIVE');
+    });
   });
 
   it('adds files to the deck queue and displays them', async () => {
