@@ -231,6 +231,54 @@ describe('GoLivePanel', () => {
     expect(secondEl).not.toBe(firstEl);
   });
 
+  it('reports status changes to onStatusChange (idle, then live)', async () => {
+    const onStatusChange = vi.fn();
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-status');
+    });
+
+    render(
+      <GoLivePanel
+        supabase={makeSupabase()}
+        authToken={async () => 'token'}
+        onStatusChange={onStatusChange}
+      />,
+    );
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    expect(onStatusChange).toHaveBeenCalledWith('idle');
+
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => expect(onStatusChange).toHaveBeenCalledWith('live'));
+  });
+
+  it('surfaces an error instead of spinning forever when reconnects are exhausted', async () => {
+    vi.useFakeTimers();
+    try {
+      render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+      await act(async () => { await Promise.resolve(); });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('go-live-btn'));
+        await Promise.resolve();
+      });
+
+      // Each ERROR in 'connecting' schedules a retry; advancing the clock fires it and
+      // returns to 'connecting'. After MAX_RETRIES the FSM reaches 'lost'.
+      for (let i = 0; i < 7; i++) {
+        await act(async () => {
+          publisherCallbacksRef.current?.onDispatch({ type: 'ERROR' });
+          await vi.advanceTimersByTimeAsync(31_000);
+        });
+      }
+
+      expect(screen.getByRole('alert')).toBeInTheDocument();
+      expect(screen.getByTestId('go-live-btn')).toHaveTextContent('GO LIVE');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('adds files to the deck queue and displays them', async () => {
     render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-panel'));

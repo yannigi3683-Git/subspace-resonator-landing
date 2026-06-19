@@ -42,7 +42,7 @@ export class Publisher {
     const offer = await this.pc.createOffer();
     await this.pc.setLocalDescription(offer);
 
-    // FR-4: stereo Opus ~256kbps (setParameters after setLocalDescription)
+    // FR-4: mono/stereo Opus capped at 128kbps (setParameters after setLocalDescription)
     await this.applyFr4Bitrate();
 
     let res: Response;
@@ -74,6 +74,15 @@ export class Publisher {
         this.callbacks.onFatal?.('Session expired. Refresh the page and log in again.');
         return;
       }
+      // 500 = a server-side configuration/logic error (e.g. station_update_failed,
+      // missing env var). Retrying never fixes it, so surface it immediately instead
+      // of spinning on CONNECTING. 502/503/network are transient → retry.
+      if (res.status === 500) {
+        this.callbacks.onFatal?.(
+          'Broadcast server error. This is a server configuration problem, not your connection. Check the deployment logs.',
+        );
+        return;
+      }
       this.callbacks.onDispatch({ type: 'ERROR' });
       return;
     }
@@ -84,7 +93,7 @@ export class Publisher {
     this.startStatsMonitor();
   }
 
-  // FR-4: 256kbps max on the audio sender.
+  // FR-4: 128kbps max on the audio sender.
   // Voice processing (echoCancellation, AGC, noiseSuppression) and DTX are
   // controlled by the getUserMedia constraints upstream in hostMixer; this
   // method handles the bitrate cap which must run post-setLocalDescription.
@@ -94,7 +103,7 @@ export class Publisher {
       if (sender.track?.kind !== 'audio') continue;
       const params = sender.getParameters();
       if (!params.encodings) params.encodings = [{}];
-      params.encodings[0].maxBitrate = 256_000;
+      params.encodings[0].maxBitrate = 128_000;
       try {
         await sender.setParameters(params);
       } catch {

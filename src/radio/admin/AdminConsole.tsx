@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import GoLivePanel from './GoLivePanel';
+import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
 
 interface Props {
   supabase: SupabaseClient;
@@ -12,6 +12,7 @@ type Tab = 'broadcast' | 'schedule' | 'moderation';
 export default function AdminConsole({ supabase, authToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('broadcast');
   const [listenerCount, setListenerCount] = useState(0);
+  const [broadcastStatus, setBroadcastStatus] = useState<BroadcastStatus>('idle');
 
   useEffect(() => {
     // Count presence on the SAME channel listeners join (usePresence -> 'room:main').
@@ -29,12 +30,49 @@ export default function AdminConsole({ supabase, authToken }: Props) {
     return () => { supabase.removeChannel(channel); };
   }, [supabase]);
 
+  // Truthful live indicator: only 'live' means audio is actually going out.
+  // 'starting'/'ending' are transitional; 'idle'/'error' are off the air.
+  const onAir = broadcastStatus === 'live';
+  const transitioning = broadcastStatus === 'starting' || broadcastStatus === 'ending';
+
   return (
     <main className="min-h-screen bg-background text-foreground px-4 py-8 max-w-2xl mx-auto">
-      <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground mb-2">
-        // SUBSPACE RADIO LIVE
-      </p>
-      <h1 className="font-display text-2xl mb-6">HOST CONSOLE</h1>
+      <div className="flex items-start justify-between gap-4 mb-6">
+        <div>
+          <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground mb-2">
+            // SUBSPACE RADIO LIVE
+          </p>
+          <h1 className="font-display text-2xl">HOST CONSOLE</h1>
+        </div>
+
+        {/* Persistent ON AIR / OFF AIR badge — visible on every tab so the host always
+            knows whether audio is going out, and can jump back to stop it. */}
+        <button
+          type="button"
+          onClick={() => setActiveTab('broadcast')}
+          data-testid="broadcast-status-badge"
+          aria-live="polite"
+          className={[
+            'font-mono text-[11px] tracking-widest px-3 min-h-[44px] border transition-colors shrink-0',
+            onAir
+              ? 'border-red-500 text-red-400 hover:bg-red-500/10'
+              : transitioning
+                ? 'border-amber-500 text-amber-400 hover:bg-amber-500/10'
+                : 'border-border text-muted-foreground hover:bg-primary/10',
+          ].join(' ')}
+        >
+          {onAir ? (
+            <span className="inline-flex items-center gap-2">
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-pulse" aria-hidden="true" />
+              ON AIR
+            </span>
+          ) : transitioning ? (
+            broadcastStatus === 'starting' ? 'CONNECTING…' : 'ENDING…'
+          ) : (
+            'OFF AIR'
+          )}
+        </button>
+      </div>
 
       {/* Tab bar */}
       <nav className="flex gap-0 mb-6 border border-border w-fit">
@@ -55,9 +93,17 @@ export default function AdminConsole({ supabase, authToken }: Props) {
         ))}
       </nav>
 
-      {activeTab === 'broadcast' && (
-        <GoLivePanel supabase={supabase} authToken={authToken} listenerCount={listenerCount} />
-      )}
+      {/* GoLivePanel stays MOUNTED across tab changes — unmounting it would silently
+          orphan a live RTCPeerConnection/AudioContext (audio keeps streaming) while the
+          remounted panel resets to GO LIVE, lying about the broadcast state. */}
+      <div className={activeTab === 'broadcast' ? '' : 'hidden'}>
+        <GoLivePanel
+          supabase={supabase}
+          authToken={authToken}
+          listenerCount={listenerCount}
+          onStatusChange={setBroadcastStatus}
+        />
+      </div>
 
       {activeTab === 'schedule' && (
         <section className="section-border p-6">

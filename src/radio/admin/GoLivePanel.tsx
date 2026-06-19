@@ -5,20 +5,23 @@ import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 
+export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
+
 interface Props {
   supabase: SupabaseClient;
   authToken: () => Promise<string>;
   listenerCount?: number;
+  // Lifts broadcast status to the parent so a persistent ON AIR / OFF AIR indicator
+  // can show on every tab (the panel itself is hidden when another tab is active).
+  onStatusChange?: (status: BroadcastStatus) => void;
 }
-
-type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
 
 interface AudioDevice {
   deviceId: string;
   label: string;
 }
 
-export default function GoLivePanel({ authToken, listenerCount = 0 }: Props) {
+export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChange }: Props) {
   const [status, setStatus] = useState<BroadcastStatus>('idle');
   const [title, setTitle] = useState('');
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -85,9 +88,20 @@ export default function GoLivePanel({ authToken, listenerCount = 0 }: Props) {
     return () => navigator.mediaDevices.removeEventListener?.('devicechange', onChange);
   }, [refreshDevices]);
 
+  // Mirror status up to the parent (AdminConsole) for the cross-tab live indicator.
+  const onStatusChangeRef = useRef(onStatusChange);
+  onStatusChangeRef.current = onStatusChange;
+  useEffect(() => { onStatusChangeRef.current?.(status); }, [status]);
+
   const dispatchFsm = useCallback((event: ConnectionEvent) => {
     const { next, effects } = transition(fsmRef.current, event);
     fsmRef.current = next;
+    // Retry budget exhausted: stop showing CONNECTING forever — surface a real error
+    // so the host can act instead of staring at a spinner.
+    if (next.status === 'lost') {
+      setStatus('error');
+      setErrorMsg('Connection lost. Check your network and press GO LIVE to try again.');
+    }
     for (const effect of effects) {
       if (effect.type === 'SCHEDULE_RETRY') {
         retryTimerRef.current = setTimeout(

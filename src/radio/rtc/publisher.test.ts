@@ -71,8 +71,16 @@ describe('Publisher HTTP error handling', () => {
     expect(cb.onDispatch).not.toHaveBeenCalledWith({ type: 'ERROR' });
   });
 
-  it('dispatches ERROR (not onFatal) when server returns 500', async () => {
+  it('calls onFatal (not ERROR) when server returns 500 — a config error retrying cannot fix', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 500 }));
+    const cb = makeCallbacks();
+    await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
+    expect(cb.onFatal).toHaveBeenCalledWith(expect.stringMatching(/server/i));
+    expect(cb.onDispatch).not.toHaveBeenCalledWith({ type: 'ERROR' });
+  });
+
+  it('dispatches ERROR (retryable, not onFatal) when server returns 502', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 502 }));
     const cb = makeCallbacks();
     await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
     expect(cb.onDispatch).toHaveBeenCalledWith({ type: 'ERROR' });
@@ -85,5 +93,27 @@ describe('Publisher HTTP error handling', () => {
     await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
     expect(cb.onDispatch).toHaveBeenCalledWith({ type: 'ERROR' });
     expect(cb.onFatal).not.toHaveBeenCalled();
+  });
+});
+
+describe('Publisher audio bitrate (FR-4)', () => {
+  it('caps the audio sender bitrate at 128 kbps for upload stability', async () => {
+    const setParameters = vi.fn().mockResolvedValue(undefined);
+    const sender = { track: { kind: 'audio' }, getParameters: () => ({}), setParameters };
+    mockPc.getSenders.mockReturnValue([sender]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({
+        ok: true,
+        json: async () => ({ cfSessionId: 'cf-1', sdpAnswer: 'v=0\r\n' }),
+      }),
+    );
+    const cb = makeCallbacks();
+    await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
+    expect(setParameters).toHaveBeenCalledWith(
+      expect.objectContaining({
+        encodings: [expect.objectContaining({ maxBitrate: 128_000 })],
+      }),
+    );
   });
 });

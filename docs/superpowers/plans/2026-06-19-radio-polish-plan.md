@@ -28,13 +28,29 @@ Order approved by user: **A (quick wins) → B (host player)**, then C/D/E, then
   ```
 - **Verify:** listener posts a message; it appears for both windows; no console error.
 
-### A2 — Audio stability (fewer dropouts)
+### A2 — Audio stability (fewer dropouts) (DONE 2026-06-19: maxBitrate 256k→128k)
 - **Cause class:** 256 kbps stereo Opus exceeds unstable upload; jitter/CPU.
 - **Do (TDD):** `src/radio/rtc/publisher.ts` `applyFr4Bitrate` — lower `maxBitrate` 256k → 128k
   (consider exposing a quality setting later). Keep DTX off.
 - **Verify:** smoother playback on the host's connection; note wired-ethernet guidance for HQ.
 
-### A3 — Kill the "CONNECTING…" hang
+### A4 — Broadcast state must never lie (DONE 2026-06-19)
+- **Symptom:** switching host tabs (BROADCAST → SCHEDULE/MODERATION) shows "GO LIVE" while
+  audio is still being transmitted (heard in the guest room). No clear LIVE/OFF indicator;
+  no way to stop from another tab.
+- **Cause:** `AdminConsole` conditionally rendered `GoLivePanel`, so a tab change **unmounted**
+  it. The live `RTCPeerConnection`/`AudioContext` (held in its refs) were orphaned and kept
+  streaming, while the remounted panel reset `status` to `idle` → false "GO LIVE".
+- **Done:**
+  - `AdminConsole` keeps `GoLivePanel` **mounted** on every tab (hidden via CSS, never
+    unmounted), so a live broadcast and its state survive tab changes.
+  - `GoLivePanel` lifts `status` up via `onStatusChange`; `AdminConsole` shows a **persistent
+    ON AIR / OFF AIR / CONNECTING badge on every tab**, clickable to jump back to BROADCAST to
+    stop. Only `status === 'live'` reads ON AIR (truthful — `starting`/`ending` are transitional).
+- **Verify:** go live, switch tabs → badge stays ON AIR, panel keeps END BROADCAST; tests in
+  `AdminConsole.test.tsx` assert mount-persistence + indicator.
+
+### A3 — Kill the "CONNECTING…" hang (DONE 2026-06-19)
 - **Cause:** publish-offer 500 (e.g. `station_update_failed`) is retried forever; FSM reaching
   `lost` never updates the UI.
 - **Do (TDD):**
