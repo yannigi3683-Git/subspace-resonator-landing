@@ -27,11 +27,14 @@ interface CfTracksResponse {
   sessionDescription?: { type: string; sdp: string };
 }
 
-async function cfPost<T>(path: string, body: unknown): Promise<T> {
+async function cfPost<T>(path: string, body?: unknown): Promise<T> {
+  // /sessions/new takes no body; sending an empty object trips CF's request validator.
+  const headers: Record<string, string> = { Authorization: `Bearer ${appSecret()}` };
+  if (body !== undefined) headers['Content-Type'] = 'application/json';
   const res = await fetch(`${CF_BASE}/apps/${appId()}${path}`, {
     method: 'POST',
-    headers: { Authorization: `Bearer ${appSecret()}`, 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
+    headers,
+    ...(body !== undefined ? { body: JSON.stringify(body) } : {}),
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
@@ -53,13 +56,22 @@ async function cfPut(path: string, body: unknown): Promise<void> {
 }
 
 async function createCfSession(): Promise<string> {
-  const data = await cfPost<CfNewSessionResponse>('/sessions/new', {});
+  const data = await cfPost<CfNewSessionResponse>('/sessions/new');
   return data.sessionId;
 }
 
+// The local offer's audio m-section mid; CF maps the published track to this transceiver.
+export function firstMid(sdp: string): string {
+  const m = sdp.match(/^a=mid:(\S+)/m);
+  return m ? m[1] : '0';
+}
+
 async function publishAudioTrack(cfSessionId: string, sdpOffer: string): Promise<{ sdpAnswer: string }> {
+  // Per the SFU API: the offer is a TOP-LEVEL sessionDescription and each local track
+  // references its transceiver by mid (not a per-track sessionDescription).
   const data = await cfPost<CfTracksResponse>(`/sessions/${cfSessionId}/tracks/new`, {
-    tracks: [{ location: 'local', trackName: 'audio-main', sessionDescription: { type: 'offer', sdp: sdpOffer } }],
+    sessionDescription: { type: 'offer', sdp: sdpOffer },
+    tracks: [{ location: 'local', mid: firstMid(sdpOffer), trackName: 'audio-main' }],
   });
   const sdp = data.sessionDescription?.sdp;
   if (!sdp) throw new Error('CF publishAudioTrack: no sdp in response');

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAdminAal2 } from './rtc-session';
+import { checkAdminAal2, firstMid } from './rtc-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // checkAdminAal2 reads the role through the security-definer has_role() RPC, which
@@ -35,5 +35,21 @@ describe('checkAdminAal2', () => {
     const client = fakeClient({ data: true, error: null });
     await checkAdminAal2('user-xyz', 'aal2', client);
     expect(client.rpc).toHaveBeenCalledWith('has_role', { _user_id: 'user-xyz', _role: 'admin' });
+  });
+});
+
+describe('firstMid', () => {
+  it('extracts the numeric mid from a typical offer', () => {
+    const sdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:0\r\n';
+    expect(firstMid(sdp)).toBe('0');
+  });
+
+  it('extracts a named mid', () => {
+    const sdp = 'v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\na=mid:audio\r\n';
+    expect(firstMid(sdp)).toBe('audio');
+  });
+
+  it('defaults to "0" when no mid line is present', () => {
+    expect(firstMid('v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n')).toBe('0');
   });
 });
