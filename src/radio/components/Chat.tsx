@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { ChatMessage } from '../types';
-import { getAvatar } from '../avatars';
+import { Avatar } from './Avatar';
 
 interface ChatProps {
   messages: ChatMessage[];
@@ -18,16 +18,14 @@ export function Chat({ messages }: ChatProps) {
   return (
     <div className="flex flex-col gap-2 overflow-y-auto flex-1 px-3 py-2" aria-label="Chat messages" aria-live="polite">
       {messages.map((msg) => {
-        const avatar = getAvatar(msg.avatar_id);
         return (
           <div key={msg.id} className="flex items-start gap-2 text-sm">
-            <span
-              className="w-6 h-6 rounded-full flex-shrink-0 flex items-center justify-center text-[9px] font-bold mt-0.5"
-              style={{ backgroundColor: avatar.color, color: avatar.textColor }}
-              aria-hidden="true"
-            >
-              {avatar.label.slice(0, 2).toUpperCase()}
-            </span>
+            <Avatar
+              avatarId={msg.avatar_id}
+              size={24}
+              label={msg.display_name}
+              className="flex-shrink-0 mt-0.5"
+            />
             <div className="flex-1 min-w-0">
               <span className="font-mono text-[11px] text-[#aaa] mr-1">
                 {msg.display_name}

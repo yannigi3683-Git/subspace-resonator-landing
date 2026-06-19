@@ -1,5 +1,5 @@
 import type { PresenceEntry } from '../types';
-import { getAvatar } from '../avatars';
+import { Avatar } from './Avatar';
 
 interface PresenceListProps {
   presenceList: PresenceEntry[];
@@ -13,23 +13,16 @@ export function PresenceList({ presenceList, count }: PresenceListProps) {
         {count} {count === 1 ? 'listener' : 'listeners'} online
       </p>
       <div className="flex flex-wrap gap-1">
-        {presenceList.slice(0, 20).map((entry) => {
-          const avatar = getAvatar(entry.avatarId);
-          return (
-            <span
-              key={entry.uid}
-              title={entry.name}
-              className="inline-flex items-center gap-1 font-mono text-[10px] text-[#aaa]"
-            >
-              <span
-                className="w-4 h-4 rounded-full inline-block flex-shrink-0"
-                style={{ backgroundColor: avatar.color }}
-                aria-hidden="true"
-              />
-              {entry.name}
-            </span>
-          );
-        })}
+        {presenceList.slice(0, 20).map((entry) => (
+          <span
+            key={entry.uid}
+            title={entry.name}
+            className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#aaa]"
+          >
+            <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
+            {entry.name}
+          </span>
+        ))}
         {presenceList.length > 20 && (
           <span className="font-mono text-[10px] text-[#555]">
             +{presenceList.length - 20} more
