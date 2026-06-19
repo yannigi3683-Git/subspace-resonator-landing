@@ -132,13 +132,11 @@ export async function checkAdminAal2(
 ): Promise<AdminCheck> {
   if (aal !== 'aal2') return { ok: false, reason: 'not_aal2' };
   try {
-    const { data } = await client
-      .from('user_roles')
-      .select('role')
-      .eq('user_id', userId)
-      .eq('role', 'admin')
-      .single();
-    return data ? { ok: true } : { ok: false, reason: 'not_admin' };
+    // has_role() is SECURITY DEFINER (see supabase/schema.sql), so it bypasses the
+    // RLS on user_roles and works regardless of whether the key bypasses RLS itself.
+    const { data, error } = await client.rpc('has_role', { _user_id: userId, _role: 'admin' });
+    if (error) return { ok: false, reason: 'not_admin' };
+    return data === true ? { ok: true } : { ok: false, reason: 'not_admin' };
   } catch {
     return { ok: false, reason: 'not_admin' };
   }

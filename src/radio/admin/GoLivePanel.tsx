@@ -113,6 +113,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
     await publisher.connect(stream);
   }
 
+  // Tear down the audio graph after a failed/ended session so a retry starts clean.
+  // A leaked AudioContext (and its file source node) is what makes the second GO LIVE
+  // throw createMediaElementSource errors.
+  function teardownMixer() {
+    mixerRef.current?.stop();
+    mixerRef.current = null;
+    streamRef.current = null;
+    deviceSourceIdRef.current = null;
+    fileSourceIdRef.current = null;
+    micSourceIdRef.current = null;
+    audioElRef.current?.pause();
+  }
+
   async function handleGoLive() {
     setStatus('starting');
     setErrorMsg('');
@@ -127,6 +140,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
           setErrorMsg(reason);
           setStatus('error');
           dispatchFsm({ type: 'RESET' });
+          teardownMixer();
         },
         onSessionReady: async (cfSessionId) => {
           // CRITICAL: update station only after CF session exists
@@ -168,14 +182,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
         mixer.setGain(id, deviceGain);
       }
 
-      // Add local file deck source if there are files queued
+      // Add local file deck source if there are files queued.
+      // A fresh <audio> element is created each session: an HTMLMediaElement can back
+      // only ONE MediaElementSourceNode for its lifetime, so reusing it across GO LIVE
+      // attempts throws "already connected to a different MediaElementSourceNode".
       const deck = deckRef.current;
-      if (!deck.isEmpty && audioElRef.current) {
+      if (!deck.isEmpty) {
         const current = deck.current;
         if (current) {
-          audioElRef.current.src = current.url;
-          audioElRef.current.play().catch(() => {});
-          const id = mixer.addFileElement(audioElRef.current);
+          const audioEl = new Audio();
+          audioEl.src = current.url;
+          audioElRef.current = audioEl;
+          audioEl.play().catch(() => {});
+          const id = mixer.addFileElement(audioEl);
           fileSourceIdRef.current = id;
           mixer.setGain(id, fileGain);
           setCurrentTrackName(current.name);
@@ -188,6 +207,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       setErrorMsg(err instanceof Error ? err.message : 'Could not start broadcast');
       setStatus('error');
       dispatchFsm({ type: 'ERROR' });
+      teardownMixer();
     }
   }
 

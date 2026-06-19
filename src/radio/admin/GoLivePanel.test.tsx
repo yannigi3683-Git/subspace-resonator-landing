@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GoLivePanel from './GoLivePanel';
+import { HostMixer } from '../rtc/hostMixer';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PublisherCallbacks } from '../rtc/publisher';
 
@@ -73,7 +74,7 @@ beforeEach(() => {
     writable: true,
   });
 
-  vi.stubGlobal('Audio', class { play = vi.fn(); pause = vi.fn(); src = ''; });
+  vi.stubGlobal('Audio', class { play = vi.fn(() => Promise.resolve()); pause = vi.fn(); src = ''; });
 });
 
 // --- Tests ---
@@ -182,6 +183,51 @@ describe('GoLivePanel', () => {
       expect(screen.getByRole('alert')).toHaveTextContent('Permission denied');
       expect(screen.getByTestId('go-live-btn')).toHaveTextContent('GO LIVE');
     });
+  });
+
+  it('uses a fresh audio element and tears down the mixer when retrying after onFatal', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    // Queue a file so the file-deck branch runs — that branch is what crashes on retry
+    // (createMediaElementSource cannot reuse an element across sessions).
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    const file = new File([''], 'track.mp3', { type: 'audio/mpeg' });
+    Object.defineProperty(fileInput, 'files', { value: [file], configurable: true });
+    fireEvent.change(fileInput);
+
+    // mock.results accumulates across tests in this file — clear so indices are local.
+    const mixerMock = vi.mocked(HostMixer);
+    mixerMock.mockClear();
+
+    // Ensure the file actually landed in the deck before going live
+    await waitFor(() => expect(screen.getByText('track')).toBeInTheDocument());
+
+    // First GO LIVE
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => {
+      expect(mixerMock.mock.results[0].value.addFileElement).toHaveBeenCalled();
+    });
+    const firstMixer = mixerMock.mock.results[0].value;
+    const firstEl = firstMixer.addFileElement.mock.calls[0][0];
+
+    // Fatal failure (e.g. 403) — should reset to GO LIVE and tear the mixer down
+    act(() => {
+      publisherCallbacksRef.current?.onFatal?.('Admin role missing.');
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('go-live-btn')).toHaveTextContent('GO LIVE');
+    });
+    expect(firstMixer.stop).toHaveBeenCalled();
+
+    // Retry: a brand-new mixer with a brand-new audio element (never the reused one)
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => {
+      expect(mixerMock.mock.results[1].value.addFileElement).toHaveBeenCalled();
+    });
+    const secondEl = mixerMock.mock.results[1].value.addFileElement.mock.calls[0][0];
+
+    expect(secondEl).not.toBe(firstEl);
   });
 
   it('adds files to the deck queue and displays them', async () => {
