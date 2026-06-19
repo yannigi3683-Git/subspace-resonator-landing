@@ -81,7 +81,10 @@ Order approved by user: **A (quick wins) → B (host player)**, then C/D/E, then
 `MediaElementSource` per session is fine; **swap `audio.src`** to change tracks (do NOT call
 `createMediaElementSource` twice on one element).
 
-### B1 — Visible playlist
+Status: B1, B2, B3, B5 DONE 2026-06-19 (single-element src-swap deck). B4 crossfade pending
+(needs dual-deck in hostMixer).
+
+### B1 — Visible playlist (DONE)
 - **Do:** render the queue as a list; highlight `currentIndex`; click row → `jumpTo` (+ play when
   live); keep REMOVE. Show when ≥1 file.
 - **Verify (TDD):** list shows all tracks, current highlighted; click selects/jumps.

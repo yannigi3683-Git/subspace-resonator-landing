@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GoLivePanel from './GoLivePanel';
 import { HostMixer } from '../rtc/hostMixer';
@@ -63,6 +63,21 @@ function makeSupabase(updateResult: { error: null | { message: string } } = { er
 
 const mockEnumerateDevices = vi.fn();
 
+// Records every <audio> the panel creates, and supports the transport surface
+// (currentTime/duration/onended) so the file-deck tests can drive playback.
+const audioInstances: FakeAudioEl[] = [];
+class FakeAudioEl {
+  play = vi.fn(() => Promise.resolve());
+  pause = vi.fn();
+  src = '';
+  currentTime = 0;
+  duration = 100;
+  onended: (() => void) | null = null;
+  constructor() {
+    audioInstances.push(this);
+  }
+}
+
 beforeEach(() => {
   vi.restoreAllMocks();
 
@@ -83,7 +98,8 @@ beforeEach(() => {
     writable: true,
   });
 
-  vi.stubGlobal('Audio', class { play = vi.fn(() => Promise.resolve()); pause = vi.fn(); src = ''; });
+  audioInstances.length = 0;
+  vi.stubGlobal('Audio', FakeAudioEl);
   // handleEnd posts to the server end-broadcast phase.
   vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) })));
 });
@@ -358,6 +374,92 @@ describe('GoLivePanel', () => {
 
     await waitFor(() => {
       expect(screen.getByText('my track')).toBeInTheDocument();
+    });
+  });
+});
+
+describe('GoLivePanel file deck transport (Phase B)', () => {
+  async function goLiveWithFiles(names: string[]) {
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-deck');
+    });
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 't'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    const files = names.map((n) => new File([''], `${n}.mp3`, { type: 'audio/mpeg' }));
+    Object.defineProperty(fileInput, 'files', { value: files, configurable: true });
+    fireEvent.change(fileInput);
+    await waitFor(() => screen.getByText(names[0]));
+
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+  }
+
+  function playlistJumpRows() {
+    return within(screen.getByLabelText('Playlist'))
+      .getAllByRole('button')
+      .filter((b) => !b.getAttribute('aria-label')?.startsWith('Remove'));
+  }
+
+  const lastAudio = () => audioInstances[audioInstances.length - 1];
+
+  it('marks the first track current when the broadcast starts', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    const rows = playlistJumpRows();
+    expect(rows[0]).toHaveAttribute('aria-current', 'true');
+    expect(rows[1]).not.toHaveAttribute('aria-current', 'true');
+  });
+
+  it('NEXT advances track by swapping src, not adding a second mixer source', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    const mixerResults = vi.mocked(HostMixer).mock.results;
+    const mixer = mixerResults[mixerResults.length - 1].value;
+    expect(mixer.addFileElement).toHaveBeenCalledTimes(1);
+
+    const fileEl = lastAudio();
+    const firstSrc = fileEl.src;
+
+    fireEvent.click(screen.getByLabelText('Next track'));
+
+    expect(mixer.addFileElement).toHaveBeenCalledTimes(1);
+    expect(fileEl.src).not.toBe(firstSrc);
+    await waitFor(() => {
+      expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
+    });
+  });
+
+  it('seeks +/-10 seconds and clamps at zero', async () => {
+    await goLiveWithFiles(['alpha']);
+    const fileEl = lastAudio();
+    fileEl.currentTime = 30;
+    fileEl.duration = 100;
+
+    fireEvent.click(screen.getByLabelText('Forward 10 seconds'));
+    expect(fileEl.currentTime).toBe(40);
+
+    fireEvent.click(screen.getByLabelText('Back 10 seconds'));
+    expect(fileEl.currentTime).toBe(30);
+
+    fileEl.currentTime = 5;
+    fireEvent.click(screen.getByLabelText('Back 10 seconds'));
+    expect(fileEl.currentTime).toBe(0);
+  });
+
+  it('auto-advances when a track ends and stops at the end of the queue', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    const fileEl = lastAudio();
+
+    act(() => { fileEl.onended?.(); });
+    await waitFor(() => {
+      expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
+    });
+
+    act(() => { fileEl.onended?.(); });
+    await waitFor(() => {
+      expect(screen.getByLabelText('Play')).toBeInTheDocument();
     });
   });
 });

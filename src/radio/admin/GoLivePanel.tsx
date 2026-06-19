@@ -1,4 +1,5 @@
-import { useState, useRef, useEffect, useCallback } from 'react';
+import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
+import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
@@ -31,6 +32,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [fileGain, setFileGain] = useState(1);
   const [queue, setQueue] = useState<DeckTrack[]>([]);
   const [currentTrackName, setCurrentTrackName] = useState('');
+  const [currentTrackId, setCurrentTrackId] = useState('');
+  const [filePlaying, setFilePlaying] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
@@ -221,19 +224,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       // A fresh <audio> element is created each session: an HTMLMediaElement can back
       // only ONE MediaElementSourceNode for its lifetime, so reusing it across GO LIVE
       // attempts throws "already connected to a different MediaElementSourceNode".
+      // One <audio> element per session backs the file deck. We swap its .src to change
+      // tracks (createMediaElementSource may run only once per element), so prev/next/jump
+      // never create a second source node.
       const deck = deckRef.current;
       if (!deck.isEmpty) {
-        const current = deck.current;
-        if (current) {
-          const audioEl = new Audio();
-          audioEl.src = current.url;
-          audioElRef.current = audioEl;
-          audioEl.play().catch(() => {});
-          const id = mixer.addFileElement(audioEl);
-          fileSourceIdRef.current = id;
-          mixer.setGain(id, fileGain);
-          setCurrentTrackName(current.name);
-        }
+        const audioEl = new Audio();
+        audioEl.onended = handleDeckNext; // auto-advance to the next queued track
+        audioElRef.current = audioEl;
+        const id = mixer.addFileElement(audioEl);
+        fileSourceIdRef.current = id;
+        mixer.setGain(id, fileGain);
+        loadAndPlayCurrent(true);
       }
 
       // FSM CONNECT triggers CONNECT_RTC effect → reconnectPublisher() → publisher.connect(stream)
@@ -272,7 +274,72 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     audioElRef.current?.pause();
     setStatus('idle');
     setCurrentTrackName('');
+    setCurrentTrackId('');
+    setFilePlaying(false);
     dispatchFsm({ type: 'RESET' });
+  }
+
+  // ── File deck transport ──────────────────────────────────────────────
+  // All transport swaps the .src of the single mixer-attached <audio> element; it never
+  // creates a second MediaElementSource (forbidden per element by the Web Audio API).
+  function loadAndPlayCurrent(autoplay: boolean) {
+    const cur = deckRef.current.current;
+    const el = audioElRef.current;
+    if (!cur || !el) return;
+    el.src = cur.url;
+    setCurrentTrackName(cur.name);
+    setCurrentTrackId(cur.id);
+    if (autoplay) {
+      el.play().catch(() => {});
+      setFilePlaying(true);
+    }
+  }
+
+  function handleDeckNext() {
+    const deck = deckRef.current;
+    if (deck.advance()) {
+      setQueue([...deck.state.queue]);
+      loadAndPlayCurrent(true);
+    } else {
+      // End of the queue: stop the file deck (live inputs keep going).
+      audioElRef.current?.pause();
+      setFilePlaying(false);
+    }
+  }
+
+  function handleDeckPrev() {
+    if (deckRef.current.previous()) {
+      setQueue([...deckRef.current.state.queue]);
+      loadAndPlayCurrent(true);
+    }
+  }
+
+  function handleDeckPlayPause() {
+    const el = audioElRef.current;
+    if (!el) return;
+    if (filePlaying) {
+      el.pause();
+      setFilePlaying(false);
+    } else if (!el.src) {
+      loadAndPlayCurrent(true);
+    } else {
+      el.play().catch(() => {});
+      setFilePlaying(true);
+    }
+  }
+
+  function handleSeek(deltaSeconds: number) {
+    const el = audioElRef.current;
+    if (!el) return;
+    const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
+    el.currentTime = Math.max(0, Math.min(el.currentTime + deltaSeconds, dur));
+  }
+
+  function handleJumpTo(id: string) {
+    if (deckRef.current.jumpTo(id)) {
+      setQueue([...deckRef.current.state.queue]);
+      loadAndPlayCurrent(statusRef.current === 'live');
+    }
   }
 
   function handleFileAdd(e: React.ChangeEvent<HTMLInputElement>) {
@@ -394,40 +461,94 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
 
       {/* File deck */}
       <div className="flex flex-col gap-2">
-        <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-          FILE DECK
-        </span>
-        {currentTrackName && (
-          <p className="font-mono text-xs text-primary truncate">NOW: {currentTrackName}</p>
-        )}
-        <label className="flex items-center gap-2 cursor-pointer min-h-[44px]">
-          <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors">
-            ADD FILES
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            FILE DECK {queue.length > 0 && `(${queue.length})`}
           </span>
-          <input
-            type="file"
-            accept="audio/*"
-            multiple
-            className="sr-only"
-            onChange={handleFileAdd}
-          />
-        </label>
-        {queue.length > 0 && (
-          <ul className="flex flex-col gap-1 max-h-32 overflow-y-auto">
-            {queue.map((t) => (
-              <li key={t.id} className="flex items-center justify-between gap-2">
-                <span className="font-mono text-xs truncate">{t.name}</span>
-                <button
-                  onClick={() => handleRemoveTrack(t.id)}
-                  className="font-mono text-[10px] text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px]"
-                  aria-label={`Remove ${t.name}`}
-                >
-                  REMOVE
-                </button>
-              </li>
-            ))}
+          <label className="flex items-center cursor-pointer">
+            <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
+              ADD FILES
+            </span>
+            <input
+              type="file"
+              accept="audio/*"
+              multiple
+              className="sr-only"
+              onChange={handleFileAdd}
+            />
+          </label>
+        </div>
+
+        {queue.length > 0 ? (
+          <ul className="flex flex-col gap-1 max-h-44 overflow-y-auto" aria-label="Playlist">
+            {queue.map((t, i) => {
+              const isCurrent = t.id === currentTrackId;
+              return (
+                <li key={t.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleJumpTo(t.id)}
+                    aria-current={isCurrent ? 'true' : undefined}
+                    className={[
+                      'flex-1 flex items-center gap-2 text-left min-h-[40px] px-2 rounded font-mono text-xs transition-colors',
+                      isCurrent
+                        ? 'bg-primary/20 text-foreground'
+                        : 'text-muted-foreground hover:bg-primary/10',
+                    ].join(' ')}
+                  >
+                    <span className="w-5 shrink-0 flex items-center justify-center text-[10px] tabular-nums text-muted-foreground">
+                      {isCurrent && filePlaying ? (
+                        <Play className="w-3 h-3 fill-current text-primary" aria-hidden="true" />
+                      ) : (
+                        String(i + 1).padStart(2, '0')
+                      )}
+                    </span>
+                    <span className="truncate">{t.name}</span>
+                  </button>
+                  <button
+                    onClick={() => handleRemoveTrack(t.id)}
+                    className="font-mono text-[10px] text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px]"
+                    aria-label={`Remove ${t.name}`}
+                  >
+                    REMOVE
+                  </button>
+                </li>
+              );
+            })}
           </ul>
+        ) : (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Add audio files to build a set, or broadcast a live input only.
+          </p>
         )}
+
+        {/* Transport: live deck control */}
+        {status === 'live' && queue.length > 0 && (
+          <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback controls">
+            <TransportBtn onClick={handleDeckPrev} label="Previous track">
+              <SkipBack className="w-4 h-4" aria-hidden="true" />
+            </TransportBtn>
+            <TransportBtn onClick={handleDeckPlayPause} label={filePlaying ? 'Pause' : 'Play'}>
+              {filePlaying ? (
+                <Pause className="w-4 h-4" aria-hidden="true" />
+              ) : (
+                <Play className="w-4 h-4" aria-hidden="true" />
+              )}
+            </TransportBtn>
+            <TransportBtn onClick={handleDeckNext} label="Next track">
+              <SkipForward className="w-4 h-4" aria-hidden="true" />
+            </TransportBtn>
+            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds">
+              <Rewind className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="text-[10px] ml-0.5">10</span>
+            </TransportBtn>
+            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
+              <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="text-[10px] ml-0.5">10</span>
+            </TransportBtn>
+          </div>
+        )}
+
         {queue.length > 0 && (
           <GainSlider
             label="FILE GAIN"
@@ -447,10 +568,27 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         </div>
       )}
 
-      {/* Live status: output level + listener count */}
+      {/* Live status: what's going out + output level + listener count */}
       {status === 'live' && (
         <div className="flex flex-col gap-2">
           <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            WHAT&apos;S GOING OUT
+          </span>
+          {currentTrackName ? (
+            <p className="font-mono text-xs text-primary truncate">
+              <span className="text-muted-foreground">NOW </span>
+              {currentTrackName}
+            </p>
+          ) : (
+            <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
+          )}
+          {deckRef.current.next && (
+            <p className="font-mono text-[11px] text-muted-foreground truncate">
+              <span>NEXT </span>
+              {deckRef.current.next.name}
+            </p>
+          )}
+          <span className="font-mono text-[10px] tracking-widest text-muted-foreground mt-1">
             OUTPUT LEVEL
           </span>
           <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
@@ -574,6 +712,27 @@ function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }
         style={{ transform: `scaleX(${level})` }}
       />
     </div>
+  );
+}
+
+function TransportBtn({
+  onClick,
+  label,
+  children,
+}: {
+  onClick: () => void;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-label={label}
+      className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-2 border border-border rounded text-foreground hover:bg-primary/10 active:scale-95 transition-all"
+    >
+      {children}
+    </button>
   );
 }
 
