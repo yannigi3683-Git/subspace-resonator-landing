@@ -4,6 +4,10 @@ import type { Station } from '../types';
 
 export interface UseListenerAudioResult {
   playing: boolean;
+  /** True once the host's stream is attached, even if autoplay was blocked. */
+  ready: boolean;
+  /** Manually start playback from a user gesture (defeats autoplay restrictions). */
+  resume: () => void;
   volume: number;
   setVolume: (v: number) => void;
   audioElement: HTMLAudioElement | null;
@@ -14,6 +18,7 @@ export function useListenerAudio(
   station: Station | null,
 ): UseListenerAudioResult {
   const [playing, setPlaying] = useState(false);
+  const [ready, setReady] = useState(false);
   const [volume, setVolumeState] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
@@ -23,6 +28,10 @@ export function useListenerAudio(
     const clamped = Math.max(0, Math.min(1, v));
     setVolumeState(clamped);
     if (audioRef.current) audioRef.current.volume = clamped;
+  }, []);
+
+  const resume = useCallback(() => {
+    audioRef.current?.play().then(() => setPlaying(true)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -42,6 +51,7 @@ export function useListenerAudio(
       cleanupRef.current?.();
       cleanupRef.current = null;
       setPlaying(false);
+      setReady(false);
       return;
     }
 
@@ -58,6 +68,8 @@ export function useListenerAudio(
           {
             onStreamReady: (stream) => {
               audio.srcObject = stream;
+              setReady(true);
+              // Autoplay may be blocked until the listener interacts; resume() covers that.
               audio.play().then(() => setPlaying(true)).catch(() => {});
             },
             onDispatch: (event) => {
@@ -78,6 +90,7 @@ export function useListenerAudio(
           audio.srcObject = null;
           audioRef.current = null;
           setPlaying(false);
+          setReady(false);
         };
       } catch {
         // WebRTC not available (tests, server-side)
@@ -97,5 +110,5 @@ export function useListenerAudio(
     return () => { cleanupRef.current?.(); };
   }, []);
 
-  return { playing, volume, setVolume, audioElement: audioRef.current };
+  return { playing, ready, resume, volume, setVolume, audioElement: audioRef.current };
 }
