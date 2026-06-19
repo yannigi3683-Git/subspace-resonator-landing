@@ -81,8 +81,8 @@ Order approved by user: **A (quick wins) → B (host player)**, then C/D/E, then
 `MediaElementSource` per session is fine; **swap `audio.src`** to change tracks (do NOT call
 `createMediaElementSource` twice on one element).
 
-Status: B1, B2, B3, B5 DONE 2026-06-19 (single-element src-swap deck). B4 crossfade pending
-(needs dual-deck in hostMixer).
+Status: B1-B5 DONE 2026-06-19. B4 auto-mix crossfade uses a lazy second deck + AudioParam
+gain ramps (`hostMixer.rampGain`); decision logic is the pure `crossfade.ts` helper.
 
 ### B1 — Visible playlist (DONE)
 - **Do:** render the queue as a list; highlight `currentIndex`; click row → `jumpTo` (+ play when

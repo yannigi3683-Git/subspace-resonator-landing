@@ -86,6 +86,26 @@ export class HostMixer {
     if (se) se.gain = value;
   }
 
+  // Smoothly ramp a source's gain to a target over durationSec (used for auto-mix
+  // crossfades). Falls back to an instant set if AudioParam scheduling is unavailable.
+  rampGain(id: string, target: number, durationSec: number): void {
+    const entry = this.sources.get(id);
+    if (!entry || !this.ctx) return;
+    const clamped = Math.max(0, Math.min(2, target));
+    const param = entry.gain.gain;
+    const now = this.ctx.currentTime;
+    const dur = Math.max(0.01, durationSec);
+    if (typeof param.cancelScheduledValues === 'function') {
+      param.cancelScheduledValues(now);
+      param.setValueAtTime(param.value, now);
+      param.linearRampToValueAtTime(clamped, now + dur);
+    } else {
+      param.value = clamped;
+    }
+    const se = this.sourceEntries.find((e) => e.id === id);
+    if (se) se.gain = clamped;
+  }
+
   removeSource(id: string): void {
     const entry = this.sources.get(id);
     if (!entry) return;

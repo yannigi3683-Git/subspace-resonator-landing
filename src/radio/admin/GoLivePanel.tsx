@@ -5,6 +5,7 @@ import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
+import { shouldStartCrossfade } from '../rtc/crossfade';
 import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
@@ -34,6 +35,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [currentTrackId, setCurrentTrackId] = useState('');
   const [filePlaying, setFilePlaying] = useState(false);
+  const [autoMix, setAutoMix] = useState(false);
+  const [crossfadeSec, setCrossfadeSec] = useState(6);
   const [errorMsg, setErrorMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
@@ -51,6 +54,20 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const deviceSourceIdRef = useRef<string | null>(null);
   const fileSourceIdRef = useRef<string | null>(null);
   const micSourceIdRef = useRef<string | null>(null);
+  // Auto-mix uses a second "deck" element/source, created lazily on the first crossfade.
+  // audioElRef/fileSourceIdRef always point at the ACTIVE deck; alt* is the incoming deck.
+  const altElRef = useRef<HTMLAudioElement | null>(null);
+  const altIdRef = useRef<string | null>(null);
+  const crossfadingRef = useRef(false);
+  const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Mirror gain/auto-mix state into refs so the audio element's persistent event handlers
+  // (set once at GO LIVE) always read the latest values.
+  const autoMixRef = useRef(false);
+  autoMixRef.current = autoMix;
+  const crossfadeRef = useRef(6);
+  crossfadeRef.current = crossfadeSec;
+  const fileGainRef = useRef(1);
+  fileGainRef.current = fileGain;
   // Cached for the pagehide beacon: the unload handler must build the request synchronously,
   // so the auth token is captured at GO LIVE time rather than awaited during unload.
   const tokenRef = useRef('');
@@ -173,6 +190,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     fileSourceIdRef.current = null;
     micSourceIdRef.current = null;
     audioElRef.current?.pause();
+    resetCrossfade();
+  }
+
+  function resetCrossfade() {
+    if (crossfadeTimerRef.current !== null) {
+      clearTimeout(crossfadeTimerRef.current);
+      crossfadeTimerRef.current = null;
+    }
+    crossfadingRef.current = false;
+    altElRef.current?.pause();
+    altElRef.current = null;
+    altIdRef.current = null;
   }
 
   async function handleGoLive() {
@@ -230,7 +259,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       const deck = deckRef.current;
       if (!deck.isEmpty) {
         const audioEl = new Audio();
-        audioEl.onended = handleDeckNext; // auto-advance to the next queued track
+        audioEl.onended = handleDeckNext; // auto-advance (no-op while a crossfade is running)
+        audioEl.ontimeupdate = () => handleTimeUpdate(audioEl); // drives auto-mix
         audioElRef.current = audioEl;
         const id = mixer.addFileElement(audioEl);
         fileSourceIdRef.current = id;
@@ -272,6 +302,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     publisherRef.current = null;
     streamRef.current = null;
     audioElRef.current?.pause();
+    resetCrossfade();
     setStatus('idle');
     setCurrentTrackName('');
     setCurrentTrackId('');
@@ -296,6 +327,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleDeckNext() {
+    if (crossfadingRef.current) return; // a crossfade already owns the transition
     const deck = deckRef.current;
     if (deck.advance()) {
       setQueue([...deck.state.queue]);
@@ -308,10 +340,82 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleDeckPrev() {
+    if (crossfadingRef.current) return;
     if (deckRef.current.previous()) {
       setQueue([...deckRef.current.state.queue]);
       loadAndPlayCurrent(true);
     }
+  }
+
+  // ── Auto-mix crossfade ────────────────────────────────────────────────
+  // Driven by the active element's timeupdate. When the track nears its end, fade into
+  // the next one on a second deck, then swap which deck is active.
+  function handleTimeUpdate(el: HTMLAudioElement) {
+    if (el !== audioElRef.current) return;
+    const fire = shouldStartCrossfade({
+      currentTime: el.currentTime,
+      duration: el.duration,
+      crossfadeSec: crossfadeRef.current,
+      autoMix: autoMixRef.current,
+      hasNext: !!deckRef.current.next,
+      alreadyFading: crossfadingRef.current,
+    });
+    if (fire) startCrossfade();
+  }
+
+  function startCrossfade() {
+    const mixer = mixerRef.current;
+    const nextTrack = deckRef.current.next;
+    const outId = fileSourceIdRef.current;
+    if (!mixer || !nextTrack || !outId) return;
+
+    // Lazily create the second deck the first time we ever crossfade. A given
+    // HTMLMediaElement can back only one MediaElementSource, so we keep two for the session.
+    if (!altElRef.current) {
+      const el = new Audio();
+      el.ontimeupdate = () => handleTimeUpdate(el);
+      el.onended = () => handleDeckNext();
+      altElRef.current = el;
+      altIdRef.current = mixer.addFileElement(el);
+    }
+    const inEl = altElRef.current;
+    const inId = altIdRef.current;
+    if (!inEl || !inId) return;
+
+    crossfadingRef.current = true;
+    const sec = crossfadeRef.current;
+    inEl.src = nextTrack.url;
+    inEl.currentTime = 0;
+    inEl.play().catch(() => {});
+    mixer.rampGain(outId, 0, sec);
+    mixer.rampGain(inId, fileGainRef.current, sec);
+
+    crossfadeTimerRef.current = setTimeout(() => finalizeCrossfade(), sec * 1000);
+  }
+
+  function finalizeCrossfade() {
+    const deck = deckRef.current;
+    deck.advance();
+    setQueue([...deck.state.queue]);
+
+    const oldEl = audioElRef.current;
+    const oldId = fileSourceIdRef.current;
+    oldEl?.pause();
+    if (oldId) mixerRef.current?.setGain(oldId, 0);
+
+    // The incoming deck is now active; swap the active/alt pointers.
+    audioElRef.current = altElRef.current;
+    fileSourceIdRef.current = altIdRef.current;
+    altElRef.current = oldEl;
+    altIdRef.current = oldId;
+
+    const cur = deck.current;
+    if (cur) {
+      setCurrentTrackName(cur.name);
+      setCurrentTrackId(cur.id);
+    }
+    setFilePlaying(true);
+    crossfadingRef.current = false;
   }
 
   function handleDeckPlayPause() {
@@ -546,6 +650,35 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="text-[10px] ml-0.5">10</span>
             </TransportBtn>
+          </div>
+        )}
+
+        {queue.length > 0 && (
+          <div className="flex flex-col gap-2 pt-1">
+            <label className="flex items-center gap-2 font-mono text-[11px] tracking-widest text-muted-foreground cursor-pointer min-h-[44px]">
+              <input
+                type="checkbox"
+                checked={autoMix}
+                onChange={(e) => setAutoMix(e.target.checked)}
+                className="w-5 h-5 accent-primary"
+              />
+              AUTO-MIX (CROSSFADE)
+            </label>
+            {autoMix && (
+              <label className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                <span className="w-20 shrink-0 tabular-nums">FADE {crossfadeSec}s</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={12}
+                  step={1}
+                  value={crossfadeSec}
+                  onChange={(e) => setCrossfadeSec(Number(e.target.value))}
+                  className="flex-1 min-h-[44px]"
+                  aria-label="Crossfade seconds"
+                />
+              </label>
+            )}
           </div>
         )}
 

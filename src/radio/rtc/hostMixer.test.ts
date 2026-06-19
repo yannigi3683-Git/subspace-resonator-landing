@@ -13,7 +13,12 @@ function makeNode() {
 function makeGainNode(value = 1) {
   return {
     ...makeNode(),
-    gain: { value },
+    gain: {
+      value,
+      cancelScheduledValues: vi.fn(),
+      setValueAtTime: vi.fn(),
+      linearRampToValueAtTime: vi.fn(),
+    },
   };
 }
 
@@ -50,6 +55,7 @@ function makeAudioContextMock() {
 
   const ctx = {
     state: 'running' as AudioContextState,
+    currentTime: 0,
     resume: vi.fn().mockResolvedValue(undefined),
     close: vi.fn().mockResolvedValue(undefined),
     createGain: vi.fn().mockReturnValue(gainNode),
@@ -156,6 +162,34 @@ describe('HostMixer', () => {
   it('setGain() is a no-op for unknown ids', async () => {
     await mixer.start();
     expect(() => mixer.setGain('ghost', 1)).not.toThrow();
+  });
+
+  // --- rampGain (crossfade) ---
+
+  it('rampGain() schedules a linear ramp to the target on the source gain', async () => {
+    await mixer.start();
+    const id = mixer.addFileElement({} as HTMLAudioElement);
+    const calls = ctxMock.createGain.mock.results;
+    const sourceGain = calls[calls.length - 1].value as ReturnType<typeof makeGainNode>;
+
+    mixer.rampGain(id, 0, 5);
+    expect(sourceGain.gain.cancelScheduledValues).toHaveBeenCalled();
+    expect(sourceGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(0, expect.any(Number));
+  });
+
+  it('rampGain() clamps the target to [0, 2]', async () => {
+    await mixer.start();
+    const id = mixer.addFileElement({} as HTMLAudioElement);
+    const calls = ctxMock.createGain.mock.results;
+    const sourceGain = calls[calls.length - 1].value as ReturnType<typeof makeGainNode>;
+
+    mixer.rampGain(id, 99, 3);
+    expect(sourceGain.gain.linearRampToValueAtTime).toHaveBeenCalledWith(2, expect.any(Number));
+  });
+
+  it('rampGain() is a no-op for unknown ids', async () => {
+    await mixer.start();
+    expect(() => mixer.rampGain('ghost', 1, 5)).not.toThrow();
   });
 
   // --- removeSource ---

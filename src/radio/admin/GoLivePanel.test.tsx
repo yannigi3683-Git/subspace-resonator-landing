@@ -18,14 +18,16 @@ vi.mock('../hooks/useStation', () => ({ useStation: vi.fn(() => null) }));
 vi.mock('../rtc/hostMixer', () => ({
   // Must use a regular function (not arrow) — arrow functions can't be constructors.
   HostMixer: vi.fn().mockImplementation(function () {
+    let fileCounter = 0;
     return {
       start: vi.fn().mockResolvedValue({
         getTracks: () => [],
         getAudioTracks: () => [],
       } as unknown as MediaStream),
       addAudioDevice: vi.fn().mockResolvedValue('src-1'),
-      addFileElement: vi.fn().mockReturnValue('src-2'),
+      addFileElement: vi.fn(() => `file-${++fileCounter}`),
       setGain: vi.fn(),
+      rampGain: vi.fn(),
       stop: vi.fn(),
       removeSource: vi.fn(),
       get analysis() { return null; },
@@ -73,6 +75,7 @@ class FakeAudioEl {
   currentTime = 0;
   duration = 100;
   onended: (() => void) | null = null;
+  ontimeupdate: (() => void) | null = null;
   constructor() {
     audioInstances.push(this);
   }
@@ -461,5 +464,52 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Play')).toBeInTheDocument();
     });
+  });
+
+  it('reveals the crossfade slider only when AUTO-MIX is enabled', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    expect(screen.queryByLabelText('Crossfade seconds')).toBeNull();
+
+    fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
+
+    expect(screen.getByLabelText('Crossfade seconds')).toBeInTheDocument();
+  });
+
+  it('crossfades into the next track near the end when AUTO-MIX is on', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
+
+    const mixerResults = vi.mocked(HostMixer).mock.results;
+    const mixer = mixerResults[mixerResults.length - 1].value;
+
+    const activeEl = lastAudio();
+    activeEl.duration = 100;
+    activeEl.currentTime = 96; // 4s left, default fade 6s
+
+    act(() => { activeEl.ontimeupdate?.(); });
+
+    // A second deck was created and started; both gains ramped (out + in).
+    expect(mixer.addFileElement).toHaveBeenCalledTimes(2);
+    expect(mixer.rampGain).toHaveBeenCalledTimes(2);
+    const inEl = lastAudio();
+    expect(inEl).not.toBe(activeEl);
+    expect(inEl.play).toHaveBeenCalled();
+  });
+
+  it('finalizes the crossfade after the fade window and makes the next track current', async () => {
+    await goLiveWithFiles(['alpha', 'beta']);
+    fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
+    const activeEl = lastAudio();
+    activeEl.duration = 100;
+    activeEl.currentTime = 96;
+
+    vi.useFakeTimers();
+    try {
+      act(() => { activeEl.ontimeupdate?.(); });
+      act(() => { vi.advanceTimersByTime(6000); });
+      expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });
