@@ -24,7 +24,7 @@ export class Publisher {
     private readonly getAuthToken: () => Promise<string>,
   ) {}
 
-  async connect(stream: MediaStream): Promise<void> {
+  async connect(stream: MediaStream, title?: string): Promise<void> {
     this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     for (const track of stream.getAudioTracks()) {
@@ -53,7 +53,7 @@ export class Publisher {
           Authorization: `Bearer ${await this.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ phase: 'publish-offer', sdpOffer: offer.sdp }),
+        body: JSON.stringify({ phase: 'publish-offer', sdpOffer: offer.sdp, title }),
       });
     } catch {
       this.callbacks.onDispatch({ type: 'ERROR' });

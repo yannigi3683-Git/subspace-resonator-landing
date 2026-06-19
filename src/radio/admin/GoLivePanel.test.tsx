@@ -75,6 +75,8 @@ beforeEach(() => {
   });
 
   vi.stubGlobal('Audio', class { play = vi.fn(() => Promise.resolve()); pause = vi.fn(); src = ''; });
+  // handleEnd posts to the server end-broadcast phase.
+  vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({ ok: true, json: () => Promise.resolve({}) })));
 });
 
 // --- Tests ---
@@ -126,10 +128,10 @@ describe('GoLivePanel', () => {
     expect(getUserMedia).toHaveBeenCalled();
   });
 
-  it('CRITICAL: station update happens AFTER onSessionReady fires (cfSessionId present)', async () => {
+  it('goes live (END BROADCAST) once onSessionReady fires; station write is server-side', async () => {
+    // The server flips the station live during publish-offer, so onSessionReady just
+    // reflects the live state. The client must NOT write the station itself.
     const sb = makeSupabase();
-
-    // connect calls onSessionReady with the CF session id — the contract GoLivePanel must honour
     mockPublisherConnect.mockImplementation(async () => {
       await Promise.resolve();
       publisherCallbacksRef.current?.onSessionReady('cf-test-123');
@@ -137,37 +139,36 @@ describe('GoLivePanel', () => {
 
     render(<GoLivePanel supabase={sb} authToken={async () => 'bearer-token'} />);
     await waitFor(() => screen.getByTestId('go-live-btn'));
-
-    // Supabase must NOT be updated before GO LIVE
-    expect(sb._update).not.toHaveBeenCalled();
-
     fireEvent.click(screen.getByTestId('go-live-btn'));
 
     await waitFor(() => {
-      expect(sb._update).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mode: 'live',
-          live_session: expect.objectContaining({ cfSessionId: 'cf-test-123' }),
-        }),
-      );
+      expect(screen.getByTestId('end-btn')).toBeInTheDocument();
     }, { timeout: 3000 });
+    expect(sb._update).not.toHaveBeenCalled();
   });
 
-  it('shows error alert when station update fails', async () => {
-    const sb = makeSupabase({ error: { message: 'RLS denied' } });
-
+  it('ends the broadcast via the server end-broadcast phase', async () => {
     mockPublisherConnect.mockImplementation(async () => {
       await Promise.resolve();
-      publisherCallbacksRef.current?.onSessionReady('cf-test-err');
+      publisherCallbacksRef.current?.onSessionReady('cf-test-end');
     });
 
-    render(<GoLivePanel supabase={sb} authToken={async () => 'token'} />);
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-btn'));
     fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+
+    fireEvent.click(screen.getByTestId('end-btn'));
 
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toBeInTheDocument();
-    }, { timeout: 3000 });
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/rtc-session',
+        expect.objectContaining({
+          method: 'POST',
+          body: expect.stringContaining('end-broadcast'),
+        }),
+      );
+    });
   });
 
   it('shows error and resets to GO LIVE when Publisher calls onFatal', async () => {

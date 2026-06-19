@@ -106,6 +106,20 @@ function getSupabaseAdmin() {
   return createClient(url, key, { auth: { persistSession: false, autoRefreshToken: false } });
 }
 
+// A client scoped to the caller's verified JWT, so PostgREST runs the request as that
+// authenticated user (auth.uid() = their id). Used for station writes that are gated by
+// RLS policies like has_role(auth.uid(),'admin') — this guarantees the write carries the
+// admin identity without depending on the browser attaching its session to PostgREST.
+function getUserClient(token: string) {
+  const url = cleanEnv(process.env.SUPABASE_URL);
+  const key = cleanEnv(process.env.SUPABASE_SECRET_KEY);
+  if (!url || !key) throw new Error('SUPABASE_URL / SUPABASE_SECRET_KEY not set');
+  return createClient(url, key, {
+    global: { headers: { Authorization: `Bearer ${token}` } },
+    auth: { persistSession: false, autoRefreshToken: false },
+  });
+}
+
 // ---- JWT helpers ----
 
 interface JwtPayload {
@@ -216,14 +230,45 @@ export async function POST(req: Request): Promise<Response> {
     const sdpOffer = body.sdpOffer as string | undefined;
     if (!sdpOffer) return json({ error: 'sdpOffer required' }, 400);
 
+    let cfSessionId: string;
+    let sdpAnswer: string;
     try {
-      const cfSessionId = await createCfSession();
-      const { sdpAnswer } = await publishAudioTrack(cfSessionId, sdpOffer);
-      return json({ cfSessionId, sdpAnswer });
+      cfSessionId = await createCfSession();
+      ({ sdpAnswer } = await publishAudioTrack(cfSessionId, sdpOffer));
     } catch (err) {
-      console.error('[rtc-session publish-offer]', err);
+      console.error('[rtc-session publish-offer cf]', err);
       return json({ error: 'cf_error' }, 502);
     }
+
+    // Flip the station live server-side using the admin's own token, so the station
+    // RLS write policy (has_role on auth.uid()) is satisfied deterministically.
+    const title = ((body.title as string | undefined) ?? '').slice(0, 80) || 'Subspace Radio Live';
+    const { error: stErr } = await getUserClient(token)
+      .from('station')
+      .update({ mode: 'live', live_title: title, live_session: { cfSessionId } })
+      .eq('id', true);
+    if (stErr) {
+      console.error('[rtc-session publish-offer station]', stErr);
+      return json({ error: 'station_update_failed', detail: stErr.message }, 500);
+    }
+    return json({ cfSessionId, sdpAnswer });
+  }
+
+  // ── END BROADCAST ────────────────────────────────────────────────────────
+  // Admin-only: take the station off the air. Runs as the admin's token so the
+  // station write policy is satisfied.
+  if (phase === 'end-broadcast') {
+    const check = await checkAdminAal2(identity.userId, identity.aal);
+    if (!check.ok) return json({ error: 'forbidden', reason: check.reason }, 403);
+    const { error: stErr } = await getUserClient(token)
+      .from('station')
+      .update({ mode: 'off', live_session: null })
+      .eq('id', true);
+    if (stErr) {
+      console.error('[rtc-session end-broadcast]', stErr);
+      return json({ error: 'station_update_failed', detail: stErr.message }, 500);
+    }
+    return json({ ok: true });
   }
 
   // ── SUBSCRIBE PULL ───────────────────────────────────────────────────────

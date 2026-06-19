@@ -18,7 +18,7 @@ interface AudioDevice {
   label: string;
 }
 
-export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: Props) {
+export default function GoLivePanel({ authToken, listenerCount = 0 }: Props) {
   const [status, setStatus] = useState<BroadcastStatus>('idle');
   const [title, setTitle] = useState('');
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -39,6 +39,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
   const deckRef = useRef<LocalDeck>(new LocalDeck());
   const audioElRef = useRef<HTMLAudioElement | null>(null);
   const fsmRef = useRef<FsmState>(initialState());
+  const titleRef = useRef('');
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const deviceSourceIdRef = useRef<string | null>(null);
   const fileSourceIdRef = useRef<string | null>(null);
@@ -110,7 +111,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
     const stream = streamRef.current;
     const publisher = publisherRef.current;
     if (!stream || !publisher) return;
-    await publisher.connect(stream);
+    await publisher.connect(stream, titleRef.current);
   }
 
   // Tear down the audio graph after a failed/ended session so a retry starts clean.
@@ -129,6 +130,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
   async function handleGoLive() {
     setStatus('starting');
     setErrorMsg('');
+    titleRef.current = title || 'Subspace Radio Live';
 
     // AudioContext must be created in the gesture handler for iOS compatibility
     const mixer = new HostMixer();
@@ -142,24 +144,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
           dispatchFsm({ type: 'RESET' });
           teardownMixer();
         },
-        onSessionReady: async (cfSessionId) => {
-          // CRITICAL: update station only after CF session exists
-          const { error } = await supabase
-            .from('station')
-            .update({
-              mode: 'live',
-              live_title: title || 'Subspace Radio Live',
-              live_session: { cfSessionId },
-            })
-            .eq('id', true);
-
-          if (error) {
-            setErrorMsg('Failed to update station. Check Supabase connection.');
-            setStatus('error');
-          } else {
-            setStatus('live');
-            dispatchFsm({ type: 'CONNECTED' });
-          }
+        onSessionReady: () => {
+          // The server set the station live during publish-offer (using the admin's
+          // own token), so there is nothing to write here — just reflect the state.
+          setStatus('live');
+          dispatchFsm({ type: 'CONNECTED' });
         },
         onDispatch: dispatchFsm,
         onQualityChange: (degraded) => {
@@ -218,8 +207,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0 }: 
       retryTimerRef.current = null;
     }
 
-    // End sequence: cut off new subscribers FIRST, then tear down locally
-    await supabase.from('station').update({ mode: 'off', live_session: null }).eq('id', true);
+    // End sequence: cut off new subscribers FIRST (server takes the station off the air
+    // using the admin token), then tear down locally.
+    try {
+      await fetch('/api/rtc-session', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${await authToken()}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ phase: 'end-broadcast' }),
+      });
+    } catch {
+      // Best-effort: even if the off-write fails, tear down the local broadcast below.
+    }
     publisherRef.current?.disconnect();
     mixerRef.current?.stop();
     mixerRef.current = null;
