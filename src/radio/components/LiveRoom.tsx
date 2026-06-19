@@ -1,3 +1,4 @@
+import { Volume2 } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
@@ -51,10 +52,9 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
         )}
 
         {playing && (
-          <div className="absolute bottom-3 left-3 z-10 flex items-center gap-2 bg-black/50 px-3 py-2 rounded">
-            <span className="font-mono text-[10px] tracking-widest text-primary animate-pulse">
-              LIVE
-            </span>
+          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-4 py-2">
+            <span className="w-2 h-2 rounded-full bg-red-500 radio-pulse shrink-0" aria-hidden="true" />
+            <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
             <input
               type="range"
               min={0}
@@ -63,7 +63,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
               value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
               aria-label="Volume"
-              className="w-24 min-h-[44px]"
+              className="w-24 sm:w-32 accent-primary"
             />
           </div>
         )}
