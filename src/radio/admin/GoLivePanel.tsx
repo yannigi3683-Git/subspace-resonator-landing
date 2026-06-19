@@ -4,6 +4,7 @@ import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
+import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
 
@@ -21,7 +22,7 @@ interface AudioDevice {
   label: string;
 }
 
-export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChange }: Props) {
+export default function GoLivePanel({ supabase, authToken, listenerCount = 0, onStatusChange }: Props) {
   const [status, setStatus] = useState<BroadcastStatus>('idle');
   const [title, setTitle] = useState('');
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -47,6 +48,16 @@ export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChan
   const deviceSourceIdRef = useRef<string | null>(null);
   const fileSourceIdRef = useRef<string | null>(null);
   const micSourceIdRef = useRef<string | null>(null);
+  // Cached for the pagehide beacon: the unload handler must build the request synchronously,
+  // so the auth token is captured at GO LIVE time rather than awaited during unload.
+  const tokenRef = useRef('');
+  const statusRef = useRef<BroadcastStatus>('idle');
+  statusRef.current = status;
+
+  // The DB station row. Used only to detect a station left 'live' by a previous session
+  // (e.g. the host pressed F5 mid-broadcast, which kills the connection but not the DB flag).
+  const station = useStation(supabase);
+  const orphanedLive = status === 'idle' && station?.mode === 'live';
 
   // Read audio inputs. Before mic permission, entries have a deviceId but a blank label;
   // returns true if at least one device has a real (non-empty) label.
@@ -92,6 +103,26 @@ export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChan
   const onStatusChangeRef = useRef(onStatusChange);
   onStatusChangeRef.current = onStatusChange;
   useEffect(() => { onStatusChangeRef.current?.(status); }, [status]);
+
+  // A page reload/close (F5, tab close) destroys the WebRTC connection but leaves the DB
+  // station 'live', stranding listeners on a silent room. Best-effort take it off air on
+  // unload. keepalive lets the request outlive the page; the token is pre-cached because the
+  // handler can't await during unload. If this misses, the recovery banner is the backstop.
+  useEffect(() => {
+    const handler = () => {
+      const s = statusRef.current;
+      if ((s === 'live' || s === 'starting') && tokenRef.current) {
+        fetch('/api/rtc-session', {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${tokenRef.current}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ phase: 'end-broadcast' }),
+          keepalive: true,
+        }).catch(() => {});
+      }
+    };
+    window.addEventListener('pagehide', handler);
+    return () => window.removeEventListener('pagehide', handler);
+  }, []);
 
   const dispatchFsm = useCallback((event: ConnectionEvent) => {
     const { next, effects } = transition(fsmRef.current, event);
@@ -145,6 +176,7 @@ export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChan
     setStatus('starting');
     setErrorMsg('');
     titleRef.current = title || 'Subspace Radio Live';
+    authToken().then((t) => { tokenRef.current = t; }).catch(() => {});
 
     // AudioContext must be created in the gesture handler for iOS compatibility
     const mixer = new HostMixer();
@@ -286,6 +318,23 @@ export default function GoLivePanel({ authToken, listenerCount = 0, onStatusChan
         <p role="alert" className="font-mono text-xs text-destructive">
           {errorMsg}
         </p>
+      )}
+
+      {orphanedLive && (
+        <div role="alert" className="flex flex-col gap-3 border border-amber-500/60 bg-amber-500/10 p-4">
+          <p className="font-mono text-xs text-amber-300 leading-relaxed">
+            This station is still marked LIVE from a previous session, but this device is not
+            broadcasting (a refresh or closed tab can cause this). End it to clear the signal,
+            then GO LIVE again.
+          </p>
+          <button
+            onClick={handleEnd}
+            data-testid="force-end-btn"
+            className="font-mono text-xs tracking-widest border border-amber-500 px-4 min-h-[44px] hover:bg-amber-500/20 transition-colors self-start"
+          >
+            END PREVIOUS BROADCAST
+          </button>
+        </div>
       )}
 
       {/* Broadcast title */}

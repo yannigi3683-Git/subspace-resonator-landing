@@ -2,8 +2,14 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GoLivePanel from './GoLivePanel';
 import { HostMixer } from '../rtc/hostMixer';
+import { useStation } from '../hooks/useStation';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PublisherCallbacks } from '../rtc/publisher';
+
+// useStation reads/subscribes to the DB station row. GoLivePanel uses it only to detect an
+// orphaned "still live from a previous session" state; default to null (no station) so the
+// existing tests are unaffected.
+vi.mock('../hooks/useStation', () => ({ useStation: vi.fn(() => null) }));
 
 // --- Module mocks ---
 // GoLivePanel tests verify coordination logic (ordering, error handling, UI state).
@@ -59,6 +65,9 @@ const mockEnumerateDevices = vi.fn();
 
 beforeEach(() => {
   vi.restoreAllMocks();
+
+  // Default: no live station (restoreAllMocks may have cleared the factory default).
+  vi.mocked(useStation).mockReturnValue(null);
 
   publisherCallbacksRef.current = null;
   // Default: connect resolves without triggering onSessionReady.
@@ -277,6 +286,63 @@ describe('GoLivePanel', () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+
+  it('best-effort ends the broadcast on pagehide (reload/close) while live', async () => {
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-unload');
+    });
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'tok'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+
+    vi.mocked(fetch).mockClear();
+    act(() => { window.dispatchEvent(new Event('pagehide')); });
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/rtc-session',
+        expect.objectContaining({
+          body: expect.stringContaining('end-broadcast'),
+          keepalive: true,
+        }),
+      );
+    });
+  });
+
+  it('does NOT fire an end beacon on pagehide when idle (no broadcast running)', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'tok'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+
+    vi.mocked(fetch).mockClear();
+    act(() => { window.dispatchEvent(new Event('pagehide')); });
+
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('shows a recovery banner and can clear a station left live by a previous session', async () => {
+    vi.mocked(useStation).mockReturnValue({
+      mode: 'live',
+      live_title: 'Old Session',
+      live_session: null,
+      slow_mode_s: 0,
+      locked: false,
+    } as ReturnType<typeof useStation>);
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'tok'} />);
+    await waitFor(() => screen.getByTestId('force-end-btn'));
+
+    fireEvent.click(screen.getByTestId('force-end-btn'));
+
+    await waitFor(() => {
+      expect(fetch).toHaveBeenCalledWith(
+        '/api/rtc-session',
+        expect.objectContaining({ body: expect.stringContaining('end-broadcast') }),
+      );
+    });
   });
 
   it('adds files to the deck queue and displays them', async () => {

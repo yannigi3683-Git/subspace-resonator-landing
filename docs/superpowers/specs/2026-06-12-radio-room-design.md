@@ -35,6 +35,15 @@ RLS single-writer; aal2 step-up for all admin writes; Turnstile-gated anon sessi
 
 Upload locker / walk-away marathons (Phase L, designed) · full browser DJ deck (waveforms/beatmatch) · recordings/archive · social auto-posting · reactions.
 
+## Future scope — tracked, not yet built
+
+- **Host from Android/mobile** (raised 2026-06-19): hosting from Android Chrome works for the
+  microphone (and phone DJ apps that expose audio) since Android supports getUserMedia + WebRTC
+  publish. Blockers to resolve when picked up: (a) reaching `#admin` without a keyboard shortcut —
+  solved by the admin-only nav link (radio polish Phase E); (b) mobile audio-source selection; (c)
+  Traktor/virtual-cable routing stays desktop-only (phones can't route a DJ app into the browser).
+  Own spec when scheduled.
+
 ## Milestones
 
 M1 MPA shell+infra → M2 schema+auth → M3 RTC core (round-trip proven) → M4 host console → M5 identity+chat+presence → M6 visualizer → M7 standby+nav+OG+GA4 → M8 moderation+polish+QA gate (abuse matrix, real devices, 4G host test, 2h rehearsal broadcast). Every milestone: `npm run build` + `npm test` clean, test count never drops.

@@ -60,6 +60,19 @@ Order approved by user: **A (quick wins) → B (host player)**, then C/D/E, then
     + message ("Connection lost — check network and try again").
 - **Verify:** a forced publish failure surfaces an error instead of an endless spinner.
 
+### A5 — F5/refresh "zombie live room" (DONE 2026-06-19)
+- **Symptom:** host presses F5 (or closes the tab) mid-broadcast → WebRTC connection dies (audio
+  stops) but DB `station.mode` stays `live`. Listeners are stranded on a silent room; the
+  remounted host console shows GO LIVE.
+- **Cause:** no `pagehide`/`beforeunload` handler and no on-mount recovery; a reload destroys the
+  in-memory publisher without taking the station off air.
+- **Done (TDD):**
+  - `GoLivePanel` registers a `pagehide` handler that best-effort POSTs `end-broadcast` with a
+    pre-cached token and `keepalive: true` while `status` is `live`/`starting`.
+  - `GoLivePanel` reads the station via `useStation`; if the DB is `live` while this device is idle
+    (`orphanedLive`), it shows an amber recovery banner with an END PREVIOUS BROADCAST button.
+- **Verify:** go live, F5; on reload the listener returns to standby (or the banner clears it).
+
 ---
 
 ## Phase B — Host player (the broadcaster's deck)
