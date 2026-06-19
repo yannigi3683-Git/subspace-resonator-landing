@@ -41,11 +41,25 @@ const makeCallbacks = () => ({
 });
 
 describe('Publisher HTTP error handling', () => {
-  it('calls onFatal (not ERROR) when server returns 403', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false, status: 403 }));
+  it('calls onFatal with a 2FA message when 403 reason is not_aal2', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ reason: 'not_aal2' }) }),
+    );
     const cb = makeCallbacks();
     await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
-    expect(cb.onFatal).toHaveBeenCalledWith(expect.stringMatching(/permission denied/i));
+    expect(cb.onFatal).toHaveBeenCalledWith(expect.stringMatching(/two-factor/i));
+    expect(cb.onDispatch).not.toHaveBeenCalledWith({ type: 'ERROR' });
+  });
+
+  it('calls onFatal with an admin-role message when 403 reason is not_admin', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: false, status: 403, json: async () => ({ reason: 'not_admin' }) }),
+    );
+    const cb = makeCallbacks();
+    await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
+    expect(cb.onFatal).toHaveBeenCalledWith(expect.stringMatching(/admin role/i));
     expect(cb.onDispatch).not.toHaveBeenCalledWith({ type: 'ERROR' });
   });
 

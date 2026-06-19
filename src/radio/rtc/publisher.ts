@@ -62,7 +62,12 @@ export class Publisher {
 
     if (!res.ok) {
       if (res.status === 403) {
-        this.callbacks.onFatal?.('Permission denied. Verify admin role in Supabase.');
+        const reason = await res.json().then((b) => b?.reason).catch(() => undefined);
+        this.callbacks.onFatal?.(
+          reason === 'not_aal2'
+            ? 'Two-factor not verified for this session. Log out and sign in again, entering your authenticator code.'
+            : 'Admin role missing. Add your user to user_roles in Supabase.',
+        );
         return;
       }
       if (res.status === 401) {

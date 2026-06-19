@@ -123,18 +123,24 @@ async function verifyToken(token: string): Promise<{ userId: string; aal: string
   }
 }
 
-async function isAdminAal2(userId: string, aal: string): Promise<boolean> {
-  if (aal !== 'aal2') return false;
+export type AdminCheck = { ok: true } | { ok: false; reason: 'not_aal2' | 'not_admin' };
+
+export async function checkAdminAal2(
+  userId: string,
+  aal: string,
+  client = getSupabaseAdmin(),
+): Promise<AdminCheck> {
+  if (aal !== 'aal2') return { ok: false, reason: 'not_aal2' };
   try {
-    const { data } = await getSupabaseAdmin()
+    const { data } = await client
       .from('user_roles')
       .select('role')
       .eq('user_id', userId)
       .eq('role', 'admin')
       .single();
-    return !!data;
+    return data ? { ok: true } : { ok: false, reason: 'not_admin' };
   } catch {
-    return false;
+    return { ok: false, reason: 'not_admin' };
   }
 }
 
@@ -193,8 +199,9 @@ export async function POST(req: Request): Promise<Response> {
   // ── PUBLISH OFFER ────────────────────────────────────────────────────────
   // Only the host (admin + aal2) may publish. Anyone can subscribe.
   if (phase === 'publish-offer') {
-    if (!(await isAdminAal2(identity.userId, identity.aal))) {
-      return json({ error: 'forbidden' }, 403);
+    const check = await checkAdminAal2(identity.userId, identity.aal);
+    if (!check.ok) {
+      return json({ error: 'forbidden', reason: check.reason }, 403);
     }
     const sdpOffer = body.sdpOffer as string | undefined;
     if (!sdpOffer) return json({ error: 'sdpOffer required' }, 400);
