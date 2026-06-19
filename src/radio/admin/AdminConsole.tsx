@@ -14,12 +14,17 @@ export default function AdminConsole({ supabase, authToken }: Props) {
   const [listenerCount, setListenerCount] = useState(0);
 
   useEffect(() => {
-    const channel = supabase
-      .channel('admin-presence-count')
-      .on('presence', { event: 'sync' }, () => {
-        const count = Object.values(channel.presenceState()).flat().length;
-        setListenerCount(count);
-      })
+    // Count presence on the SAME channel listeners join (usePresence -> 'room:main').
+    // The host only observes here (never track()s), so it isn't counted as a listener.
+    const channel = supabase.channel('room:main', { config: { private: true } });
+    const sync = () => {
+      const count = Object.values(channel.presenceState()).flat().length;
+      setListenerCount(count);
+    };
+    channel
+      .on('presence', { event: 'sync' }, sync)
+      .on('presence', { event: 'join' }, sync)
+      .on('presence', { event: 'leave' }, sync)
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [supabase]);
