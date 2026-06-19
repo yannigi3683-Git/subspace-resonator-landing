@@ -19,7 +19,7 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid);
   const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
-  const { playing, ready, resume, volume, setVolume } = useListenerAudio(supabase, station);
+  const { playing, ready, resume, volume, setVolume, getFrequencyData } = useListenerAudio(supabase, station);
 
   if (isKicked) {
     return (
@@ -33,7 +33,12 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   return (
     <div className="flex flex-col md:flex-row h-screen bg-[#0a0010]">
       <div className="flex-1 min-h-[40vh] md:min-h-0 relative">
-        <DanceFloor presenceList={presenceList} station={station} uid={uid} />
+        <DanceFloor
+          presenceList={presenceList}
+          station={station}
+          uid={uid}
+          getFrequencyData={getFrequencyData}
+        />
 
         {/* Browsers block autoplay until the listener interacts, so surface an explicit
             control. Shows "connecting" until the host stream attaches. */}

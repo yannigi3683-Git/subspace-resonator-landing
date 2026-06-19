@@ -3,6 +3,7 @@ import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
+import { Visualizer } from './Visualizer';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -16,6 +17,7 @@ interface DanceFloorProps {
   presenceList: PresenceEntry[];
   station: Station | null;
   uid: string;
+  getFrequencyData?: () => Uint8Array | null;
 }
 
 const GHOST_ENTRIES: PresenceEntry[] = [
@@ -34,7 +36,7 @@ const MOTES = Array.from({ length: 14 }, (_, i) => ({
   color: ['#26C6DA', '#7B2FBE', '#FF2079', '#FFFFFF'][i % 4],
 }));
 
-export function DanceFloor({ presenceList, station, uid }: DanceFloorProps) {
+export function DanceFloor({ presenceList, station, uid, getFrequencyData }: DanceFloorProps) {
   const visible = presenceList.length > 0 ? presenceList.slice(0, 150) : GHOST_ENTRIES;
   const isGhost = presenceList.length === 0;
   const live = station?.mode === 'live';
@@ -48,6 +50,16 @@ export function DanceFloor({ presenceList, station, uid }: DanceFloorProps) {
       <div className="absolute inset-x-0 top-0 h-1/3 radio-stage-backdrop" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-[42%] radio-floor-glow" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-[38%] radio-grid" aria-hidden="true" />
+
+      {/* Audio-reactive visualizer in the centre of the floor */}
+      {getFrequencyData && (
+        <div
+          className="absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[72vmin] h-[72vmin] max-w-[520px] max-h-[520px] z-[2] pointer-events-none"
+          data-testid="visualizer"
+        >
+          <Visualizer getFrequencyData={getFrequencyData} />
+        </div>
+      )}
 
       {/* Floating motes */}
       <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
