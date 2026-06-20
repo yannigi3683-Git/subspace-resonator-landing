@@ -484,18 +484,18 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     expect(mockSetQualityCeiling).toHaveBeenCalledWith(128);
   });
 
-  it('reveals the crossfade slider only when AUTO-MIX is enabled', async () => {
+  it('shows the crossfade slider by default (AUTO-MIX on) and hides it when toggled off', async () => {
     await goLiveWithFiles(['alpha', 'beta']);
-    expect(screen.queryByLabelText('Crossfade seconds')).toBeNull();
+    expect(screen.getByLabelText('Crossfade seconds')).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
 
-    expect(screen.getByLabelText('Crossfade seconds')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Crossfade seconds')).toBeNull();
   });
 
   it('crossfades into the next track near the end when AUTO-MIX is on', async () => {
     await goLiveWithFiles(['alpha', 'beta']);
-    fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
+    // AUTO-MIX is on by default now.
 
     const mixerResults = vi.mocked(HostMixer).mock.results;
     const mixer = mixerResults[mixerResults.length - 1].value;
@@ -516,7 +516,7 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
 
   it('finalizes the crossfade after the fade window and makes the next track current', async () => {
     await goLiveWithFiles(['alpha', 'beta']);
-    fireEvent.click(screen.getByLabelText(/AUTO-MIX/i));
+    // AUTO-MIX is on by default now.
     const activeEl = lastAudio();
     activeEl.duration = 100;
     activeEl.currentTime = 96;

@@ -37,12 +37,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [currentTrackId, setCurrentTrackId] = useState('');
   const [filePlaying, setFilePlaying] = useState(false);
-  const [autoMix, setAutoMix] = useState(false);
+  const [autoMix, setAutoMix] = useState(true);
   const [crossfadeSec, setCrossfadeSec] = useState(6);
   const [quality, setQuality] = useState<QualityKey>('stable');
   const [currentBitrate, setCurrentBitrate] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
-  const [deviceConnected, setDeviceConnected] = useState(true);
+  const [deviceConnected, setDeviceConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
@@ -253,11 +253,16 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       const stream = await mixer.start();
       streamRef.current = stream;
 
-      // Add selected line-in / virtual device (Traktor / Rekordbox virtual cable)
-      if (selectedDeviceId) {
+      // Add selected line-in / virtual device (Traktor / Rekordbox virtual cable).
+      // Track whether a device is actually in the mix so DISCONNECT INPUT reflects reality
+      // (a file-only broadcast has no input device to disconnect).
+      if (selectedDeviceId && audioReady) {
         const id = await mixer.addAudioDevice(selectedDeviceId, 'device');
         deviceSourceIdRef.current = id;
         mixer.setGain(id, deviceGain);
+        setDeviceConnected(true);
+      } else {
+        setDeviceConnected(false);
       }
 
       // Add local file deck source if there are files queued.
@@ -320,7 +325,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setFilePlaying(false);
     setCurrentBitrate(0);
     setPosition({ cur: 0, dur: 0 });
-    setDeviceConnected(true);
+    setDeviceConnected(false);
     dispatchFsm({ type: 'RESET' });
   }
 
@@ -491,19 +496,25 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   async function handleToggleInput() {
     const mixer = mixerRef.current;
     if (!mixer) return;
-    if (deviceConnected && deviceSourceIdRef.current) {
-      mixer.removeSource(deviceSourceIdRef.current);
+    if (deviceConnected) {
+      if (deviceSourceIdRef.current) mixer.removeSource(deviceSourceIdRef.current);
       deviceSourceIdRef.current = null;
       setDeviceConnected(false);
-    } else if (!deviceConnected && selectedDeviceId) {
-      try {
-        const id = await mixer.addAudioDevice(selectedDeviceId, 'device');
-        deviceSourceIdRef.current = id;
-        mixer.setGain(id, deviceGain);
-        setDeviceConnected(true);
-      } catch {
-        setErrorMsg('Could not reconnect the input device. Check the browser mic permission.');
-      }
+      return;
+    }
+    // (Re)connect the input device mid-broadcast.
+    if (!selectedDeviceId || !audioReady) {
+      setErrorMsg('Enable audio access and pick an input device first.');
+      return;
+    }
+    try {
+      const id = await mixer.addAudioDevice(selectedDeviceId, 'device');
+      deviceSourceIdRef.current = id;
+      mixer.setGain(id, deviceGain);
+      setDeviceConnected(true);
+      setErrorMsg('');
+    } catch {
+      setErrorMsg('Could not connect the input device. Check the browser mic permission.');
     }
   }
 
@@ -620,7 +631,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             />
           </div>
         )}
-        {status === 'live' && selectedDeviceId && (
+        {status === 'live' && (deviceConnected || (audioReady && selectedDeviceId)) && (
           <button
             type="button"
             onClick={handleToggleInput}
