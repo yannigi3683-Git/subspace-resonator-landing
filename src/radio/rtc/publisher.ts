@@ -29,6 +29,7 @@ export class Publisher {
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
     private ceilingKbps = 128,
+    private readonly stereo = true,
   ) {}
 
   /** Change the max quality ceiling live; drops the active bitrate immediately if needed. */
@@ -59,7 +60,7 @@ export class Publisher {
     // Always stereo (psytrance needs the width) + inband FEC. Stability comes from the low
     // bitrate ceiling, adaptive backoff, and the listener-side jitter buffer — not from mono.
     offer.sdp = tuneOpus(offer.sdp ?? '', {
-      stereo: true,
+      stereo: this.stereo,
       maxAverageBitrate: this.ceilingKbps * 1000,
     });
     await this.pc.setLocalDescription(offer);

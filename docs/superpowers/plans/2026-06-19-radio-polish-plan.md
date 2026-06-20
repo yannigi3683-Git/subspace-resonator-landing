@@ -146,6 +146,38 @@ gain ramps (`hostMixer.rampGain`); decision logic is the pure `crossfade.ts` hel
 
 ---
 
+## Roadmap additions (2026-06-20)
+
+### Chat lifecycle — clear per broadcast + auto-archive (admin-only)
+- **Goal:** the guest chat is fresh each broadcast; the host keeps a permanent record.
+- **Clear between sessions:** on GO LIVE (or END), purge live `chat_messages` so a new
+  broadcast starts empty. Listeners only ever see the current session's chat.
+- **Auto-archive:** before purging, copy the session's messages into a `chat_archive`
+  table (or storage object) tagged with broadcast title + start/end timestamps. Write is
+  server-side (service path) so listeners cannot read archives — RLS denies non-admin SELECT;
+  host views them in a MODERATION/HISTORY tab listed by date/time.
+- **Build:** server `end-broadcast` phase also snapshots → archive then deletes live rows;
+  add a `chat_archive` table (RLS: admin-only select via `has_role`); host HISTORY view.
+
+### Visualizer upgrade — MilkDrop (Butterchurn) with changing psychedelic presets
+- **Research (2026-06-20):** the highest-rated Winamp visualizer in history is **MilkDrop**
+  by Ryan Geiss (2001; v2 2007 added pixel shaders) — consistently rated above Geiss/AVS/Tripex
+  for how it syncs to music. Its faithful **WebGL browser port is Butterchurn** (`jberg/butterchurn`),
+  with a community preset pack (`jberg/butterchurn-presets`, "cream of the crop" hundreds of
+  MilkDrop presets). This is exactly what our spec already earmarked for M6 (pinned, lazy chunk).
+- **How it incorporates:** Butterchurn takes a Web Audio **AnalyserNode** (we already expose
+  the listener analyser via `useListenerAudio.getFrequencyData`; switch to pass the live
+  AnalyserNode) and renders to a canvas. It auto-**cycles presets** on a timer (e.g. every
+  20–30s) with smooth blend/morph transitions (prev frame fed into next preset) — that is the
+  "changing psychedelic visualizers" effect, overwhelming and on-brand for psytrance.
+- **Plan:** lazy-load `butterchurn` + `butterchurn-presets` (own chunk) only on the live room;
+  mount a fullscreen WebGL canvas behind the dancefloor; feed the listener analyser; cycle a
+  curated psy subset of presets with blend transitions; reduced-motion → fall back to the
+  current first-party canvas (`Visualizer.tsx`) or static. Perf budget: WebGL on GPU, cap DPR,
+  pause when tab hidden.
+- Sources: MilkDrop history (Hybrid Copy), `github.com/jberg/butterchurn`,
+  `github.com/jberg/butterchurn-presets`, Webamp Milkdrop docs.
+
 ## Execution notes
 - One implementer subagent per task; provide full task text + the recap's "stack map" as context;
   do not make subagents re-derive this session.

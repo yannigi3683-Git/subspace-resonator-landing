@@ -13,6 +13,7 @@ interface SubscribePullResponse {
 
 export class Subscriber {
   private pc: RTCPeerConnection | null = null;
+  private receivers: RTCRtpReceiver[] = [];
 
   constructor(
     private readonly callbacks: SubscriberCallbacks,
@@ -21,13 +22,20 @@ export class Subscriber {
     // A one-way broadcast tolerates latency, so we buffer ~1.5s by default. A deeper jitter
     // buffer absorbs network jitter and gives FEC/retransmits time to fill gaps, which is the
     // single biggest reducer of audible cuts. Trade-off: that much added delay (fine for radio).
-    private readonly bufferMs = 1500,
+    private bufferMs = 1500,
   ) {}
+
+  // Change the jitter buffer live (host can raise it for everyone when cuts are reported).
+  setBufferMs(ms: number): void {
+    this.bufferMs = ms;
+    for (const r of this.receivers) this.applyJitterBuffer(r);
+  }
 
   async connect(): Promise<void> {
     this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     this.pc.ontrack = (event) => {
+      this.receivers.push(event.receiver);
       this.applyJitterBuffer(event.receiver);
       // Cloudflare Realtime delivers the track inside streams[0]
       if (event.streams[0]) {
@@ -118,5 +126,6 @@ export class Subscriber {
   disconnect(): void {
     this.pc?.close();
     this.pc = null;
+    this.receivers = [];
   }
 }

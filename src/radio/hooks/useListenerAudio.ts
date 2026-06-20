@@ -27,6 +27,8 @@ export function useListenerAudio(
   const sessionTokenRef = useRef<string>('');
   const analyserCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
+  const bufferMsRef = useRef(1500);
 
   const getFrequencyData = useCallback((): Uint8Array | null => {
     const a = analyserRef.current;
@@ -79,7 +81,7 @@ export function useListenerAudio(
 
         const sub = new Subscriber(
           {
-            onStreamReady: (stream) => {
+            onStreamReady: (stream: MediaStream) => {
               audio.srcObject = stream;
               setReady(true);
               // Autoplay may be blocked until the listener interacts; resume() covers that.
@@ -116,7 +118,9 @@ export function useListenerAudio(
           },
           '/api/rtc-session',
           async () => sessionTokenRef.current,
+          bufferMsRef.current,
         );
+        subscriberRef.current = sub;
 
         sub.connect().catch(() => {});
 
@@ -125,6 +129,7 @@ export function useListenerAudio(
           audio.pause();
           audio.srcObject = null;
           audioRef.current = null;
+          subscriberRef.current = null;
           analyserCtxRef.current?.close().catch(() => {});
           analyserCtxRef.current = null;
           analyserRef.current = null;
@@ -144,6 +149,20 @@ export function useListenerAudio(
     // volume intentionally excluded: setVolume updates audio.volume directly
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [cfSessionId]);
+
+  // Listen for live broadcast settings from the host (jitter buffer changes) and apply them
+  // to the active subscriber. Defensive: failures here never affect playback.
+  useEffect(() => {
+    const ch = supabase.channel('room:control', { config: { broadcast: { self: false } } });
+    ch.on('broadcast', { event: 'buffer' }, ({ payload }) => {
+      const ms = Number((payload as { bufferMs?: number })?.bufferMs);
+      if (Number.isFinite(ms) && ms > 0) {
+        bufferMsRef.current = ms;
+        subscriberRef.current?.setBufferMs(ms);
+      }
+    }).subscribe();
+    return () => { supabase.removeChannel(ch); };
+  }, [supabase]);
 
   useEffect(() => {
     return () => { cleanupRef.current?.(); };

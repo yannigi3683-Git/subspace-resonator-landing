@@ -39,7 +39,10 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [filePlaying, setFilePlaying] = useState(false);
   const [autoMix, setAutoMix] = useState(true);
   const [crossfadeSec, setCrossfadeSec] = useState(6);
-  const [quality, setQuality] = useState<QualityKey>('stable');
+  const [quality, setQuality] = useState<QualityKey>('hq');
+  const [autoPilot, setAutoPilot] = useState(true);
+  const [stereoMode, setStereoMode] = useState(true);
+  const [bufferSec, setBufferSec] = useState(1.5);
   const [currentBitrate, setCurrentBitrate] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
   const [deviceConnected, setDeviceConnected] = useState(false);
@@ -68,9 +71,13 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mirror gain/auto-mix state into refs so the audio element's persistent event handlers
   // (set once at GO LIVE) always read the latest values.
-  // Now-playing broadcast to listeners (track name + position), throttled.
+  // Control channel to listeners (jitter buffer setting; now-playing later). Re-broadcast on
+  // an interval so late joiners pick up the current buffer.
   const npChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const npLastSentRef = useRef(0);
+  const controlHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const bufferSecRef = useRef(1.5);
+  bufferSecRef.current = bufferSec;
   const autoMixRef = useRef(false);
   autoMixRef.current = autoMix;
   const crossfadeRef = useRef(6);
@@ -200,6 +207,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     micSourceIdRef.current = null;
     audioElRef.current?.pause();
     resetCrossfade();
+    closeControlChannel();
+  }
+
+  function closeControlChannel() {
+    if (controlHeartbeatRef.current !== null) {
+      clearInterval(controlHeartbeatRef.current);
+      controlHeartbeatRef.current = null;
+    }
+    if (npChannelRef.current) {
+      supabase.removeChannel(npChannelRef.current);
+      npChannelRef.current = null;
+    }
   }
 
   function resetCrossfade() {
@@ -245,13 +264,26 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       },
       '/api/rtc-session',
       authToken,
-      QUALITY_PRESETS[quality],
+      autoPilot ? QUALITY_PRESETS.hq : QUALITY_PRESETS[quality],
+      autoPilot ? true : stereoMode,
     );
     publisherRef.current = publisher;
 
     try {
       const stream = await mixer.start();
       streamRef.current = stream;
+
+      // Control channel: push the listener jitter-buffer setting (and re-push periodically
+      // so late joiners get it).
+      const channel = supabase.channel('room:control', { config: { broadcast: { self: false } } });
+      channel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') publishBuffer(Math.round(bufferSecRef.current * 1000));
+      });
+      npChannelRef.current = channel;
+      controlHeartbeatRef.current = setInterval(
+        () => publishBuffer(Math.round(bufferSecRef.current * 1000)),
+        4000,
+      );
 
       // Add selected line-in / virtual device (Traktor / Rekordbox virtual cable).
       // Track whether a device is actually in the mix so DISCONNECT INPUT reflects reality
@@ -319,6 +351,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     streamRef.current = null;
     audioElRef.current?.pause();
     resetCrossfade();
+    closeControlChannel();
     setStatus('idle');
     setCurrentTrackName('');
     setCurrentTrackId('');
@@ -335,6 +368,21 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   function publishNowPlaying(name: string, cur: number, dur: number) {
     npChannelRef.current?.send({ type: 'broadcast', event: 'np', payload: { name, cur, dur } });
     npLastSentRef.current = Date.now();
+  }
+
+  function publishBuffer(ms: number) {
+    npChannelRef.current?.send({ type: 'broadcast', event: 'buffer', payload: { bufferMs: ms } });
+  }
+
+  function handleBufferChange(sec: number) {
+    setBufferSec(sec);
+    publishBuffer(Math.round(sec * 1000));
+  }
+
+  function handleAutoPilot(on: boolean) {
+    setAutoPilot(on);
+    // Auto-pilot rides the full range up to HQ; manual pins the chosen ceiling.
+    publisherRef.current?.setQualityCeiling(on ? QUALITY_PRESETS.hq : QUALITY_PRESETS[quality]);
   }
 
   function loadAndPlayCurrent(autoplay: boolean) {
@@ -648,32 +696,95 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         )}
       </div>
 
-      {/* Audio quality (adaptive ceiling) */}
-      <div className="flex flex-col gap-2">
+      {/* Broadcast tuning: auto-pilot, manual quality/channels, listener buffer */}
+      <div className="flex flex-col gap-3">
         <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-          AUDIO QUALITY
+          BROADCAST TUNING
         </span>
-        <div className="flex border border-border w-fit" role="group" aria-label="Audio quality">
-          {(['stable', 'balanced', 'hq'] as QualityKey[]).map((k) => (
-            <button
-              key={k}
-              type="button"
-              onClick={() => handleQualityChange(k)}
-              aria-pressed={quality === k}
-              className={[
-                'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
-                quality === k
-                  ? 'bg-primary/20 text-foreground'
-                  : 'text-muted-foreground hover:bg-primary/10',
-              ].join(' ')}
-            >
-              {QUALITY_LABELS[k]}
-            </button>
-          ))}
-        </div>
-        <p className="font-mono text-[10px] text-muted-foreground">
-          Auto-lowers if your connection drops packets, so the stream keeps flowing.
-        </p>
+
+        <label className="flex items-center gap-2 font-mono text-[11px] cursor-pointer min-h-[44px]">
+          <input
+            type="checkbox"
+            checked={autoPilot}
+            onChange={(e) => handleAutoPilot(e.target.checked)}
+            className="w-5 h-5 accent-primary"
+          />
+          AUTO-PILOT
+          <span className="text-[10px] text-muted-foreground">(auto-tunes quality to your line)</span>
+        </label>
+
+        {!autoPilot && (
+          <>
+            <div className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] tracking-widest text-muted-foreground">QUALITY</span>
+              <div className="flex border border-border w-fit" role="group" aria-label="Audio quality">
+                {(['stable', 'balanced', 'hq'] as QualityKey[]).map((k) => (
+                  <button
+                    key={k}
+                    type="button"
+                    onClick={() => handleQualityChange(k)}
+                    aria-pressed={quality === k}
+                    className={[
+                      'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
+                      quality === k
+                        ? 'bg-primary/20 text-foreground'
+                        : 'text-muted-foreground hover:bg-primary/10',
+                    ].join(' ')}
+                  >
+                    {QUALITY_LABELS[k]}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-1">
+              <span className="font-mono text-[10px] tracking-widest text-muted-foreground">CHANNELS</span>
+              <div className="flex border border-border w-fit" role="group" aria-label="Channels">
+                {([['STEREO', true], ['MONO', false]] as const).map(([label, val]) => (
+                  <button
+                    key={label}
+                    type="button"
+                    onClick={() => setStereoMode(val)}
+                    aria-pressed={stereoMode === val}
+                    className={[
+                      'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
+                      stereoMode === val
+                        ? 'bg-primary/20 text-foreground'
+                        : 'text-muted-foreground hover:bg-primary/10',
+                    ].join(' ')}
+                  >
+                    {label}
+                  </button>
+                ))}
+              </div>
+              {status === 'live' && (
+                <span className="font-mono text-[10px] text-muted-foreground">
+                  Channel change applies on next GO LIVE.
+                </span>
+              )}
+            </div>
+          </>
+        )}
+
+        {/* Listener buffer — always available; the main anti-cut lever */}
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
+            LISTENER BUFFER {bufferSec.toFixed(1)}s
+          </span>
+          <input
+            type="range"
+            min={0.5}
+            max={5}
+            step={0.5}
+            value={bufferSec}
+            onChange={(e) => handleBufferChange(Number(e.target.value))}
+            className="min-h-[44px]"
+            aria-label="Listener buffer seconds"
+          />
+          <span className="font-mono text-[10px] text-muted-foreground">
+            Higher = smoother for listeners (more delay). Raise it if listeners report cuts.
+          </span>
+        </label>
       </div>
 
       {/* File deck */}

@@ -58,6 +58,11 @@ function makeSupabase(updateResult: { error: null | { message: string } } = { er
   });
   return {
     from: vi.fn().mockReturnValue({ update }),
+    channel: vi.fn().mockReturnValue({
+      subscribe: vi.fn((cb?: (s: string) => void) => { cb?.('SUBSCRIBED'); return {}; }),
+      send: vi.fn(),
+    }),
+    removeChannel: vi.fn(),
     _update: update,
   } as unknown as SupabaseClient & { _update: ReturnType<typeof vi.fn> };
 }
@@ -468,7 +473,7 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     });
   });
 
-  it('changes the live quality ceiling when a quality preset is picked', async () => {
+  it('reveals manual quality controls and changes the ceiling when auto-pilot is off', async () => {
     mockPublisherConnect.mockImplementation(async () => {
       await Promise.resolve();
       publisherCallbacksRef.current?.onSessionReady('cf-q');
@@ -478,10 +483,13 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     fireEvent.click(screen.getByTestId('go-live-btn'));
     await waitFor(() => screen.getByTestId('end-btn'));
 
-    // Default is STABLE; switch to HQ (128 kbps) live.
-    fireEvent.click(screen.getByRole('button', { name: /hq/i }));
+    // Manual quality buttons are hidden while AUTO-PILOT is on.
+    expect(screen.queryByRole('button', { name: /balanced/i })).toBeNull();
 
-    expect(mockSetQualityCeiling).toHaveBeenCalledWith(128);
+    fireEvent.click(screen.getByLabelText(/AUTO-PILOT/i)); // turn auto-pilot off
+    fireEvent.click(screen.getByRole('button', { name: /balanced/i })); // pick 96k
+
+    expect(mockSetQualityCeiling).toHaveBeenCalledWith(96);
   });
 
   it('shows the crossfade slider by default (AUTO-MIX on) and hides it when toggled off', async () => {
