@@ -740,6 +740,10 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             Add audio files to build a set, or broadcast a live input only.
           </p>
         )}
+        <p className="font-mono text-[10px] text-muted-foreground/70">
+          Files play from your device only. Folder upload triggers a browser confirmation, but
+          nothing is uploaded to any server.
+        </p>
 
         {/* Transport: live deck control */}
         {status === 'live' && queue.length > 0 && (
