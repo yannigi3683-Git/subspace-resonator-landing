@@ -40,12 +40,13 @@ vi.mock('../rtc/hostMixer', () => ({
 // onSessionReady at the right moment.
 const publisherCallbacksRef: { current: PublisherCallbacks | null } = { current: null };
 const mockPublisherConnect = vi.fn();
+const mockSetQualityCeiling = vi.fn();
 
 vi.mock('../rtc/publisher', () => ({
   // Must use a regular function (not arrow) — arrow functions can't be constructors.
   Publisher: vi.fn().mockImplementation(function (callbacks: PublisherCallbacks) {
     publisherCallbacksRef.current = callbacks;
-    return { connect: mockPublisherConnect, disconnect: vi.fn() };
+    return { connect: mockPublisherConnect, disconnect: vi.fn(), setQualityCeiling: mockSetQualityCeiling };
   }),
 }));
 
@@ -88,6 +89,7 @@ beforeEach(() => {
   vi.mocked(useStation).mockReturnValue(null);
 
   publisherCallbacksRef.current = null;
+  mockSetQualityCeiling.mockClear();
   // Default: connect resolves without triggering onSessionReady.
   mockPublisherConnect.mockResolvedValue(undefined);
 
@@ -464,6 +466,22 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     await waitFor(() => {
       expect(screen.getByLabelText('Play')).toBeInTheDocument();
     });
+  });
+
+  it('changes the live quality ceiling when a quality preset is picked', async () => {
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-q');
+    });
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 't'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+
+    // Default is BALANCED; switch to STABLE (96 kbps) live.
+    fireEvent.click(screen.getByRole('button', { name: /stable/i }));
+
+    expect(mockSetQualityCeiling).toHaveBeenCalledWith(96);
   });
 
   it('reveals the crossfade slider only when AUTO-MIX is enabled', async () => {

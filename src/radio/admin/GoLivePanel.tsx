@@ -6,6 +6,7 @@ import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 import { shouldStartCrossfade } from '../rtc/crossfade';
+import { QUALITY_PRESETS, QUALITY_LABELS, type QualityKey } from '../rtc/audioQuality';
 import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
@@ -37,6 +38,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [filePlaying, setFilePlaying] = useState(false);
   const [autoMix, setAutoMix] = useState(false);
   const [crossfadeSec, setCrossfadeSec] = useState(6);
+  const [quality, setQuality] = useState<QualityKey>('balanced');
+  const [currentBitrate, setCurrentBitrate] = useState(0);
   const [errorMsg, setErrorMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
@@ -232,9 +235,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         onQualityChange: (degraded) => {
           dispatchFsm(degraded ? { type: 'QUALITY_DEGRADED' } : { type: 'QUALITY_RECOVERED' });
         },
+        onBitrate: (kbps) => setCurrentBitrate(kbps),
       },
       '/api/rtc-session',
       authToken,
+      QUALITY_PRESETS[quality],
     );
     publisherRef.current = publisher;
 
@@ -307,6 +312,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setCurrentTrackName('');
     setCurrentTrackId('');
     setFilePlaying(false);
+    setCurrentBitrate(0);
     dispatchFsm({ type: 'RESET' });
   }
 
@@ -470,6 +476,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     }
   }
 
+  function handleQualityChange(key: QualityKey) {
+    setQuality(key);
+    publisherRef.current?.setQualityCeiling(QUALITY_PRESETS[key]);
+  }
+
   const isBusy = status === 'starting' || status === 'ending';
 
   return (
@@ -561,6 +572,34 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             />
           </div>
         )}
+      </div>
+
+      {/* Audio quality (adaptive ceiling) */}
+      <div className="flex flex-col gap-2">
+        <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+          AUDIO QUALITY
+        </span>
+        <div className="flex border border-border w-fit" role="group" aria-label="Audio quality">
+          {(['stable', 'balanced', 'hq'] as QualityKey[]).map((k) => (
+            <button
+              key={k}
+              type="button"
+              onClick={() => handleQualityChange(k)}
+              aria-pressed={quality === k}
+              className={[
+                'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
+                quality === k
+                  ? 'bg-primary/20 text-foreground'
+                  : 'text-muted-foreground hover:bg-primary/10',
+              ].join(' ')}
+            >
+              {QUALITY_LABELS[k]}
+            </button>
+          ))}
+        </div>
+        <p className="font-mono text-[10px] text-muted-foreground">
+          Auto-lowers if your connection drops packets, so the stream keeps flowing.
+        </p>
       </div>
 
       {/* File deck */}
@@ -725,9 +764,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             OUTPUT LEVEL
           </span>
           <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
-          <p className="font-mono text-xs text-muted-foreground">
-            LISTENERS: {listenerCount}
-          </p>
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-xs text-muted-foreground">
+              LISTENERS: {listenerCount}
+            </p>
+            <p className="font-mono text-xs text-muted-foreground tabular-nums">
+              {currentBitrate ? `${currentBitrate} kbps` : '— kbps'}
+              {currentBitrate > 0 && currentBitrate < QUALITY_PRESETS[quality] && (
+                <span className="text-amber-400"> (adapting)</span>
+              )}
+            </p>
+          </div>
         </div>
       )}
 

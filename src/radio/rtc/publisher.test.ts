@@ -117,3 +117,47 @@ describe('Publisher audio bitrate (FR-4)', () => {
     );
   });
 });
+
+describe('Publisher adaptive quality', () => {
+  it('forces stereo Opus in the published SDP offer', async () => {
+    mockPc.createOffer.mockResolvedValue({
+      type: 'offer',
+      sdp: 'v=0\r\na=rtpmap:111 opus/48000/2\r\na=fmtp:111 minptime=10\r\n',
+    });
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    const cb = makeCallbacks();
+    await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
+
+    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    expect(body.sdpOffer).toMatch(/stereo=1/);
+    expect(body.sdpOffer).toMatch(/useinbandfec=1/);
+  });
+
+  it('lowers the sender bitrate immediately when the quality ceiling drops', async () => {
+    const setParameters = vi.fn().mockResolvedValue(undefined);
+    const sender = {
+      track: { kind: 'audio' },
+      getParameters: () => ({ encodings: [{}] }),
+      setParameters,
+    };
+    mockPc.getSenders.mockReturnValue([sender]);
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) }),
+    );
+    const pub = new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok', 160);
+    await pub.connect(makeStream());
+
+    setParameters.mockClear();
+    pub.setQualityCeiling(96);
+    await Promise.resolve();
+
+    expect(setParameters).toHaveBeenCalledWith(
+      expect.objectContaining({ encodings: [expect.objectContaining({ maxBitrate: 96_000 })] }),
+    );
+  });
+});

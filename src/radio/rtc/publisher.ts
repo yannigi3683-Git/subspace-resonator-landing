@@ -1,10 +1,13 @@
 import type { ConnectionEvent } from './connectionFsm';
+import { preferOpusStereo, nextBitrateKbps } from './audioQuality';
 
 export interface PublisherCallbacks {
   onSessionReady: (cfSessionId: string) => void;
   onDispatch: (event: ConnectionEvent) => void;
   onQualityChange: (degraded: boolean) => void;
   onFatal?: (reason: string) => void;
+  /** Reports the current adaptive bitrate (kbps) each stats tick. */
+  onBitrate?: (kbps: number) => void;
 }
 
 interface PublishOfferResponse {
@@ -17,12 +20,25 @@ export class Publisher {
   private statsInterval: ReturnType<typeof setInterval> | null = null;
   private lastBytesSent = 0;
   private lastStatsTime = 0;
+  private lastPacketsSent = 0;
+  private lastPacketsLost = 0;
+  private currentKbps = 128;
 
   constructor(
     private readonly callbacks: PublisherCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
+    private ceilingKbps = 128,
   ) {}
+
+  /** Change the max quality ceiling live; drops the active bitrate immediately if needed. */
+  setQualityCeiling(kbps: number): void {
+    this.ceilingKbps = kbps;
+    if (this.currentKbps > kbps) {
+      this.currentKbps = kbps;
+      void this.applyBitrate(kbps);
+    }
+  }
 
   async connect(stream: MediaStream, title?: string): Promise<void> {
     this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
@@ -40,10 +56,14 @@ export class Publisher {
     };
 
     const offer = await this.pc.createOffer();
+    // Force stereo Opus + inband FEC (music, loss-resilient) and hint the ceiling bitrate
+    // before negotiating. WebRTC defaults to mono, which is wrong for a DJ stream.
+    offer.sdp = preferOpusStereo(offer.sdp ?? '', this.ceilingKbps * 1000);
     await this.pc.setLocalDescription(offer);
 
-    // FR-4: mono/stereo Opus capped at 128kbps (setParameters after setLocalDescription)
-    await this.applyFr4Bitrate();
+    // Start at the ceiling; the stats loop adapts down on packet loss.
+    this.currentKbps = this.ceilingKbps;
+    await this.applyBitrate(this.currentKbps);
 
     let res: Response;
     try {
@@ -93,17 +113,15 @@ export class Publisher {
     this.startStatsMonitor();
   }
 
-  // FR-4: 128kbps max on the audio sender.
-  // Voice processing (echoCancellation, AGC, noiseSuppression) and DTX are
-  // controlled by the getUserMedia constraints upstream in hostMixer; this
-  // method handles the bitrate cap which must run post-setLocalDescription.
-  private async applyFr4Bitrate(): Promise<void> {
+  // Apply a max bitrate (kbps) to the audio sender. Voice processing and DTX are set
+  // upstream in hostMixer; this is the cap, which must run post-setLocalDescription.
+  private async applyBitrate(kbps: number): Promise<void> {
     if (!this.pc) return;
     for (const sender of this.pc.getSenders()) {
       if (sender.track?.kind !== 'audio') continue;
       const params = sender.getParameters();
       if (!params.encodings) params.encodings = [{}];
-      params.encodings[0].maxBitrate = 128_000;
+      params.encodings[0].maxBitrate = kbps * 1000;
       try {
         await sender.setParameters(params);
       } catch {
@@ -118,9 +136,17 @@ export class Publisher {
       if (!this.pc) return;
       const stats = await this.pc.getStats();
       let bytesSent = 0;
+      let packetsSent = 0;
+      let packetsLost = 0;
       stats.forEach((report) => {
-        if (report.type === 'outbound-rtp' && (report as RTCOutboundRtpStreamStats).kind === 'audio') {
-          bytesSent = (report as RTCOutboundRtpStreamStats).bytesSent ?? 0;
+        const r = report as RTCOutboundRtpStreamStats & { packetsSent?: number; packetsLost?: number };
+        if (report.type === 'outbound-rtp' && r.kind === 'audio') {
+          bytesSent = r.bytesSent ?? 0;
+          packetsSent = r.packetsSent ?? 0;
+        }
+        // The receiver's loss report comes back over RTCP as remote-inbound-rtp.
+        if (report.type === 'remote-inbound-rtp' && r.kind === 'audio') {
+          packetsLost = r.packetsLost ?? 0;
         }
       });
 
@@ -130,9 +156,26 @@ export class Publisher {
       this.lastBytesSent = bytesSent;
       this.lastStatsTime = now;
 
-      // Below 20kbps indicates Opus stopped sending (silence suppression or stall).
-      // With DTX off this should only happen on a genuine stall.
-      const degraded = bps < 20_000;
+      // Packet loss over the interval drives the adaptive bitrate.
+      const dSent = packetsSent - this.lastPacketsSent;
+      const dLost = Math.max(0, packetsLost - this.lastPacketsLost);
+      this.lastPacketsSent = packetsSent;
+      this.lastPacketsLost = packetsLost;
+      const lossFraction = dSent + dLost > 0 ? dLost / (dSent + dLost) : 0;
+
+      const next = nextBitrateKbps({
+        current: this.currentKbps,
+        lossFraction,
+        ceiling: this.ceilingKbps,
+      });
+      if (next !== this.currentKbps) {
+        this.currentKbps = next;
+        void this.applyBitrate(next);
+      }
+      this.callbacks.onBitrate?.(this.currentKbps);
+
+      // Degraded when throughput collapses (stall) or loss is heavy.
+      const degraded = bps < 20_000 || lossFraction > 0.08;
       this.callbacks.onQualityChange(degraded);
     }, 3_000);
   }
@@ -145,5 +188,7 @@ export class Publisher {
     this.pc?.close();
     this.pc = null;
     this.lastBytesSent = 0;
+    this.lastPacketsSent = 0;
+    this.lastPacketsLost = 0;
   }
 }
