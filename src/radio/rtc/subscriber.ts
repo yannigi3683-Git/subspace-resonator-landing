@@ -1,4 +1,5 @@
 import type { ConnectionEvent } from './connectionFsm';
+import { tuneOpus } from './audioQuality';
 
 export interface SubscriberCallbacks {
   onStreamReady: (stream: MediaStream) => void;
@@ -69,6 +70,8 @@ export class Subscriber {
     // We answer it so CF knows our ICE/codec capabilities.
     await this.pc.setRemoteDescription({ type: 'offer', sdp: cfOffer });
     const answer = await this.pc.createAnswer();
+    // Advertise stereo decode in our answer so Cloudflare forwards stereo (not mono) to us.
+    answer.sdp = tuneOpus(answer.sdp ?? '', { stereo: true });
     await this.pc.setLocalDescription(answer);
 
     // Step 3: send our SDP answer back so CF can complete renegotiation.
