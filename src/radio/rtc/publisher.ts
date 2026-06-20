@@ -1,5 +1,5 @@
 import type { ConnectionEvent } from './connectionFsm';
-import { preferOpusStereo, nextBitrateKbps } from './audioQuality';
+import { tuneOpus, nextBitrateKbps } from './audioQuality';
 
 export interface PublisherCallbacks {
   onSessionReady: (cfSessionId: string) => void;
@@ -56,9 +56,12 @@ export class Publisher {
     };
 
     const offer = await this.pc.createOffer();
-    // Force stereo Opus + inband FEC (music, loss-resilient) and hint the ceiling bitrate
-    // before negotiating. WebRTC defaults to mono, which is wrong for a DJ stream.
-    offer.sdp = preferOpusStereo(offer.sdp ?? '', this.ceilingKbps * 1000);
+    // Always stereo (psytrance needs the width) + inband FEC. Stability comes from the low
+    // bitrate ceiling, adaptive backoff, and the listener-side jitter buffer — not from mono.
+    offer.sdp = tuneOpus(offer.sdp ?? '', {
+      stereo: true,
+      maxAverageBitrate: this.ceilingKbps * 1000,
+    });
     await this.pc.setLocalDescription(offer);
 
     // Start at the ceiling; the stats loop adapts down on packet loss.

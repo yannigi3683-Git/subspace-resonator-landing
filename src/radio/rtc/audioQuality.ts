@@ -3,24 +3,24 @@
 
 export type QualityKey = 'stable' | 'balanced' | 'hq';
 
-// Ceiling bitrates (kbps) the host can choose. The adaptive loop rides at or below the
-// chosen ceiling and never above it.
+// Ceiling bitrates (kbps) the host can choose. Always stereo; lower bitrate is the stability
+// trade-off (stereo at 64k is the compromise). The adaptive loop rides at/below the ceiling.
 export const QUALITY_PRESETS: Record<QualityKey, number> = {
-  stable: 96,
-  balanced: 128,
-  hq: 160,
+  stable: 64,
+  balanced: 96,
+  hq: 128,
 };
 
 export const QUALITY_LABELS: Record<QualityKey, string> = {
-  stable: 'STABLE 96k',
-  balanced: 'BALANCED 128k',
-  hq: 'HQ 160k',
+  stable: 'STABLE 64k',
+  balanced: 'BALANCED 96k',
+  hq: 'HQ 128k',
 };
 
-// Never drop below this — Opus stays intelligible for music down to ~48 kbps.
-export const BITRATE_FLOOR_KBPS = 48;
+// Never drop below this — stereo Opus stays usable for music down to ~40 kbps.
+export const BITRATE_FLOOR_KBPS = 40;
 
-const INCREASE_STEP_KBPS = 16;
+const INCREASE_STEP_KBPS = 12;
 
 /**
  * AIMD-style bitrate controller. On packet loss it backs off multiplicatively (fast); on a
@@ -41,26 +41,33 @@ export function nextBitrateKbps(p: {
   if (current > ceiling) return ceiling;
   if (current < floor) current = floor;
 
+  // Stability-first AIMD: drop hard and early on loss, recover slowly only when very clean.
   const loss = Math.max(0, Math.min(1, p.lossFraction));
-  if (loss > 0.08) return Math.max(floor, Math.round(current * 0.7)); // heavy loss: big cut
-  if (loss > 0.03) return Math.max(floor, Math.round(current * 0.85)); // some loss: ease off
-  if (loss < 0.01) return Math.min(ceiling, current + INCREASE_STEP_KBPS); // clean: recover
+  if (loss > 0.05) return Math.max(floor, Math.round(current * 0.6)); // heavy loss: big cut
+  if (loss > 0.02) return Math.max(floor, Math.round(current * 0.8)); // some loss: ease off
+  if (loss < 0.005) return Math.min(ceiling, current + INCREASE_STEP_KBPS); // clean: recover
   return current;
 }
 
 /**
- * Force stereo Opus (music, not voice) and inband FEC (packet-loss concealment) on the
- * SDP offer, plus an optional maxaveragebitrate hint. WebRTC negotiates mono by default,
- * which is wrong for a DJ stream. Returns the SDP unchanged if no Opus payload is found.
+ * Tune the Opus payload in the SDP offer: always enable inband FEC (packet-loss
+ * concealment) and an optional maxaveragebitrate hint, and force stereo ONLY when asked
+ * (mono is far more upload-resilient, so it is the default). Returns the SDP unchanged if
+ * no Opus payload is found.
  */
-export function preferOpusStereo(sdp: string, maxAverageBitrate?: number): string {
+export function tuneOpus(
+  sdp: string,
+  opts: { stereo?: boolean; maxAverageBitrate?: number } = {},
+): string {
   const rtpmap = sdp.match(/^a=rtpmap:(\d+)\s+opus\/48000(?:\/2)?/im);
   if (!rtpmap) return sdp;
   const pt = rtpmap[1];
 
-  const wanted = ['stereo=1', 'sprop-stereo=1', 'useinbandfec=1'];
-  if (maxAverageBitrate && maxAverageBitrate > 0) {
-    wanted.push(`maxaveragebitrate=${Math.round(maxAverageBitrate)}`);
+  const wanted = ['useinbandfec=1'];
+  if (opts.stereo) wanted.push('stereo=1', 'sprop-stereo=1');
+  else wanted.push('stereo=0', 'sprop-stereo=0');
+  if (opts.maxAverageBitrate && opts.maxAverageBitrate > 0) {
+    wanted.push(`maxaveragebitrate=${Math.round(opts.maxAverageBitrate)}`);
   }
   const overriddenKeys = wanted.map((kv) => kv.split('=')[0]);
 

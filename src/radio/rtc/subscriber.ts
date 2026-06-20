@@ -17,12 +17,17 @@ export class Subscriber {
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
+    // A one-way broadcast tolerates latency, so we buffer ~1.5s by default. A deeper jitter
+    // buffer absorbs network jitter and gives FEC/retransmits time to fill gaps, which is the
+    // single biggest reducer of audible cuts. Trade-off: that much added delay (fine for radio).
+    private readonly bufferMs = 1500,
   ) {}
 
   async connect(): Promise<void> {
     this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     this.pc.ontrack = (event) => {
+      this.applyJitterBuffer(event.receiver);
       // Cloudflare Realtime delivers the track inside streams[0]
       if (event.streams[0]) {
         this.callbacks.onStreamReady(event.streams[0]);
@@ -90,6 +95,21 @@ export class Subscriber {
       this.callbacks.onDispatch({ type: 'ERROR' });
     }
     // ontrack fires once ICE negotiation succeeds; CONNECTED dispatch happens there.
+  }
+
+  // Enlarge the receiver's jitter buffer. Prefers the modern jitterBufferTarget (ms),
+  // falls back to playoutDelayHint (seconds) on older Chrome; no-ops where unsupported.
+  private applyJitterBuffer(receiver: RTCRtpReceiver): void {
+    try {
+      const r = receiver as unknown as Record<string, unknown>;
+      if ('jitterBufferTarget' in r) {
+        r.jitterBufferTarget = this.bufferMs; // ms (Chrome 114+)
+      } else if ('playoutDelayHint' in r) {
+        r.playoutDelayHint = this.bufferMs / 1000; // seconds (older Chrome)
+      }
+    } catch {
+      // Unsupported browser — falls back to the default buffer.
+    }
   }
 
   disconnect(): void {

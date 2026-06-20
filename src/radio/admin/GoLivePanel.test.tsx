@@ -478,10 +478,10 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     fireEvent.click(screen.getByTestId('go-live-btn'));
     await waitFor(() => screen.getByTestId('end-btn'));
 
-    // Default is BALANCED; switch to STABLE (96 kbps) live.
-    fireEvent.click(screen.getByRole('button', { name: /stable/i }));
+    // Default is STABLE; switch to HQ (128 kbps) live.
+    fireEvent.click(screen.getByRole('button', { name: /hq/i }));
 
-    expect(mockSetQualityCeiling).toHaveBeenCalledWith(96);
+    expect(mockSetQualityCeiling).toHaveBeenCalledWith(128);
   });
 
   it('reveals the crossfade slider only when AUTO-MIX is enabled', async () => {

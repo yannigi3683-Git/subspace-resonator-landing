@@ -7,6 +7,7 @@ import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 import { shouldStartCrossfade } from '../rtc/crossfade';
 import { QUALITY_PRESETS, QUALITY_LABELS, type QualityKey } from '../rtc/audioQuality';
+import { formatClock } from '../format';
 import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
@@ -38,8 +39,10 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [filePlaying, setFilePlaying] = useState(false);
   const [autoMix, setAutoMix] = useState(false);
   const [crossfadeSec, setCrossfadeSec] = useState(6);
-  const [quality, setQuality] = useState<QualityKey>('balanced');
+  const [quality, setQuality] = useState<QualityKey>('stable');
   const [currentBitrate, setCurrentBitrate] = useState(0);
+  const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
+  const [deviceConnected, setDeviceConnected] = useState(true);
   const [errorMsg, setErrorMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
@@ -65,6 +68,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Mirror gain/auto-mix state into refs so the audio element's persistent event handlers
   // (set once at GO LIVE) always read the latest values.
+  // Now-playing broadcast to listeners (track name + position), throttled.
+  const npChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
+  const npLastSentRef = useRef(0);
   const autoMixRef = useRef(false);
   autoMixRef.current = autoMix;
   const crossfadeRef = useRef(6);
@@ -313,12 +319,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setCurrentTrackId('');
     setFilePlaying(false);
     setCurrentBitrate(0);
+    setPosition({ cur: 0, dur: 0 });
+    setDeviceConnected(true);
     dispatchFsm({ type: 'RESET' });
   }
 
   // ── File deck transport ──────────────────────────────────────────────
   // All transport swaps the .src of the single mixer-attached <audio> element; it never
   // creates a second MediaElementSource (forbidden per element by the Web Audio API).
+  function publishNowPlaying(name: string, cur: number, dur: number) {
+    npChannelRef.current?.send({ type: 'broadcast', event: 'np', payload: { name, cur, dur } });
+    npLastSentRef.current = Date.now();
+  }
+
   function loadAndPlayCurrent(autoplay: boolean) {
     const cur = deckRef.current.current;
     const el = audioElRef.current;
@@ -326,6 +339,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     el.src = cur.url;
     setCurrentTrackName(cur.name);
     setCurrentTrackId(cur.id);
+    publishNowPlaying(cur.name, 0, 0); // duration follows once metadata loads via timeupdate
     if (autoplay) {
       el.play().catch(() => {});
       setFilePlaying(true);
@@ -358,6 +372,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   // the next one on a second deck, then swap which deck is active.
   function handleTimeUpdate(el: HTMLAudioElement) {
     if (el !== audioElRef.current) return;
+    setPosition({ cur: el.currentTime || 0, dur: Number.isFinite(el.duration) ? el.duration : 0 });
     const fire = shouldStartCrossfade({
       currentTime: el.currentTime,
       duration: el.duration,
@@ -457,6 +472,39 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     deckRef.current.add(e.target.files);
     setQueue([...deckRef.current.state.queue]);
     e.target.value = '';
+  }
+
+  // Folder picker (webkitdirectory) returns every file in the folder tree; keep only audio.
+  function handleFolderAdd(e: React.ChangeEvent<HTMLInputElement>) {
+    if (!e.target.files?.length) return;
+    const audio = Array.from(e.target.files).filter(
+      (f) => f.type.startsWith('audio/') || /\.(mp3|wav|flac|m4a|aac|ogg|aiff?)$/i.test(f.name),
+    );
+    if (audio.length) {
+      deckRef.current.add(audio);
+      setQueue([...deckRef.current.state.queue]);
+    }
+    e.target.value = '';
+  }
+
+  // Drop / re-acquire the live input device (mic / virtual cable) mid-broadcast.
+  async function handleToggleInput() {
+    const mixer = mixerRef.current;
+    if (!mixer) return;
+    if (deviceConnected && deviceSourceIdRef.current) {
+      mixer.removeSource(deviceSourceIdRef.current);
+      deviceSourceIdRef.current = null;
+      setDeviceConnected(false);
+    } else if (!deviceConnected && selectedDeviceId) {
+      try {
+        const id = await mixer.addAudioDevice(selectedDeviceId, 'device');
+        deviceSourceIdRef.current = id;
+        mixer.setGain(id, deviceGain);
+        setDeviceConnected(true);
+      } catch {
+        setErrorMsg('Could not reconnect the input device. Check the browser mic permission.');
+      }
+    }
   }
 
   function handleRemoveTrack(id: string) {
@@ -572,6 +620,21 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             />
           </div>
         )}
+        {status === 'live' && selectedDeviceId && (
+          <button
+            type="button"
+            onClick={handleToggleInput}
+            data-testid="toggle-input-btn"
+            className={[
+              'font-mono text-[10px] tracking-widest px-3 min-h-[44px] border w-fit transition-colors',
+              deviceConnected
+                ? 'border-destructive text-destructive hover:bg-destructive/10'
+                : 'border-primary text-primary hover:bg-primary/10',
+            ].join(' ')}
+          >
+            {deviceConnected ? 'DISCONNECT INPUT' : 'CONNECT INPUT'}
+          </button>
+        )}
       </div>
 
       {/* Audio quality (adaptive ceiling) */}
@@ -608,18 +671,31 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
             FILE DECK {queue.length > 0 && `(${queue.length})`}
           </span>
-          <label className="flex items-center cursor-pointer">
-            <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
-              ADD FILES
-            </span>
-            <input
-              type="file"
-              accept="audio/*"
-              multiple
-              className="sr-only"
-              onChange={handleFileAdd}
-            />
-          </label>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center cursor-pointer">
+              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
+                ADD FILES
+              </span>
+              <input
+                type="file"
+                accept="audio/*"
+                multiple
+                className="sr-only"
+                onChange={handleFileAdd}
+              />
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
+                ADD FOLDER
+              </span>
+              <input
+                type="file"
+                className="sr-only"
+                onChange={handleFolderAdd}
+                {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+              />
+            </label>
+          </div>
         </div>
 
         {queue.length > 0 ? (
@@ -747,10 +823,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             WHAT&apos;S GOING OUT
           </span>
           {currentTrackName ? (
-            <p className="font-mono text-xs text-primary truncate">
-              <span className="text-muted-foreground">NOW </span>
-              {currentTrackName}
-            </p>
+            <div className="flex items-center justify-between gap-2">
+              <p className="font-mono text-xs text-primary truncate min-w-0">
+                <span className="text-muted-foreground">NOW </span>
+                {currentTrackName}
+              </p>
+              {position.dur > 0 && (
+                <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+                  {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+                </p>
+              )}
+            </div>
           ) : (
             <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
           )}
