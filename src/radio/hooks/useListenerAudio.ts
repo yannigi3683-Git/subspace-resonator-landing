@@ -13,6 +13,10 @@ export interface UseListenerAudioResult {
   audioElement: HTMLAudioElement | null;
   /** Live frequency spectrum for the visualizer, or null before the stream attaches. */
   getFrequencyData: () => Uint8Array | null;
+  /** The AudioContext owning the stream graph (for Butterchurn), or null before ready. */
+  getAudioContext: () => AudioContext | null;
+  /** The stream source node to feed a visualizer, or null before ready. */
+  getAudioSource: () => AudioNode | null;
 }
 
 export function useListenerAudio(
@@ -27,6 +31,7 @@ export function useListenerAudio(
   const sessionTokenRef = useRef<string>('');
   const analyserCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const srcNodeRef = useRef<AudioNode | null>(null);
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
   const bufferMsRef = useRef(1200);
 
@@ -37,6 +42,9 @@ export function useListenerAudio(
     a.getByteFrequencyData(data);
     return data;
   }, []);
+
+  const getAudioContext = useCallback(() => analyserCtxRef.current, []);
+  const getAudioSource = useCallback(() => srcNodeRef.current, []);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -96,6 +104,7 @@ export function useListenerAudio(
                   const actx = new Ctor();
                   analyserCtxRef.current = actx;
                   const srcNode = actx.createMediaStreamSource(stream);
+                  srcNodeRef.current = srcNode;
                   const an = actx.createAnalyser();
                   an.fftSize = 256;
                   an.smoothingTimeConstant = 0.8;
@@ -133,6 +142,7 @@ export function useListenerAudio(
           analyserCtxRef.current?.close().catch(() => {});
           analyserCtxRef.current = null;
           analyserRef.current = null;
+          srcNodeRef.current = null;
           setPlaying(false);
           setReady(false);
         };
@@ -168,5 +178,15 @@ export function useListenerAudio(
     return () => { cleanupRef.current?.(); };
   }, []);
 
-  return { playing, ready, resume, volume, setVolume, audioElement: audioRef.current, getFrequencyData };
+  return {
+    playing,
+    ready,
+    resume,
+    volume,
+    setVolume,
+    audioElement: audioRef.current,
+    getFrequencyData,
+    getAudioContext,
+    getAudioSource,
+  };
 }

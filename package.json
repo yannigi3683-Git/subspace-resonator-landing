@@ -17,6 +17,8 @@
     "@supabase/supabase-js": "^2.108.1",
     "@vitejs/plugin-react": "^6.0.2",
     "autoprefixer": "^10.5.0",
+    "butterchurn": "^2.6.7",
+    "butterchurn-presets": "^2.4.7",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
     "postcss": "^8.5.15",

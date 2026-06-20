@@ -4,6 +4,7 @@ import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { Visualizer } from './Visualizer';
+import { ButterchurnViz } from './ButterchurnViz';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -18,6 +19,9 @@ interface DanceFloorProps {
   station: Station | null;
   uid: string;
   getFrequencyData?: () => Uint8Array | null;
+  getAudioContext?: () => AudioContext | null;
+  getAudioSource?: () => AudioNode | null;
+  playing?: boolean;
 }
 
 const GHOST_ENTRIES: PresenceEntry[] = [
@@ -36,10 +40,22 @@ const MOTES = Array.from({ length: 14 }, (_, i) => ({
   color: ['#26C6DA', '#7B2FBE', '#FF2079', '#FFFFFF'][i % 4],
 }));
 
-export function DanceFloor({ presenceList, station, uid, getFrequencyData }: DanceFloorProps) {
+export function DanceFloor({
+  presenceList,
+  station,
+  uid,
+  getFrequencyData,
+  getAudioContext,
+  getAudioSource,
+  playing,
+}: DanceFloorProps) {
   const visible = presenceList.length > 0 ? presenceList.slice(0, 150) : GHOST_ENTRIES;
   const isGhost = presenceList.length === 0;
   const live = station?.mode === 'live';
+  const reduced =
+    typeof window !== 'undefined' &&
+    (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
+  const useButterchurn = !reduced && !!getAudioContext && !!getAudioSource;
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#05060f]">
@@ -51,8 +67,19 @@ export function DanceFloor({ presenceList, station, uid, getFrequencyData }: Dan
       <div className="absolute inset-x-0 bottom-0 h-[42%] radio-floor-glow" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-[38%] radio-grid" aria-hidden="true" />
 
-      {/* Audio-reactive visualizer in the centre of the floor */}
-      {getFrequencyData && (
+      {/* Full-bleed MilkDrop (Butterchurn) visualizer — the main psychedelic backdrop */}
+      {useButterchurn && (
+        <div className="absolute inset-0 z-[1] pointer-events-none" data-testid="butterchurn">
+          <ButterchurnViz
+            getAudioContext={getAudioContext!}
+            getAudioSource={getAudioSource!}
+            active={!!playing}
+          />
+        </div>
+      )}
+
+      {/* Lightweight radial visualizer — fallback when MilkDrop can't run (reduced motion) */}
+      {!useButterchurn && getFrequencyData && (
         <div
           className="absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[72vmin] h-[72vmin] max-w-[520px] max-h-[520px] z-[2] pointer-events-none"
           data-testid="visualizer"

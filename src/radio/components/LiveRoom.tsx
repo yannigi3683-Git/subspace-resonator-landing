@@ -21,7 +21,8 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid);
   const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
-  const { playing, ready, resume, volume, setVolume, getFrequencyData } = useListenerAudio(supabase, station);
+  const { playing, ready, resume, volume, setVolume, getFrequencyData, getAudioContext, getAudioSource } =
+    useListenerAudio(supabase, station);
   const { heat, myVote, vote } = useHeatMeter(supabase, uid);
 
   if (isKicked) {
@@ -41,6 +42,9 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
           station={station}
           uid={uid}
           getFrequencyData={getFrequencyData}
+          getAudioContext={getAudioContext}
+          getAudioSource={getAudioSource}
+          playing={playing}
         />
 
         {/* Browsers block autoplay until the listener interacts, so surface an explicit
