@@ -42,7 +42,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [quality, setQuality] = useState<QualityKey>('hq');
   const [autoPilot, setAutoPilot] = useState(true);
   const [stereoMode, setStereoMode] = useState(true);
-  const [bufferSec, setBufferSec] = useState(1.5);
+  const [bufferSec, setBufferSec] = useState(1.2);
   const [currentBitrate, setCurrentBitrate] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
   const [deviceConnected, setDeviceConnected] = useState(false);
@@ -76,7 +76,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const npChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const npLastSentRef = useRef(0);
   const controlHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bufferSecRef = useRef(1.5);
+  const bufferSecRef = useRef(1.2);
   bufferSecRef.current = bufferSec;
   const autoMixRef = useRef(false);
   autoMixRef.current = autoMix;
@@ -773,16 +773,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </span>
           <input
             type="range"
-            min={0.5}
+            min={0.3}
             max={5}
-            step={0.5}
+            step={0.1}
             value={bufferSec}
             onChange={(e) => handleBufferChange(Number(e.target.value))}
             className="min-h-[44px]"
             aria-label="Listener buffer seconds"
           />
           <span className="font-mono text-[10px] text-muted-foreground">
-            Higher = smoother for listeners (more delay). Raise it if listeners report cuts.
+            Higher = fewer cuts but more delay (and occasional speed-up "warp" on bursts).
+            Lower = tighter timing but more risk of cuts. Tune to taste.
           </span>
         </label>
       </div>

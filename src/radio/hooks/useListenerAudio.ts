@@ -28,7 +28,7 @@ export function useListenerAudio(
   const analyserCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
-  const bufferMsRef = useRef(1500);
+  const bufferMsRef = useRef(1200);
 
   const getFrequencyData = useCallback((): Uint8Array | null => {
     const a = analyserRef.current;
