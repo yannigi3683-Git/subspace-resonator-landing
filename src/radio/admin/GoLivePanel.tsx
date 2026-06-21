@@ -1,4 +1,5 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
+import { motion } from 'framer-motion';
 import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3 } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
@@ -683,7 +684,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           // BROADCAST CONTROL
         </p>
         {status === 'live' && (
-          <span className="font-mono text-[11px] tracking-widest text-red-400 animate-pulse">
+          <span className="flex items-center gap-1.5 font-mono text-[11px] tracking-widest text-red-400">
+            <span
+              className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"
+              style={{ filter: 'drop-shadow(0 0 4px #ef4444)' }}
+              aria-hidden="true"
+            />
             ON AIR
           </span>
         )}
@@ -871,7 +877,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             step={0.1}
             value={bufferSec}
             onChange={(e) => handleBufferChange(Number(e.target.value))}
-            className="min-h-[44px]"
+            className="min-h-[44px] console-slider w-full"
             aria-label="Listener buffer seconds"
           />
           <span className="font-mono text-[10px] text-muted-foreground">
@@ -1027,7 +1033,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                   step={1}
                   value={crossfadeSec}
                   onChange={(e) => setCrossfadeSec(Number(e.target.value))}
-                  className="flex-1 min-h-[44px]"
+                  className="flex-1 min-h-[44px] console-slider"
                   aria-label="Crossfade seconds"
                 />
               </label>
@@ -1061,26 +1067,41 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             WHAT&apos;S GOING OUT
           </span>
           {currentTrackName ? (
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border flex items-center justify-center">
-                {currentArtUrl ? (
-                  <img src={currentArtUrl} alt="" className="w-full h-full object-cover" />
-                ) : (
-                  <Disc3 className="w-5 h-5 text-primary" aria-hidden="true" strokeWidth={1.5} />
-                )}
-              </div>
-              <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-                <p className="font-mono text-xs text-primary truncate min-w-0">
-                  <span className="text-muted-foreground">NOW </span>
-                  {currentTrackName}
-                </p>
-                {position.dur > 0 && (
-                  <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
-                    {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+            <>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border flex items-center justify-center ${status === 'live' ? 'ring-1 ring-primary/40' : ''}`}>
+                  {currentArtUrl ? (
+                    <img src={currentArtUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Disc3
+                      className={`w-5 h-5 text-primary ${filePlaying ? 'animate-spin' : ''}`}
+                      aria-hidden="true"
+                      strokeWidth={1.5}
+                      style={{ animationDuration: '3s' }}
+                    />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs text-primary truncate min-w-0">
+                    <span className="text-muted-foreground">NOW </span>
+                    {currentTrackName}
                   </p>
-                )}
+                  {position.dur > 0 && (
+                    <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+                      {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+                    </p>
+                  )}
+                </div>
               </div>
-            </div>
+              {position.dur > 0 && (
+                <div className="h-px w-full bg-muted/30 relative overflow-hidden rounded-full">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-primary origin-left"
+                    style={{ transform: `scaleX(${Math.min(1, position.cur / position.dur)})`, transition: 'transform 0.5s linear' }}
+                  />
+                </div>
+              )}
+            </>
           ) : (
             <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
           )}
@@ -1121,12 +1142,40 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </span>
           <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
           <div className="flex items-center justify-between">
-            <p className="font-mono text-xs text-muted-foreground">
-              LISTENERS: {listenerCount}
+            <p className="font-mono text-xs text-muted-foreground flex items-center gap-1">
+              LISTENERS:{' '}
+              <motion.span
+                key={listenerCount}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {listenerCount}
+              </motion.span>
             </p>
-            <p className="font-mono text-xs text-muted-foreground tabular-nums">
+            <p className="font-mono text-xs text-muted-foreground tabular-nums flex items-center gap-1">
+              {(() => {
+                const bars = currentBitrate && activeCeiling
+                  ? Math.max(0, Math.min(5, Math.round((currentBitrate / activeCeiling) * 5)))
+                  : 0;
+                return (
+                  <svg width="18" height="12" viewBox="0 0 18 12" className="inline-block mr-1 align-middle" aria-hidden="true">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <rect
+                        key={i}
+                        x={i * 4}
+                        y={12 - (i + 1) * 2}
+                        width={3}
+                        height={(i + 1) * 2}
+                        rx={0.5}
+                        className={i < bars ? 'fill-primary' : 'fill-muted-foreground/20'}
+                      />
+                    ))}
+                  </svg>
+                );
+              })()}
               {autoPilot && <span className="text-primary">AUTO </span>}
-              {currentBitrate ? `${currentBitrate} kbps` : '— kbps'}
+              {currentBitrate ? `${currentBitrate} kbps` : '-- kbps'}
               {isBitrateAdapting(currentBitrate, activeCeiling) && (
                 <span className="text-amber-400"> (adapting)</span>
               )}
@@ -1164,6 +1213,38 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
 
 // Pre-broadcast monitor: opens the selected device to show input level before going live.
 // Stops automatically when unmounted (before HostMixer opens the same device).
+function SegmentMeter({ level, peakAt }: { level: number; peakAt?: number }) {
+  const N = 16;
+  return (
+    <div className="flex gap-[2px] w-full h-full">
+      {Array.from({ length: N }, (_, i) => {
+        const lit = i / N <= level;
+        const isRed = i >= 14;
+        const isAmber = i >= 11 && i < 14;
+        return (
+          <div
+            key={i}
+            className={[
+              'flex-1 h-full rounded-sm transition-none',
+              lit
+                ? isRed ? 'bg-red-500' : isAmber ? 'bg-amber-400' : 'bg-primary'
+                : 'bg-muted/20',
+            ].join(' ')}
+          />
+        );
+      })}
+      {peakAt !== undefined && (
+        <div
+          className="absolute top-0 h-full w-[2px] bg-white/70 pointer-events-none"
+          style={{ left: `${Math.min(peakAt, 1) * 100}%`, transform: 'translateX(-1px)' }}
+        />
+      )}
+    </div>
+  );
+}
+
+// Pre-broadcast monitor: opens the selected device to show input level before going live.
+// Stops automatically when unmounted (before HostMixer opens the same device).
 function PreviewMeter({ deviceId }: { deviceId: string }) {
   const [level, setLevel] = useState(0);
 
@@ -1194,7 +1275,7 @@ function PreviewMeter({ deviceId }: { deviceId: string }) {
         raf = requestAnimationFrame(tick);
         return () => { cancelAnimationFrame(raf); stream.getTracks().forEach((t) => t.stop()); ctx.close(); };
       } catch {
-        // getUserMedia blocked or unavailable — show flat bar
+        // getUserMedia blocked or unavailable - show flat bar
       }
     })();
 
@@ -1210,13 +1291,14 @@ function PreviewMeter({ deviceId }: { deviceId: string }) {
       aria-valuemin={0}
       aria-valuemax={100}
     >
-      <div className="h-full w-full bg-primary origin-left" style={{ transform: `scaleX(${level})` }} />
+      <SegmentMeter level={level} />
     </div>
   );
 }
 
 function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }) {
   const [level, setLevel] = useState(0);
+  const peakRef = useRef(0);
   const getRef = useRef(getAnalysis);
   getRef.current = getAnalysis;
 
@@ -1229,7 +1311,13 @@ function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }
         let sum = 0;
         for (let i = 0; i < data.length; i++) sum += data[i] * data[i];
         const rms = Math.sqrt(sum / data.length);
-        setLevel(Math.min(1, rms * 2.5));
+        const scaled = Math.min(1, rms * 2.5);
+        if (scaled > peakRef.current) {
+          peakRef.current = scaled;
+        } else {
+          peakRef.current = Math.max(0, peakRef.current - 0.008);
+        }
+        setLevel(scaled);
       }
       raf = requestAnimationFrame(tick);
     };
@@ -1239,17 +1327,14 @@ function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }
 
   return (
     <div
-      className="h-3 w-full bg-muted/30 border border-border rounded overflow-hidden"
+      className="relative h-3 w-full bg-muted/30 border border-border rounded overflow-hidden"
       role="meter"
       aria-label="Output level"
       aria-valuenow={Math.round(level * 100)}
       aria-valuemin={0}
       aria-valuemax={100}
     >
-      <div
-        className="h-full w-full bg-primary origin-left"
-        style={{ transform: `scaleX(${level})` }}
-      />
+      <SegmentMeter level={level} peakAt={peakRef.current} />
     </div>
   );
 }
@@ -1288,7 +1373,7 @@ function GainSlider({ label, value, onChange }: { label: string; value: number; 
         step={0.05}
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="flex-1 min-h-[44px]"
+        className="flex-1 min-h-[44px] console-slider"
         aria-label={label}
       />
       <span className="font-mono text-[10px] w-8 text-right">
