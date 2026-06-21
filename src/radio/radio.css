@@ -121,5 +121,30 @@
   .radio-eq,
   .radio-pulse,
   .radio-spot,
-  .radio-mote { animation: none; }
+  .radio-mote,
+  .pixel-blink { animation: none; }
+}
+
+/* ── Retro / pixel aesthetic ────────────────────────────────── */
+.pixel { font-family: 'Press Start 2P', monospace; }
+
+@keyframes pixel-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.pixel-blink { animation: pixel-blink 1s step-end infinite; }
+
+/* CRT scanline overlay — apply to a positioned container */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 1px,
+    rgba(0, 0, 0, 0.12) 2px
+  );
+  pointer-events: none;
+  z-index: 100;
 }

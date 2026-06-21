@@ -36,8 +36,8 @@ export function HeatMeter({ heat, myVote, vote }: HeatMeterProps) {
   const litCount = Math.round(h * (DOTS.length - 1));
 
   return (
-    <div className="flex flex-col items-center gap-2 px-3 py-3 border-b border-[#1a1a2e]" data-testid="heat-meter">
-      <p className="font-mono text-[10px] tracking-[0.35em] text-white/60 uppercase">Heat Meter</p>
+    <div className="flex flex-col items-center gap-2 px-3 py-3 border-b border-[#8800FF]" data-testid="heat-meter">
+      <p className="pixel text-[10px] text-[#888899]">// HEAT METER</p>
 
       <svg viewBox="0 0 200 118" className="w-full max-w-[220px]" role="img" aria-label={`Crowd heat ${Math.round(h * 100)} percent`}>
         <defs>
@@ -83,8 +83,8 @@ export function HeatMeter({ heat, myVote, vote }: HeatMeterProps) {
         <circle cx="100" cy="100" r="6" fill="#0a0010" stroke="#7B2FBE" strokeWidth="2" />
 
         {/* Labels */}
-        <text x="18" y="114" className="font-mono" fontSize="9" fill="#26C6DA" letterSpacing="1">COOL</text>
-        <text x="160" y="114" className="font-mono" fontSize="9" fill="#FF2079" letterSpacing="1">HOT</text>
+        <text x="16" y="114" fontFamily="'Press Start 2P', monospace" fontSize="8" fill="#00FFEE">COOL</text>
+        <text x="155" y="114" fontFamily="'Press Start 2P', monospace" fontSize="8" fill="#FF00AA">HOT</text>
       </svg>
 
       {/* Vote buttons */}
@@ -95,11 +95,12 @@ export function HeatMeter({ heat, myVote, vote }: HeatMeterProps) {
           aria-pressed={myVote === HEAT_COOL}
           aria-label="Vote cool"
           className={[
-            'flex-1 inline-flex items-center justify-center gap-1 min-h-[44px] rounded-lg border font-mono text-[11px] tracking-widest transition-colors',
+            'flex-1 inline-flex items-center justify-center gap-1 min-h-[44px] border-2 pixel text-[10px] transition-colors',
             myVote === HEAT_COOL
-              ? 'border-[#26C6DA] bg-[#26C6DA]/15 text-[#26C6DA]'
-              : 'border-[#333] text-[#9fb6c2] hover:bg-[#26C6DA]/10',
+              ? 'border-[#00FFEE] bg-[#00FFEE]/20 text-[#00FFEE]'
+              : 'border-[#8800FF] text-[#888899] hover:bg-[#00FFEE]/10',
           ].join(' ')}
+          style={{ boxShadow: '2px 2px 0 #8800FF' }}
         >
           <Snowflake className="w-4 h-4" aria-hidden="true" /> COOL
         </button>
@@ -109,11 +110,12 @@ export function HeatMeter({ heat, myVote, vote }: HeatMeterProps) {
           aria-pressed={myVote === HEAT_HOT}
           aria-label="Vote hot"
           className={[
-            'flex-1 inline-flex items-center justify-center gap-1 min-h-[44px] rounded-lg border font-mono text-[11px] tracking-widest transition-colors',
+            'flex-1 inline-flex items-center justify-center gap-1 min-h-[44px] border-2 pixel text-[10px] transition-colors',
             myVote === HEAT_HOT
-              ? 'border-[#FF2079] bg-[#FF2079]/15 text-[#FF2079]'
-              : 'border-[#333] text-[#c2a0b0] hover:bg-[#FF2079]/10',
+              ? 'border-[#FF00AA] bg-[#FF00AA]/20 text-[#FF00AA]'
+              : 'border-[#8800FF] text-[#888899] hover:bg-[#FF00AA]/10',
           ].join(' ')}
+          style={{ boxShadow: '2px 2px 0 #8800FF' }}
         >
           <Flame className="w-4 h-4" aria-hidden="true" /> HOT
         </button>

@@ -18,12 +18,12 @@ export function NowPlaying({ station }: NowPlayingProps) {
   }, [title]);
 
   if (!title) {
-    return <p className="font-mono text-[#555] text-xs tracking-wide">-</p>;
+    return <p className="pixel text-[10px] text-[#555]">-</p>;
   }
 
   return (
-    <div className="font-mono text-white text-sm tracking-wide truncate" title={title}>
-      <span className="text-[#7B2FBE] text-xs mr-2">NOW PLAYING</span>
+    <div className="pixel text-[10px] text-white truncate" title={title}>
+      <span className="text-[#8800FF] mr-2">NOW PLAYING</span>
       {title}
     </div>
   );

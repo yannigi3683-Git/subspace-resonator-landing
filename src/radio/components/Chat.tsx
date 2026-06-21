@@ -22,21 +22,21 @@ export function Chat({ messages }: ChatProps) {
           <div key={msg.id} className="flex items-start gap-2 text-sm">
             <Avatar
               avatarId={msg.avatar_id}
-              size={24}
+              size={20}
               label={msg.display_name}
               className="flex-shrink-0 mt-0.5"
             />
             <div className="flex-1 min-w-0">
-              <span className="font-mono text-[11px] text-[#aaa] mr-1">
+              <span className="pixel text-[10px] text-[#888899] mr-1">
                 {msg.display_name}
               </span>
               {msg.is_host && (
-                <span className="font-mono text-[9px] bg-[#7B2FBE] text-white px-1 py-0.5 rounded mr-1 align-middle">
+                <span className="pixel text-[10px] bg-[#8800FF] text-white px-1 py-0.5 mr-1 align-middle">
                   HOST
                 </span>
               )}
               {/* SECURITY: msg.body is rendered as text content, never as HTML */}
-              <span className="font-mono text-white text-[12px] break-words">
+              <span className="pixel text-[10px] text-white break-words">
                 {msg.body}
               </span>
             </div>

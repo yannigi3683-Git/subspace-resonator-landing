@@ -25,15 +25,6 @@ const GHOST_ENTRIES: PresenceEntry[] = [
   { uid: 'ghost-3', name: '???', avatarId: AVATARS[7].id, position: { x: 70, y: 45 } },
 ];
 
-// Deterministic ambient particles drifting up off the floor.
-const MOTES = Array.from({ length: 14 }, (_, i) => ({
-  left: (i * 37) % 100,
-  bottom: (i * 53) % 38,
-  size: 2 + (i % 3),
-  duration: 7 + (i % 6),
-  delay: (i % 7) * 0.9,
-  color: ['#26C6DA', '#7B2FBE', '#FF2079', '#FFFFFF'][i % 4],
-}));
 
 export function DanceFloor({
   presenceList,
@@ -45,7 +36,7 @@ export function DanceFloor({
   const live = station?.mode === 'live';
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#05060f]">
+    <div className="relative w-full h-full overflow-hidden bg-[#05060f] scanlines">
       {/* Atmosphere layers (decorative) */}
       <div className="absolute inset-0 radio-nebula" aria-hidden="true" />
       <div className="absolute inset-0 radio-stars" aria-hidden="true" />
@@ -62,47 +53,27 @@ export function DanceFloor({
         <PsyViz />
       </div>
 
-      {/* Floating motes */}
-      <div className="absolute inset-0 pointer-events-none" aria-hidden="true">
-        {MOTES.map((m, i) => (
-          <span
-            key={i}
-            className="radio-mote absolute"
-            style={{
-              left: `${m.left}%`,
-              bottom: `${m.bottom}%`,
-              width: m.size,
-              height: m.size,
-              backgroundColor: m.color,
-              boxShadow: `0 0 6px ${m.color}`,
-              animationDuration: `${m.duration}s`,
-              animationDelay: `${m.delay}s`,
-            }}
-          />
-        ))}
-      </div>
-
       {/* ── STAGE ────────────────────────────────────────────── */}
       <div className="absolute top-0 inset-x-0 z-10 flex flex-col items-center gap-2 px-4 pt-3">
         <div className="flex items-center gap-2">
           <span
-            className={`w-2 h-2 rounded-full ${live ? 'bg-red-500 radio-pulse' : 'bg-[#39405a]'}`}
+            className={`w-2 h-2 ${live ? 'bg-[#FF0033] pixel-blink' : 'bg-[#39405a]'}`}
             aria-hidden="true"
           />
-          <span className="font-mono text-[10px] tracking-[0.4em] text-white/60 uppercase">
+          <span className="pixel text-[10px] text-white/60">
             {live ? 'On Air' : 'Standby'}
           </span>
         </div>
 
         {/* Decks / now-playing console */}
-        <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md radio-booth-glow max-w-full">
+        <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 border-2 border-[#8800FF] bg-[#220033] max-w-full" style={{ boxShadow: '2px 2px 0 #FF00AA' }}>
           <Disc3
             className={`w-7 h-7 shrink-0 text-[#26C6DA] ${live ? 'radio-spin' : ''}`}
             aria-hidden="true"
             strokeWidth={1.5}
           />
           <div className="min-w-0 flex flex-col">
-            <span className="font-display text-sm text-white tracking-wide truncate">
+            <span className="pixel text-[10px] text-white truncate">
               SUBSPACE RESONATOR
             </span>
             <NowPlaying station={station} />
@@ -112,7 +83,7 @@ export function DanceFloor({
               {Array.from({ length: 7 }).map((_, i) => (
                 <span
                   key={i}
-                  className="flex-1 bg-[#26C6DA]/80 rounded-full self-end radio-eq"
+                  className="flex-1 bg-[#FF00AA] self-end radio-eq"
                   style={{ animationDelay: `${i * 90}ms` }}
                 />
               ))}
@@ -127,8 +98,8 @@ export function DanceFloor({
           )}
           <BroadcasterAvatar live={live} />
           <div className="radio-riser w-24 h-3 -mt-1" aria-hidden="true" />
-          <span className="font-mono text-[10px] tracking-[0.25em] text-[#26C6DA] mt-0.5">
-            {live ? 'LIVE DJ' : 'OFF AIR'}
+          <span className="pixel text-[10px] text-[#FF00AA] mt-0.5">
+            {live ? 'LIVE DJ' : 'OFF AIR'}{live && <span className="pixel-blink">_</span>}
           </span>
         </div>
       </div>
@@ -159,7 +130,7 @@ export function DanceFloor({
             >
               <Avatar avatarId={entry.avatarId} size={isSelf ? 56 : 44} label={entry.name} />
             </div>
-            <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
+            <span className="pixel text-[10px] text-white/80 leading-none mt-1.5 max-w-[84px] truncate">
               {entry.name.slice(0, 14)}
             </span>
           </div>
