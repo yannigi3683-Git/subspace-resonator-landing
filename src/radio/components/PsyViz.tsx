@@ -27,8 +27,8 @@ export function PsyViz() {
       const size = Math.min(canvas.clientWidth, canvas.clientHeight) || 300;
       canvas.width = Math.round(size * dpr);
       canvas.height = Math.round(size * dpr);
-      ctx.fillStyle = '#05060f';
-      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      // Transparent canvas: the cosmic nebula shows through, no opaque black box.
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
     };
     resize();
     const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(resize) : null;
@@ -47,9 +47,12 @@ export function PsyViz() {
       const scale = Math.min(w, h) * 0.46;
       const t = now * 0.001;
 
-      // Fade trail — older marks dissolve slowly, new paths glow on top.
-      ctx.fillStyle = 'rgba(5,6,15,0.04)';
+      // Fade trail toward transparent (destination-out) so older marks dissolve
+      // without painting an opaque backdrop — the nebula stays visible behind.
+      ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = 'rgba(0,0,0,0.06)';
       ctx.fillRect(0, 0, w, h);
+      ctx.globalCompositeOperation = 'source-over';
 
       for (let ci = 0; ci < CURVES.length; ci++) {
         const c = CURVES[ci];

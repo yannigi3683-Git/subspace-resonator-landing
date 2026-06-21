@@ -4,7 +4,6 @@ import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { PsyViz } from './PsyViz';
-import { SpeakerStack } from './SpeakerStack';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -57,7 +56,7 @@ export function DanceFloor({
 
       {/* Psychedelic geometric animation — always on, no AudioContext */}
       <div
-        className="absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[72vmin] h-[72vmin] max-w-[520px] max-h-[520px] z-[2] pointer-events-none"
+        className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 w-[64vmin] h-[64vmin] max-w-[460px] max-h-[460px] z-[2] pointer-events-none"
         data-testid="psyviz"
       >
         <PsyViz />
@@ -134,23 +133,15 @@ export function DanceFloor({
         </div>
       </div>
 
-      {/* ── PA STACKS (classic Turbosound: tops on subs, in front of the crowd) ── */}
-      <div className="absolute bottom-0 left-0 z-[6] w-[20vw] min-w-[64px] max-w-[140px] origin-bottom-left pointer-events-none" aria-hidden="true">
-        <SpeakerStack side="left" live={live} />
-      </div>
-      <div className="absolute bottom-0 right-0 z-[6] w-[20vw] min-w-[64px] max-w-[140px] origin-bottom-right pointer-events-none" aria-hidden="true">
-        <SpeakerStack side="right" live={live} />
-      </div>
-
       {/* ── DANCEFLOOR CROWD ─────────────────────────────────── */}
       {visible.map((entry) => {
         const isSelf = entry.uid === uid;
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        // Cluster the crowd in the lower-centre floor band so it never hugs the edges.
-        const px = 14 + clamp(entry.position.x, 0, 100) * 0.72;
-        const py = 52 + clamp(entry.position.y, 0, 100) * 0.42;
+        // Keep the crowd in the lower floor band, clear of the central visualizer.
+        const px = 12 + clamp(entry.position.x, 0, 100) * 0.76;
+        const py = 74 + clamp(entry.position.y, 0, 100) * 0.21;
         return (
           <div
             key={entry.uid}
