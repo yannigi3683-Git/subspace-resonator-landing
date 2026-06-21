@@ -40,7 +40,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [currentTrackId, setCurrentTrackId] = useState('');
   const [currentArtUrl, setCurrentArtUrl] = useState<string | null>(null);
-  const [npMode, setNpMode] = useState<NowPlayingMode>('always');
+  const [npMode, setNpMode] = useState<NowPlayingMode>('peek');
   const [filePlaying, setFilePlaying] = useState(false);
   // Host-saved defaults (crossfade / jitter buffer), falling back to the built-ins.
   const [savedPrefs, setSavedPrefs] = useState(loadHostPrefs);

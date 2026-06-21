@@ -12,13 +12,14 @@ export interface UseChatResult {
   sendError: string | null;
 }
 
-export function useChat(supabase: SupabaseClient, identity: Identity, uid: string): UseChatResult {
+export function useChat(supabase: SupabaseClient, identity: Identity, uid: string, sessionId?: string): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
+    setMessages([]); // clear on session change so old broadcasts don't bleed through
 
     supabase
       .from('chat_messages')
@@ -32,7 +33,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       });
 
     const channel = supabase
-      .channel('chat-inserts')
+      .channel(`chat-inserts-${sessionId ?? 'default'}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages' },
@@ -50,7 +51,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [supabase]);
+  }, [supabase, sessionId]);
 
   const sendMessage = useCallback(
     async (body: string) => {
