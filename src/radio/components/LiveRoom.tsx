@@ -56,18 +56,18 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
             onClick={resume}
             disabled={!ready}
             data-testid="tap-to-listen"
-            className="absolute inset-0 z-10 flex items-center justify-center bg-[#0A000F]/85"
+            className="absolute inset-0 z-10 flex items-center justify-center bg-black/60 backdrop-blur-sm"
           >
-            <span className="pixel text-[10px] text-[#00FFEE] border-2 border-[#00FFEE] px-6 py-4" style={{ boxShadow: '4px 4px 0 #8800FF' }}>
-              {ready ? '> TAP TO LISTEN' : '> CONNECTING...'}
+            <span className="font-mono text-sm tracking-[0.3em] text-white border border-white/40 px-6 py-3">
+              {ready ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
             </span>
           </button>
         )}
 
         {playing && (
-          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 max-w-[calc(100%-2rem)] border-2 border-[#8800FF] bg-[#220033] pl-3 pr-4 py-2" style={{ boxShadow: '2px 2px 0 #FF00AA' }}>
+          <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-4 py-2">
             <span className="w-2 h-2 bg-[#FF0033] pixel-blink shrink-0" aria-hidden="true" />
-            <Volume2 className="w-4 h-4 text-[#00FFEE] shrink-0" aria-hidden="true" strokeWidth={1.5} />
+            <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
             <input
               type="range"
               min={0}
@@ -76,17 +76,17 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
               value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
               aria-label="Volume"
-              className="w-24 sm:w-32 accent-[#FF00AA]"
+              className="w-24 sm:w-32 accent-primary"
             />
           </div>
         )}
       </div>
 
-      <div className="w-full md:w-80 flex flex-col border-t md:border-t-0 md:border-l border-[#8800FF] bg-[#0A000F]">
+      <div className="w-full md:w-80 flex flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]">
         <HeatMeter heat={heat} myVote={myVote} vote={vote} />
-        <div className="px-3 py-2 border-b border-[#8800FF]">
-          <p className="pixel text-[10px] text-[#888899]">
-            // CHAT
+        <div className="px-3 py-2 border-b border-[#1a1a2e]">
+          <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">
+            Chat
           </p>
         </div>
         <Chat messages={messages} />
