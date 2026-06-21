@@ -4,6 +4,7 @@ import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { PsyViz } from './PsyViz';
+import { SpeakerStack } from './SpeakerStack';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -131,6 +132,14 @@ export function DanceFloor({
             {live ? 'LIVE DJ' : 'OFF AIR'}{live && <span className="pixel-blink">_</span>}
           </span>
         </div>
+      </div>
+
+      {/* ── PA STACKS (classic Turbosound: tops on subs, in front of the crowd) ── */}
+      <div className="absolute bottom-0 left-0 z-[6] w-[20vw] min-w-[64px] max-w-[140px] origin-bottom-left pointer-events-none" aria-hidden="true">
+        <SpeakerStack side="left" live={live} />
+      </div>
+      <div className="absolute bottom-0 right-0 z-[6] w-[20vw] min-w-[64px] max-w-[140px] origin-bottom-right pointer-events-none" aria-hidden="true">
+        <SpeakerStack side="right" live={live} />
       </div>
 
       {/* ── DANCEFLOOR CROWD ─────────────────────────────────── */}
