@@ -54,10 +54,11 @@ export function DanceFloor({
   const isGhost = presenceList.length === 0;
   const live = station?.mode === 'live';
   const [vizFailed, setVizFailed] = useState(false);
-  // MilkDrop is the main backdrop; if it can't run (no WebGL / load error) we fall back to the
-  // lightweight radial visualizer so the floor is never blank.
-  // prefers-reduced-motion is intentionally ignored: this is an opt-in psychedelic experience.
-  const showButterchurn = !!getAudioContext && !!getAudioSource && !vizFailed;
+  // ponytail: radial is default — MilkDrop on the main thread starves Web Audio.
+  // Listener opts in via the toggle; if WebGL fails it reverts to radial automatically.
+  const [milkdropEnabled, setMilkdropEnabled] = useState(false);
+  const canMilkdrop = !!getAudioContext && !!getAudioSource;
+  const showButterchurn = canMilkdrop && milkdropEnabled && !vizFailed;
   const showFallbackViz = !showButterchurn && !!getFrequencyData;
 
   return (
@@ -70,7 +71,7 @@ export function DanceFloor({
       <div className="absolute inset-x-0 bottom-0 h-[42%] radio-floor-glow" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-[38%] radio-grid" aria-hidden="true" />
 
-      {/* Full-bleed MilkDrop (Butterchurn) visualizer — the main psychedelic backdrop */}
+      {/* Full-bleed MilkDrop (Butterchurn) visualizer — opt-in, GPU-intensive */}
       {showButterchurn && (
         <div className="absolute inset-0 z-[1] pointer-events-none" data-testid="butterchurn">
           <ButterchurnViz
@@ -82,7 +83,19 @@ export function DanceFloor({
         </div>
       )}
 
-      {/* Lightweight radial visualizer — fallback when MilkDrop can't run (reduced motion / no WebGL) */}
+      {/* MilkDrop toggle — bottom-right corner, only shown when audio is active */}
+      {canMilkdrop && playing && (
+        <button
+          type="button"
+          onClick={() => { setMilkdropEnabled(m => !m); setVizFailed(false); }}
+          className="absolute bottom-4 right-4 z-20 font-mono text-[10px] tracking-widest border border-white/20 bg-black/50 backdrop-blur-sm px-2.5 py-1.5 text-white/50 hover:text-white hover:border-white/40 transition-colors"
+          title={milkdropEnabled ? 'Switch to basic visuals' : 'Enable MilkDrop visuals (GPU-intensive)'}
+        >
+          {milkdropEnabled ? 'MILKDROP ON' : 'MILKDROP OFF'}
+        </button>
+      )}
+
+      {/* Lightweight radial visualizer — default; fallback when MilkDrop can't run */}
       {showFallbackViz && (
         <div
           className="absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[72vmin] h-[72vmin] max-w-[520px] max-h-[520px] z-[2] pointer-events-none"
