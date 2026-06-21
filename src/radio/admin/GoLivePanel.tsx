@@ -718,6 +718,151 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         </div>
       )}
 
+      {/* File deck — at the top so the host can load tracks before going live */}
+      <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
+        <div className="flex items-center justify-between">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            FILE DECK {queue.length > 0 && `(${queue.length})`}
+          </span>
+          <div className="flex items-center gap-2">
+            <label className="flex items-center cursor-pointer">
+              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
+                ADD FILES
+              </span>
+              <input
+                type="file"
+                accept="audio/*"
+                multiple
+                className="sr-only"
+                onChange={handleFileAdd}
+              />
+            </label>
+            <label className="flex items-center cursor-pointer">
+              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
+                ADD FOLDER
+              </span>
+              <input
+                type="file"
+                className="sr-only"
+                onChange={handleFolderAdd}
+                {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
+              />
+            </label>
+          </div>
+        </div>
+
+        {queue.length > 0 ? (
+          <ul className="flex flex-col gap-1 max-h-44 overflow-y-auto" aria-label="Playlist">
+            {queue.map((t, i) => {
+              const isCurrent = t.id === currentTrackId;
+              return (
+                <li key={t.id} className="flex items-center gap-1">
+                  <button
+                    type="button"
+                    onClick={() => handleJumpTo(t.id)}
+                    aria-current={isCurrent ? 'true' : undefined}
+                    className={[
+                      'flex-1 flex items-center gap-2 text-left min-h-[40px] px-2 rounded font-mono text-xs transition-colors',
+                      isCurrent
+                        ? 'bg-primary/20 text-foreground'
+                        : 'text-muted-foreground hover:bg-primary/10',
+                    ].join(' ')}
+                  >
+                    <span className="w-5 shrink-0 flex items-center justify-center text-[10px] tabular-nums text-muted-foreground">
+                      {isCurrent && filePlaying ? (
+                        <Play className="w-3 h-3 fill-current text-primary" aria-hidden="true" />
+                      ) : (
+                        String(i + 1).padStart(2, '0')
+                      )}
+                    </span>
+                    <span className="truncate">{t.name}</span>
+                  </button>
+                  <button
+                    onClick={() => handleRemoveTrack(t.id)}
+                    className="font-mono text-[10px] text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px]"
+                    aria-label={`Remove ${t.name}`}
+                  >
+                    REMOVE
+                  </button>
+                </li>
+              );
+            })}
+          </ul>
+        ) : (
+          <p className="font-mono text-[11px] text-muted-foreground">
+            Add audio files to build a set, or broadcast a live input only.
+          </p>
+        )}
+        <p className="font-mono text-[10px] text-muted-foreground/70">
+          Files play from your device only. Folder upload triggers a browser confirmation, but
+          nothing is uploaded to any server.
+        </p>
+
+        {/* Transport: live deck control */}
+        {status === 'live' && queue.length > 0 && (
+          <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback controls">
+            <TransportBtn onClick={handleDeckPrev} label="Previous track">
+              <SkipBack className="w-4 h-4" aria-hidden="true" />
+            </TransportBtn>
+            <TransportBtn onClick={handleDeckPlayPause} label={filePlaying ? 'Pause' : 'Play'}>
+              {filePlaying ? (
+                <Pause className="w-4 h-4" aria-hidden="true" />
+              ) : (
+                <Play className="w-4 h-4" aria-hidden="true" />
+              )}
+            </TransportBtn>
+            <TransportBtn onClick={handleDeckNext} label="Next track">
+              <SkipForward className="w-4 h-4" aria-hidden="true" />
+            </TransportBtn>
+            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds">
+              <Rewind className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="text-[10px] ml-0.5">10</span>
+            </TransportBtn>
+            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
+              <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
+              <span className="text-[10px] ml-0.5">10</span>
+            </TransportBtn>
+          </div>
+        )}
+
+        {queue.length > 0 && (
+          <div className="flex flex-col gap-2 pt-1">
+            <label className="flex items-center gap-2 font-mono text-[11px] tracking-widest text-muted-foreground cursor-pointer min-h-[44px]">
+              <input
+                type="checkbox"
+                checked={autoMix}
+                onChange={(e) => setAutoMix(e.target.checked)}
+                className="w-5 h-5 accent-primary"
+              />
+              AUTO-MIX (CROSSFADE)
+            </label>
+            {autoMix && (
+              <label className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
+                <span className="w-20 shrink-0 tabular-nums">FADE {crossfadeSec}s</span>
+                <input
+                  type="range"
+                  min={1}
+                  max={30}
+                  step={1}
+                  value={crossfadeSec}
+                  onChange={(e) => setCrossfadeSec(Number(e.target.value))}
+                  className="flex-1 min-h-[44px] console-slider"
+                  aria-label="Crossfade seconds"
+                />
+              </label>
+            )}
+          </div>
+        )}
+
+        {queue.length > 0 && (
+          <GainSlider
+            label="FILE GAIN"
+            value={fileGain}
+            onChange={(v) => handleTrackGainChange('file', v)}
+          />
+        )}
+      </div>
+
       {/* Live status: what's going out + output level + listener count */}
       {status === 'live' && (
         <div className="flex flex-col gap-2">
@@ -1052,151 +1197,6 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               : `Default: ${savedPrefs.bufferSec.toFixed(1)}s buffer, ${savedPrefs.crossfadeSec}s fade.`}
           </span>
         </div>
-      </div>
-
-      {/* File deck */}
-      <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
-        <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-            FILE DECK {queue.length > 0 && `(${queue.length})`}
-          </span>
-          <div className="flex items-center gap-2">
-            <label className="flex items-center cursor-pointer">
-              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
-                ADD FILES
-              </span>
-              <input
-                type="file"
-                accept="audio/*"
-                multiple
-                className="sr-only"
-                onChange={handleFileAdd}
-              />
-            </label>
-            <label className="flex items-center cursor-pointer">
-              <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
-                ADD FOLDER
-              </span>
-              <input
-                type="file"
-                className="sr-only"
-                onChange={handleFolderAdd}
-                {...({ webkitdirectory: '', directory: '' } as Record<string, string>)}
-              />
-            </label>
-          </div>
-        </div>
-
-        {queue.length > 0 ? (
-          <ul className="flex flex-col gap-1 max-h-44 overflow-y-auto" aria-label="Playlist">
-            {queue.map((t, i) => {
-              const isCurrent = t.id === currentTrackId;
-              return (
-                <li key={t.id} className="flex items-center gap-1">
-                  <button
-                    type="button"
-                    onClick={() => handleJumpTo(t.id)}
-                    aria-current={isCurrent ? 'true' : undefined}
-                    className={[
-                      'flex-1 flex items-center gap-2 text-left min-h-[40px] px-2 rounded font-mono text-xs transition-colors',
-                      isCurrent
-                        ? 'bg-primary/20 text-foreground'
-                        : 'text-muted-foreground hover:bg-primary/10',
-                    ].join(' ')}
-                  >
-                    <span className="w-5 shrink-0 flex items-center justify-center text-[10px] tabular-nums text-muted-foreground">
-                      {isCurrent && filePlaying ? (
-                        <Play className="w-3 h-3 fill-current text-primary" aria-hidden="true" />
-                      ) : (
-                        String(i + 1).padStart(2, '0')
-                      )}
-                    </span>
-                    <span className="truncate">{t.name}</span>
-                  </button>
-                  <button
-                    onClick={() => handleRemoveTrack(t.id)}
-                    className="font-mono text-[10px] text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px]"
-                    aria-label={`Remove ${t.name}`}
-                  >
-                    REMOVE
-                  </button>
-                </li>
-              );
-            })}
-          </ul>
-        ) : (
-          <p className="font-mono text-[11px] text-muted-foreground">
-            Add audio files to build a set, or broadcast a live input only.
-          </p>
-        )}
-        <p className="font-mono text-[10px] text-muted-foreground/70">
-          Files play from your device only. Folder upload triggers a browser confirmation, but
-          nothing is uploaded to any server.
-        </p>
-
-        {/* Transport: live deck control */}
-        {status === 'live' && queue.length > 0 && (
-          <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback controls">
-            <TransportBtn onClick={handleDeckPrev} label="Previous track">
-              <SkipBack className="w-4 h-4" aria-hidden="true" />
-            </TransportBtn>
-            <TransportBtn onClick={handleDeckPlayPause} label={filePlaying ? 'Pause' : 'Play'}>
-              {filePlaying ? (
-                <Pause className="w-4 h-4" aria-hidden="true" />
-              ) : (
-                <Play className="w-4 h-4" aria-hidden="true" />
-              )}
-            </TransportBtn>
-            <TransportBtn onClick={handleDeckNext} label="Next track">
-              <SkipForward className="w-4 h-4" aria-hidden="true" />
-            </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds">
-              <Rewind className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="text-[10px] ml-0.5">10</span>
-            </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
-              <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="text-[10px] ml-0.5">10</span>
-            </TransportBtn>
-          </div>
-        )}
-
-        {queue.length > 0 && (
-          <div className="flex flex-col gap-2 pt-1">
-            <label className="flex items-center gap-2 font-mono text-[11px] tracking-widest text-muted-foreground cursor-pointer min-h-[44px]">
-              <input
-                type="checkbox"
-                checked={autoMix}
-                onChange={(e) => setAutoMix(e.target.checked)}
-                className="w-5 h-5 accent-primary"
-              />
-              AUTO-MIX (CROSSFADE)
-            </label>
-            {autoMix && (
-              <label className="flex items-center gap-2 font-mono text-[10px] text-muted-foreground">
-                <span className="w-20 shrink-0 tabular-nums">FADE {crossfadeSec}s</span>
-                <input
-                  type="range"
-                  min={1}
-                  max={30}
-                  step={1}
-                  value={crossfadeSec}
-                  onChange={(e) => setCrossfadeSec(Number(e.target.value))}
-                  className="flex-1 min-h-[44px] console-slider"
-                  aria-label="Crossfade seconds"
-                />
-              </label>
-            )}
-          </div>
-        )}
-
-        {queue.length > 0 && (
-          <GainSlider
-            label="FILE GAIN"
-            value={fileGain}
-            onChange={(v) => handleTrackGainChange('file', v)}
-          />
-        )}
       </div>
 
       {/* GO LIVE / END — single primary action, pinned to the bottom of the console. */}

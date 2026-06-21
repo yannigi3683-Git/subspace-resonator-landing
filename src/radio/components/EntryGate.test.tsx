@@ -15,7 +15,7 @@ describe('EntryGate', () => {
 
   it('renders heading and avatar grid', () => {
     render(<EntryGate supabase={supabase as never} onEntry={onEntry} />);
-    expect(screen.getByText('SUBSPACE RADIO LIVE')).toBeInTheDocument();
+    expect(screen.getByText('SUBSPACE RADIO')).toBeInTheDocument();
     expect(screen.getByRole('radiogroup')).toBeInTheDocument();
     expect(screen.getAllByRole('radio')).toHaveLength(12);
   });

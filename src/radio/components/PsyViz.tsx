@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 
-const TARGET_MS = 1000 / 30;
-const STEPS = 1500;
+const TARGET_MS = 1000 / 24;
+const STEPS = 400;
 const MAX_THETA = 20 * Math.PI;
 
 // Three overlapping hypotrochoids with slowly drifting parameters.
