@@ -483,8 +483,8 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     fireEvent.click(screen.getByTestId('go-live-btn'));
     await waitFor(() => screen.getByTestId('end-btn'));
 
-    // Manual quality buttons are hidden while AUTO-PILOT is on.
-    expect(screen.queryByRole('button', { name: /balanced/i })).toBeNull();
+    // Manual quality buttons are visible but dimmed (pointer-events-none) while AUTO-PILOT is on.
+    expect(screen.getByRole('button', { name: /balanced/i })).toBeInTheDocument();
 
     fireEvent.click(screen.getByLabelText(/AUTO-PILOT/i)); // turn auto-pilot off
     fireEvent.click(screen.getByRole('button', { name: /balanced/i })); // pick 96k

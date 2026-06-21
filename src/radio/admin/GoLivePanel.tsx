@@ -718,26 +718,160 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         </div>
       )}
 
+      {/* Live status: what's going out + output level + listener count */}
+      {status === 'live' && (
+        <div className="flex flex-col gap-2">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            WHAT&apos;S GOING OUT
+          </span>
+          {currentTrackName ? (
+            <>
+              <div className="flex items-center gap-3">
+                <div className={`w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border flex items-center justify-center ${status === 'live' ? 'ring-1 ring-primary/40' : ''}`}>
+                  {currentArtUrl ? (
+                    <img src={currentArtUrl} alt="" className="w-full h-full object-cover" />
+                  ) : (
+                    <Disc3
+                      className={`w-5 h-5 text-primary ${filePlaying ? 'animate-spin' : ''}`}
+                      aria-hidden="true"
+                      strokeWidth={1.5}
+                      style={{ animationDuration: '3s' }}
+                    />
+                  )}
+                </div>
+                <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                  <p className="font-mono text-xs text-primary truncate min-w-0">
+                    <span className="text-muted-foreground">NOW </span>
+                    {currentTrackName}
+                  </p>
+                  {position.dur > 0 && (
+                    <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+                      {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+                    </p>
+                  )}
+                </div>
+              </div>
+              {position.dur > 0 && (
+                <div className="h-px w-full bg-muted/30 relative overflow-hidden rounded-full">
+                  <div
+                    className="absolute inset-y-0 left-0 bg-primary origin-left"
+                    style={{ transform: `scaleX(${Math.min(1, position.cur / position.dur)})`, transition: 'transform 0.5s linear' }}
+                  />
+                </div>
+              )}
+            </>
+          ) : (
+            <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
+          )}
+
+          {/* What listeners see of now-playing (track + art). */}
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
+              SHOW TO LISTENERS
+            </span>
+            <div className="flex border border-border w-fit" role="group" aria-label="Now playing visibility">
+              {([['OFF', 'off'], ['ALWAYS', 'always'], ['PEEK', 'peek']] as const).map(([label, val]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => handleNpMode(val)}
+                  aria-pressed={npMode === val}
+                  className={[
+                    'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
+                    npMode === val ? 'bg-primary/20 text-foreground' : 'text-muted-foreground hover:bg-primary/10',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {npMode === 'peek' ? 'Pops in 15s each minute + on track change.' : npMode === 'off' ? 'Hidden from listeners.' : 'Always visible to listeners.'}
+            </span>
+          </div>
+          {deckRef.current.next && (
+            <p className="font-mono text-[11px] text-muted-foreground truncate">
+              <span>NEXT </span>
+              {deckRef.current.next.name}
+            </p>
+          )}
+          <span className="font-mono text-[10px] tracking-widest text-muted-foreground mt-1">
+            OUTPUT LEVEL
+          </span>
+          <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
+          <div className="flex items-center justify-between">
+            <p className="font-mono text-xs text-muted-foreground flex items-center gap-1">
+              LISTENERS:{' '}
+              <motion.span
+                key={listenerCount}
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.2 }}
+              >
+                {listenerCount}
+              </motion.span>
+            </p>
+            <p className="font-mono text-xs text-muted-foreground tabular-nums flex items-center gap-1">
+              {(() => {
+                const bars = currentBitrate && activeCeiling
+                  ? Math.max(0, Math.min(5, Math.round((currentBitrate / activeCeiling) * 5)))
+                  : 0;
+                return (
+                  <svg width="18" height="12" viewBox="0 0 18 12" className="inline-block mr-1 align-middle" aria-hidden="true">
+                    {[0, 1, 2, 3, 4].map((i) => (
+                      <rect
+                        key={i}
+                        x={i * 4}
+                        y={12 - (i + 1) * 2}
+                        width={3}
+                        height={(i + 1) * 2}
+                        rx={0.5}
+                        className={i < bars ? 'fill-primary' : 'fill-muted-foreground/20'}
+                      />
+                    ))}
+                  </svg>
+                );
+              })()}
+              {autoPilot && <span className="text-primary">AUTO </span>}
+              {currentBitrate ? `${currentBitrate} kbps` : '-- kbps'}
+              {isBitrateAdapting(currentBitrate, activeCeiling) && (
+                <span className="text-amber-400"> (adapting)</span>
+              )}
+            </p>
+          </div>
+        </div>
+      )}
+
       {/* Broadcast title */}
-      <label className="flex flex-col gap-1">
-        <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-          BROADCAST TITLE
-        </span>
-        <input
-          type="text"
-          maxLength={80}
-          value={title}
-          onChange={(e) => setTitle(e.target.value)}
-          placeholder="Subspace Radio Live"
-          disabled={status === 'live' || isBusy}
-          className="bg-transparent border border-border rounded px-3 py-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[44px] disabled:opacity-50"
-        />
-      </label>
+      {status === 'live' ? (
+        <p className="font-mono text-xs text-muted-foreground">
+          <span className="text-muted-foreground/50">TITLE </span>
+          {title || 'Untitled'}
+        </p>
+      ) : (
+        <label className="flex flex-col gap-1">
+          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+            BROADCAST TITLE
+          </span>
+          <input
+            type="text"
+            maxLength={80}
+            value={title}
+            onChange={(e) => setTitle(e.target.value)}
+            placeholder="Subspace Radio Live"
+            disabled={isBusy}
+            className="bg-transparent border border-border rounded px-3 py-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[44px] disabled:opacity-50"
+          />
+        </label>
+      )}
 
       {/* Device select */}
       <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
         <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-          AUDIO INPUT (YOUR MICROPHONE, OR TRAKTOR / REKORDBOX VIRTUAL DEVICE)
+          AUDIO INPUT
+        </span>
+        <span className="font-mono text-[10px] text-muted-foreground/70">
+          Microphone, or a virtual device from Traktor / Rekordbox.
         </span>
         {!audioReady ? (
           <button
@@ -769,6 +903,15 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               value={deviceGain}
               onChange={(v) => handleTrackGainChange('device', v)}
             />
+          </div>
+        )}
+        {/* Input level — shown once audio access is granted, before going live */}
+        {audioReady && status !== 'live' && (
+          <div className="flex flex-col gap-2">
+            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
+              INPUT LEVEL
+            </span>
+            <PreviewMeter deviceId={selectedDeviceId} />
           </div>
         )}
         {status === 'live' && (deviceConnected || (audioReady && selectedDeviceId)) && (
@@ -811,10 +954,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </p>
         )}
 
-        {!autoPilot && (
-          <>
+        <div className={autoPilot ? 'opacity-40 pointer-events-none select-none' : ''}>
+          <div className="flex flex-col gap-2">
             <div className="flex flex-col gap-1">
-              <span className="font-mono text-[10px] tracking-widest text-muted-foreground">QUALITY</span>
+              <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
+                QUALITY {autoPilot && <span className="text-[9px]">(managed by AUTO-PILOT)</span>}
+              </span>
               <div className="flex border border-border w-fit" role="group" aria-label="Audio quality">
                 {(['stable', 'balanced', 'hq'] as QualityKey[]).map((k) => (
                   <button
@@ -833,6 +978,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                   </button>
                 ))}
               </div>
+              {!autoPilot && status === 'live' && (
+                <span className="font-mono text-[10px] text-primary/80">
+                  Applies live. No restart needed.
+                </span>
+              )}
             </div>
 
             <div className="flex flex-col gap-1">
@@ -857,13 +1007,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               </div>
               {status === 'live' && (
                 <span className="font-mono text-[10px] text-muted-foreground">
-                  Switching stereo / mono takes effect on your next GO LIVE (it re-negotiates the
-                  stream). Bitrate still adapts live.
+                  Switching stereo / mono takes effect on your next GO LIVE only. Bitrate adapts live.
                 </span>
               )}
             </div>
-          </>
-        )}
+          </div>
+        </div>
 
         {/* Listener buffer — always available; the main anti-cut lever */}
         <label className="flex flex-col gap-1">
@@ -899,8 +1048,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </button>
           <span className="font-mono text-[10px] text-muted-foreground">
             {defaultsDirty
-              ? `Saved: ${savedPrefs.bufferSec.toFixed(1)}s buffer / ${savedPrefs.crossfadeSec}s fade`
-              : 'These open on every broadcast.'}
+              ? 'Save current values as the default for future broadcasts.'
+              : `Default: ${savedPrefs.bufferSec.toFixed(1)}s buffer, ${savedPrefs.crossfadeSec}s fade.`}
           </span>
         </div>
       </div>
@@ -1049,140 +1198,6 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           />
         )}
       </div>
-
-      {/* Pre-live input level: shows as soon as mic access is granted */}
-      {audioReady && status === 'idle' && (
-        <div className="flex flex-col gap-2">
-          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-            INPUT LEVEL
-          </span>
-          <PreviewMeter deviceId={selectedDeviceId} />
-        </div>
-      )}
-
-      {/* Live status: what's going out + output level + listener count */}
-      {status === 'live' && (
-        <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
-          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-            WHAT&apos;S GOING OUT
-          </span>
-          {currentTrackName ? (
-            <>
-              <div className="flex items-center gap-3">
-                <div className={`w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border flex items-center justify-center ${status === 'live' ? 'ring-1 ring-primary/40' : ''}`}>
-                  {currentArtUrl ? (
-                    <img src={currentArtUrl} alt="" className="w-full h-full object-cover" />
-                  ) : (
-                    <Disc3
-                      className={`w-5 h-5 text-primary ${filePlaying ? 'animate-spin' : ''}`}
-                      aria-hidden="true"
-                      strokeWidth={1.5}
-                      style={{ animationDuration: '3s' }}
-                    />
-                  )}
-                </div>
-                <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
-                  <p className="font-mono text-xs text-primary truncate min-w-0">
-                    <span className="text-muted-foreground">NOW </span>
-                    {currentTrackName}
-                  </p>
-                  {position.dur > 0 && (
-                    <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
-                      {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
-                    </p>
-                  )}
-                </div>
-              </div>
-              {position.dur > 0 && (
-                <div className="h-px w-full bg-muted/30 relative overflow-hidden rounded-full">
-                  <div
-                    className="absolute inset-y-0 left-0 bg-primary origin-left"
-                    style={{ transform: `scaleX(${Math.min(1, position.cur / position.dur)})`, transition: 'transform 0.5s linear' }}
-                  />
-                </div>
-              )}
-            </>
-          ) : (
-            <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
-          )}
-
-          {/* What listeners see of now-playing (track + art). */}
-          <div className="flex items-center gap-2 flex-wrap mt-1">
-            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
-              SHOW TO LISTENERS
-            </span>
-            <div className="flex border border-border w-fit" role="group" aria-label="Now playing visibility">
-              {([['OFF', 'off'], ['ALWAYS', 'always'], ['PEEK', 'peek']] as const).map(([label, val]) => (
-                <button
-                  key={val}
-                  type="button"
-                  onClick={() => handleNpMode(val)}
-                  aria-pressed={npMode === val}
-                  className={[
-                    'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
-                    npMode === val ? 'bg-primary/20 text-foreground' : 'text-muted-foreground hover:bg-primary/10',
-                  ].join(' ')}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-            <span className="font-mono text-[10px] text-muted-foreground">
-              {npMode === 'peek' ? 'Pops in 15s each minute + on track change.' : npMode === 'off' ? 'Hidden from listeners.' : 'Always visible to listeners.'}
-            </span>
-          </div>
-          {deckRef.current.next && (
-            <p className="font-mono text-[11px] text-muted-foreground truncate">
-              <span>NEXT </span>
-              {deckRef.current.next.name}
-            </p>
-          )}
-          <span className="font-mono text-[10px] tracking-widest text-muted-foreground mt-1">
-            OUTPUT LEVEL
-          </span>
-          <LevelMeter getAnalysis={() => mixerRef.current?.analysis ?? null} />
-          <div className="flex items-center justify-between">
-            <p className="font-mono text-xs text-muted-foreground flex items-center gap-1">
-              LISTENERS:{' '}
-              <motion.span
-                key={listenerCount}
-                initial={{ opacity: 0, y: -4 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.2 }}
-              >
-                {listenerCount}
-              </motion.span>
-            </p>
-            <p className="font-mono text-xs text-muted-foreground tabular-nums flex items-center gap-1">
-              {(() => {
-                const bars = currentBitrate && activeCeiling
-                  ? Math.max(0, Math.min(5, Math.round((currentBitrate / activeCeiling) * 5)))
-                  : 0;
-                return (
-                  <svg width="18" height="12" viewBox="0 0 18 12" className="inline-block mr-1 align-middle" aria-hidden="true">
-                    {[0, 1, 2, 3, 4].map((i) => (
-                      <rect
-                        key={i}
-                        x={i * 4}
-                        y={12 - (i + 1) * 2}
-                        width={3}
-                        height={(i + 1) * 2}
-                        rx={0.5}
-                        className={i < bars ? 'fill-primary' : 'fill-muted-foreground/20'}
-                      />
-                    ))}
-                  </svg>
-                );
-              })()}
-              {autoPilot && <span className="text-primary">AUTO </span>}
-              {currentBitrate ? `${currentBitrate} kbps` : '-- kbps'}
-              {isBitrateAdapting(currentBitrate, activeCeiling) && (
-                <span className="text-amber-400"> (adapting)</span>
-              )}
-            </p>
-          </div>
-        </div>
-      )}
 
       {/* GO LIVE / END — single primary action, pinned to the bottom of the console. */}
       <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-background/85 backdrop-blur border-t border-border">
