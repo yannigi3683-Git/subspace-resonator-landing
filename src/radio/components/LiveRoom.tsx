@@ -82,7 +82,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
         )}
       </div>
 
-      <div className="w-full md:w-80 flex flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]">
+      <div className="w-full md:w-80 flex-1 md:flex-none min-h-0 flex flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]">
         <HeatMeter heat={heat} myVote={myVote} vote={vote} />
         <div className="px-3 py-2 border-b border-[#1a1a2e]">
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">

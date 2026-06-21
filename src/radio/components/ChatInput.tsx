@@ -32,7 +32,7 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
   );
 
   return (
-    <div className="px-3 py-2 border-t border-[#1a1a2e]">
+    <div className="px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] border-t border-[#1a1a2e]">
       <div className="flex gap-2">
         <textarea
           value={value}

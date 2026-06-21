@@ -1200,7 +1200,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       </div>
 
       {/* GO LIVE / END — single primary action, pinned to the bottom of the console. */}
-      <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-background/85 backdrop-blur border-t border-border">
+      <div className="sticky bottom-0 -mx-6 -mb-6 px-6 pt-4 pb-[calc(1rem+env(safe-area-inset-bottom))] bg-background/85 backdrop-blur border-t border-border">
         {(status === 'idle' || status === 'starting' || status === 'error') ? (
           <button
             onClick={handleGoLive}
