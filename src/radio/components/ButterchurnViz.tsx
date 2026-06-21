@@ -61,13 +61,14 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
         const names = Object.keys(presets);
         if (!names.length) throw new Error('no presets');
 
-        const dpr = Math.min(1.5, window.devicePixelRatio || 1);
+        // pixelRatio: 1 — MilkDrop at native res competes with the Web Audio thread
+        // and causes buffer underruns. 1.0 cuts GPU load ~4x vs the old 1.5 at retina.
         const { w, h } = sizeOf();
 
         const viz = butterchurn.createVisualizer(ctx, canvas, {
           width: w,
           height: h,
-          pixelRatio: dpr,
+          pixelRatio: 1,
           textureRatio: 1,
         });
         viz.connectAudio(source);
@@ -84,24 +85,28 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
         });
         ro.observe(canvas);
 
+        // ponytail: 30fps cap — MilkDrop at 60fps starves Web Audio on shared GPU;
+        // raise TARGET_MS to 16 (60fps) only if jitter is gone and visuals feel sluggish.
+        const TARGET_MS = 1000 / 30;
+        let lastFrame = 0;
         let loggedRenderError = false;
-        const render = () => {
+        const render = (now: number) => {
           if (cancelled) return;
+          raf = requestAnimationFrame(render);
+          if (now - lastFrame < TARGET_MS) return;
+          lastFrame = now;
           if (!document.hidden) {
             try {
               viz.render();
             } catch (err) {
-              // Surface the first failure, then keep trying (a transient frame error should
-              // not permanently blank the visualizer).
               if (!loggedRenderError) {
                 loggedRenderError = true;
                 console.error('[butterchurn] render error', err);
               }
             }
           }
-          raf = requestAnimationFrame(render);
         };
-        render();
+        render(0);
       } catch (err) {
         // No WebGL / chunk load failure / API change — show nothing here; the caller's
         // lightweight fallback remains visible. Surface the cause for debugging.
