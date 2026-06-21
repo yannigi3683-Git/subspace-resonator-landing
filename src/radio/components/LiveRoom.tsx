@@ -23,7 +23,7 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid);
   const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
-  const { playing, ready, resume, volume, setVolume, getFrequencyData, getAudioContext, getAudioSource } =
+  const { playing, ready, resume, volume, setVolume } =
     useListenerAudio(supabase, station);
   const { heat, myVote, vote } = useHeatMeter(supabase, uid);
   const nowPlaying = useNowPlaying(supabase);
@@ -44,10 +44,6 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
           presenceList={presenceList}
           station={station}
           uid={uid}
-          getFrequencyData={getFrequencyData}
-          getAudioContext={getAudioContext}
-          getAudioSource={getAudioSource}
-          playing={playing}
         />
 
         <NowPlayingCard name={nowPlaying.name} art={nowPlaying.art} visible={nowPlaying.visible && playing} />

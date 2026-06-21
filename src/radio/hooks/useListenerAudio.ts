@@ -11,12 +11,6 @@ export interface UseListenerAudioResult {
   volume: number;
   setVolume: (v: number) => void;
   audioElement: HTMLAudioElement | null;
-  /** Live frequency spectrum for the visualizer, or null before the stream attaches. */
-  getFrequencyData: () => Uint8Array | null;
-  /** The AudioContext owning the stream graph (for Butterchurn), or null before ready. */
-  getAudioContext: () => AudioContext | null;
-  /** The stream source node to feed a visualizer, or null before ready. */
-  getAudioSource: () => AudioNode | null;
 }
 
 export function useListenerAudio(
@@ -29,22 +23,8 @@ export function useListenerAudio(
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
-  const analyserCtxRef = useRef<AudioContext | null>(null);
-  const analyserRef = useRef<AnalyserNode | null>(null);
-  const srcNodeRef = useRef<AudioNode | null>(null);
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
   const bufferMsRef = useRef(2000);
-
-  const getFrequencyData = useCallback((): Uint8Array | null => {
-    const a = analyserRef.current;
-    if (!a) return null;
-    const data = new Uint8Array(a.frequencyBinCount);
-    a.getByteFrequencyData(data);
-    return data;
-  }, []);
-
-  const getAudioContext = useCallback(() => analyserCtxRef.current, []);
-  const getAudioSource = useCallback(() => srcNodeRef.current, []);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -54,7 +34,6 @@ export function useListenerAudio(
 
   const resume = useCallback(() => {
     audioRef.current?.play().then(() => setPlaying(true)).catch(() => {});
-    analyserCtxRef.current?.resume().catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -92,32 +71,7 @@ export function useListenerAudio(
             onStreamReady: (stream: MediaStream) => {
               audio.srcObject = stream;
               setReady(true);
-              // Autoplay may be blocked until the listener interacts; resume() covers that.
               audio.play().then(() => setPlaying(true)).catch(() => {});
-
-              // Tap the stream for the visualizer. Route analyser → silent gain →
-              // destination so the graph stays pulled without adding audible output
-              // (the <audio> element already plays the sound).
-              try {
-                const Ctor = window.AudioContext;
-                if (Ctor) {
-                  const actx = new Ctor();
-                  analyserCtxRef.current = actx;
-                  const srcNode = actx.createMediaStreamSource(stream);
-                  srcNodeRef.current = srcNode;
-                  const an = actx.createAnalyser();
-                  an.fftSize = 256;
-                  an.smoothingTimeConstant = 0.8;
-                  const sink = actx.createGain();
-                  sink.gain.value = 0;
-                  srcNode.connect(an);
-                  an.connect(sink);
-                  sink.connect(actx.destination);
-                  analyserRef.current = an;
-                }
-              } catch {
-                // Analysis is optional; visualizer just stays idle.
-              }
             },
             onDispatch: (event) => {
               if (event.type === 'DISCONNECTED' || event.type === 'ERROR') {
@@ -139,10 +93,6 @@ export function useListenerAudio(
           audio.srcObject = null;
           audioRef.current = null;
           subscriberRef.current = null;
-          analyserCtxRef.current?.close().catch(() => {});
-          analyserCtxRef.current = null;
-          analyserRef.current = null;
-          srcNodeRef.current = null;
           setPlaying(false);
           setReady(false);
         };
@@ -185,8 +135,5 @@ export function useListenerAudio(
     volume,
     setVolume,
     audioElement: audioRef.current,
-    getFrequencyData,
-    getAudioContext,
-    getAudioSource,
   };
 }
