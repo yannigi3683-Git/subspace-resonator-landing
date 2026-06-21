@@ -25,9 +25,7 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
 
   useEffect(() => {
     if (!active) return;
-    const reduce = window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false;
-    if (reduce) return;
-
+    // prefers-reduced-motion intentionally ignored — opt-in psychedelic experience.
     const canvas = canvasRef.current;
     const ctx = getAudioContext();
     const source = getAudioSource();

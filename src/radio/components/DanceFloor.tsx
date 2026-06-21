@@ -53,13 +53,11 @@ export function DanceFloor({
   const visible = presenceList.length > 0 ? presenceList.slice(0, 150) : GHOST_ENTRIES;
   const isGhost = presenceList.length === 0;
   const live = station?.mode === 'live';
-  const reduced =
-    typeof window !== 'undefined' &&
-    (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
   const [vizFailed, setVizFailed] = useState(false);
   // MilkDrop is the main backdrop; if it can't run (no WebGL / load error) we fall back to the
   // lightweight radial visualizer so the floor is never blank.
-  const showButterchurn = !reduced && !!getAudioContext && !!getAudioSource && !vizFailed;
+  // prefers-reduced-motion is intentionally ignored: this is an opt-in psychedelic experience.
+  const showButterchurn = !!getAudioContext && !!getAudioSource && !vizFailed;
   const showFallbackViz = !showButterchurn && !!getFrequencyData;
 
   return (
