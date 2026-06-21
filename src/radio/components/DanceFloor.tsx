@@ -4,6 +4,7 @@ import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { PsyViz } from './PsyViz';
+import { PaStack } from './PaStack';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -80,6 +81,14 @@ export function DanceFloor({
             }}
           />
         ))}
+      </div>
+
+      {/* ── FLANKING PA (static Turbosound Floodlight; CSS-only glow) ── */}
+      <div className="absolute top-[8%] left-[2.5%] z-[8] hidden min-[400px]:block w-11 sm:w-[60px] lg:w-20 pointer-events-none">
+        <PaStack side="left" />
+      </div>
+      <div className="absolute top-[8%] right-[2.5%] z-[8] hidden min-[400px]:block w-11 sm:w-[60px] lg:w-20 pointer-events-none">
+        <PaStack side="right" />
       </div>
 
       {/* ── STAGE ────────────────────────────────────────────── */}

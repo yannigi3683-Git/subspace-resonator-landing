@@ -99,6 +99,17 @@
   filter: blur(4px);
 }
 
+/* ── PA stack power glow (compositor-only: opacity/transform, no JS) ── */
+.radio-amp-glow {
+  background: radial-gradient(58% 50% at 50% 36%, rgba(38, 198, 218, 0.22), rgba(123, 47, 190, 0.12) 55%, transparent 72%);
+  filter: blur(8px);
+  animation: radio-amp-glow 9s ease-in-out infinite;
+}
+@keyframes radio-amp-glow {
+  0%, 100% { opacity: 0.45; transform: scale(0.96); }
+  50% { opacity: 0.8; transform: scale(1.04); }
+}
+
 /* ── Floating motes (ambient dancefloor life) ──────────────────── */
 .radio-mote {
   border-radius: 9999px;
@@ -122,6 +133,7 @@
   .radio-pulse,
   .radio-spot,
   .radio-mote,
+  .radio-amp-glow,
   .pixel-blink { animation: none; }
 }
 
