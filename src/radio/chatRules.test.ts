@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateMessage, formatSlowModeRemaining } from './chatRules';
+import { validateMessage, formatSlowModeRemaining, chatSinceFloor } from './chatRules';
 
 describe('validateMessage', () => {
   it('rejects empty string', () => {
@@ -34,5 +34,24 @@ describe('formatSlowModeRemaining', () => {
     expect(formatSlowModeRemaining(3000)).toBe('3s');
     expect(formatSlowModeRemaining(3001)).toBe('4s');
     expect(formatSlowModeRemaining(1)).toBe('1s');
+  });
+});
+
+describe('chatSinceFloor', () => {
+  const now = new Date(2026, 5, 21, 15, 0, 0).getTime(); // local time, TZ-stable
+  const todayMidnight = new Date(2026, 5, 21).toISOString();
+
+  it('no session (null firstSeen) floors to now, so chat starts empty', () => {
+    expect(chatSinceFloor(null, now)).toBe(new Date(now).toISOString());
+  });
+
+  it('keeps firstSeen when it is later than the start of today (refresh survives)', () => {
+    const firstSeen = new Date(2026, 5, 21, 14, 30, 0).toISOString();
+    expect(chatSinceFloor(firstSeen, now)).toBe(firstSeen);
+  });
+
+  it('floors to start of today when firstSeen is from a previous day (date change resets)', () => {
+    const yesterday = new Date(2026, 5, 20, 23, 0, 0).toISOString();
+    expect(chatSinceFloor(yesterday, now)).toBe(todayMidnight);
   });
 });
