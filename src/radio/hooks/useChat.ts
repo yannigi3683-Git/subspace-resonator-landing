@@ -19,18 +19,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
 
   useEffect(() => {
     let cancelled = false;
-    setMessages([]); // clear on session change so old broadcasts don't bleed through
-
-    supabase
-      .from('chat_messages')
-      .select('id, uid, display_name, avatar_id, body, is_host, created_at')
-      .order('created_at', { ascending: false })
-      .limit(50)
-      .then(({ data }) => {
-        if (!cancelled && data) {
-          setMessages((data as ChatMessage[]).reverse());
-        }
-      });
+    setMessages([]);
 
     const channel = supabase
       .channel(`chat-inserts-${sessionId ?? 'default'}`)
