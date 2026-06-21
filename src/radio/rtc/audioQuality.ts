@@ -20,6 +20,11 @@ export const QUALITY_LABELS: Record<QualityKey, string> = {
 // Never drop below this — stereo Opus stays usable for music down to ~40 kbps.
 export const BITRATE_FLOOR_KBPS = 40;
 
+/** True when the live bitrate has been pulled below its ceiling (i.e. it is actively adapting). */
+export function isBitrateAdapting(current: number, ceiling: number): boolean {
+  return current > 0 && current < ceiling;
+}
+
 const INCREASE_STEP_KBPS = 12;
 
 /**

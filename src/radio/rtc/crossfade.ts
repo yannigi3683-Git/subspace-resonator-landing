@@ -22,8 +22,8 @@ export function shouldStartCrossfade(c: CrossfadeCheck): boolean {
   return remaining > 0 && remaining <= c.crossfadeSec;
 }
 
-/** Clamp the crossfade length to the supported 1–12 second range (whole seconds). */
+/** Clamp the crossfade length to the supported 1–30 second range (whole seconds). */
 export function clampCrossfadeSec(value: number): number {
   if (!Number.isFinite(value)) return 1;
-  return Math.max(1, Math.min(12, Math.round(value)));
+  return Math.max(1, Math.min(30, Math.round(value)));
 }

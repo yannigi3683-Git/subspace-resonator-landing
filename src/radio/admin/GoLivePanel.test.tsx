@@ -510,7 +510,7 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
 
     const activeEl = lastAudio();
     activeEl.duration = 100;
-    activeEl.currentTime = 96; // 4s left, default fade 6s
+    activeEl.currentTime = 96; // 4s left, default fade 12s
 
     act(() => { activeEl.ontimeupdate?.(); });
 
@@ -532,7 +532,7 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     vi.useFakeTimers();
     try {
       act(() => { activeEl.ontimeupdate?.(); });
-      act(() => { vi.advanceTimersByTime(6000); });
+      act(() => { vi.advanceTimersByTime(12000); }); // default fade window
       expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
     } finally {
       vi.useRealTimers();

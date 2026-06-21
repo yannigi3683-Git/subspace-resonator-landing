@@ -9,6 +9,18 @@ export interface UsePresenceResult {
   isBanned: boolean;
 }
 
+/**
+ * Collapse presence entries that share a uid down to one (keeping the most recent).
+ * Supabase presence is keyed per connection, so a refresh leaves a stale entry alongside
+ * the fresh one until its leave fires — both carry the same stable uid. Without this, one
+ * listener counts as two and the crowd shows duplicate avatars.
+ */
+export function dedupeByUid(list: PresenceEntry[]): PresenceEntry[] {
+  const byUid = new Map<string, PresenceEntry>();
+  for (const entry of list) byUid.set(entry.uid, entry);
+  return [...byUid.values()];
+}
+
 export function usePresence(supabase: SupabaseClient, identity: Identity, uid: string): UsePresenceResult {
   const [presenceList, setPresenceList] = useState<PresenceEntry[]>([]);
   const [isKicked, setIsKicked] = useState(false);
@@ -25,7 +37,7 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
         avatarId: p.avatarId,
         position: p.position,
       }));
-      setPresenceList(list);
+      setPresenceList(dedupeByUid(list));
     };
 
     channel

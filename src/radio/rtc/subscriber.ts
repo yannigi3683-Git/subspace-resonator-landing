@@ -19,10 +19,10 @@ export class Subscriber {
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
-    // A one-way broadcast tolerates latency, so we buffer ~1.2s by default. A deeper buffer
+    // A one-way broadcast tolerates latency, so we buffer ~2.0s by default. A deeper buffer
     // absorbs jitter and reduces cuts, but too deep makes the audio engine "catch up" after a
-    // burst (audible time-warp). 1.2s balances both; the host can tune it live via the slider.
-    private bufferMs = 1200,
+    // burst (audible time-warp). 2.0s favours stability; the host can tune it live via the slider.
+    private bufferMs = 2000,
   ) {}
 
   // Change the jitter buffer live (host can raise it for everyone when cuts are reported).

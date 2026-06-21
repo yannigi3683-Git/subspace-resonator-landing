@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 interface ButterchurnVizProps {
   getAudioContext: () => AudioContext | null;
@@ -7,14 +7,21 @@ interface ButterchurnVizProps {
   active: boolean;
   /** Seconds between preset changes. */
   cycleSeconds?: number;
+  /** Called when init fails (no WebGL / load error) so the caller can show a fallback. */
+  onFailed?: () => void;
 }
 
 // MilkDrop 2 visualizer (Butterchurn) — the highest-rated Winamp visualizer, ported to WebGL.
 // Lazy-loaded so the heavy lib + preset pack are a separate chunk only on the live room.
 // Auto-cycles presets with blend transitions for the "overwhelming" psychedelic effect.
-// Falls back to nothing (caller shows the lightweight canvas) on reduced-motion or no WebGL.
-export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleSeconds = 18 }: ButterchurnVizProps) {
+// Any failure (no WebGL, chunk load error, render throw) is surfaced — never swallowed —
+// so the caller's lightweight fallback can take over and the cause is visible in the console.
+export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleSeconds = 18, onFailed }: ButterchurnVizProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [failed, setFailed] = useState(false);
+  const onFailedRef = useRef(onFailed);
+  onFailedRef.current = onFailed;
+  const fail = () => { setFailed(true); onFailedRef.current?.(); };
 
   useEffect(() => {
     if (!active) return;
@@ -24,15 +31,27 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
     const canvas = canvasRef.current;
     const ctx = getAudioContext();
     const source = getAudioSource();
-    if (!canvas || !ctx || !source) return;
+    if (!canvas || !ctx || !source) {
+      console.warn('[butterchurn] missing prerequisite', { canvas: !!canvas, ctx: !!ctx, source: !!source });
+      fail();
+      return;
+    }
 
     let cancelled = false;
     let raf = 0;
     let cycle: ReturnType<typeof setInterval> | null = null;
-    let onResize: (() => void) | null = null;
+    let ro: ResizeObserver | null = null;
+
+    const sizeOf = () => ({
+      w: canvas.clientWidth || canvas.parentElement?.clientWidth || window.innerWidth,
+      h: canvas.clientHeight || canvas.parentElement?.clientHeight || window.innerHeight,
+    });
 
     (async () => {
       try {
+        // A suspended context (autoplay not yet resumed) feeds the analyser silence; resume it.
+        if (ctx.state === 'suspended') await ctx.resume().catch(() => {});
+
         const [bcMod, presetsMod] = await Promise.all([
           import('butterchurn'),
           import('butterchurn-presets'),
@@ -42,11 +61,10 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
         const presetsApi = presetsMod.default ?? presetsMod;
         const presets = presetsApi.getPresets();
         const names = Object.keys(presets);
-        if (!names.length) return;
+        if (!names.length) throw new Error('no presets');
 
         const dpr = Math.min(1.5, window.devicePixelRatio || 1);
-        const w = canvas.clientWidth || window.innerWidth;
-        const h = canvas.clientHeight || window.innerHeight;
+        const { w, h } = sizeOf();
 
         const viz = butterchurn.createVisualizer(ctx, canvas, {
           width: w,
@@ -62,21 +80,35 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
           if (!document.hidden && !cancelled) viz.loadPreset(presets[pick()], 5.0);
         }, cycleSeconds * 1000);
 
-        onResize = () => {
-          const ww = canvas.clientWidth || window.innerWidth;
-          const hh = canvas.clientHeight || window.innerHeight;
-          viz.setRendererSize(ww, hh);
-        };
-        window.addEventListener('resize', onResize);
+        ro = new ResizeObserver(() => {
+          const s = sizeOf();
+          if (s.w > 0 && s.h > 0) viz.setRendererSize(s.w, s.h);
+        });
+        ro.observe(canvas);
 
+        let loggedRenderError = false;
         const render = () => {
           if (cancelled) return;
-          if (!document.hidden) viz.render();
+          if (!document.hidden) {
+            try {
+              viz.render();
+            } catch (err) {
+              // Surface the first failure, then keep trying (a transient frame error should
+              // not permanently blank the visualizer).
+              if (!loggedRenderError) {
+                loggedRenderError = true;
+                console.error('[butterchurn] render error', err);
+              }
+            }
+          }
           raf = requestAnimationFrame(render);
         };
         render();
-      } catch {
-        // No WebGL / load failure — caller's lightweight fallback remains visible.
+      } catch (err) {
+        // No WebGL / chunk load failure / API change — show nothing here; the caller's
+        // lightweight fallback remains visible. Surface the cause for debugging.
+        console.error('[butterchurn] init failed', err);
+        if (!cancelled) fail();
       }
     })();
 
@@ -84,9 +116,16 @@ export function ButterchurnViz({ getAudioContext, getAudioSource, active, cycleS
       cancelled = true;
       cancelAnimationFrame(raf);
       if (cycle) clearInterval(cycle);
-      if (onResize) window.removeEventListener('resize', onResize);
+      if (ro) ro.disconnect();
     };
   }, [active, getAudioContext, getAudioSource, cycleSeconds]);
 
-  return <canvas ref={canvasRef} className="w-full h-full" aria-hidden="true" />;
+  return (
+    <canvas
+      ref={canvasRef}
+      className="w-full h-full"
+      aria-hidden="true"
+      data-failed={failed ? 'true' : undefined}
+    />
+  );
 }

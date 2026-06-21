@@ -5,7 +5,9 @@ import { useChat } from '../hooks/useChat';
 import { usePresence } from '../hooks/usePresence';
 import { useListenerAudio } from '../hooks/useListenerAudio';
 import { useHeatMeter } from '../hooks/useHeatMeter';
+import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
+import { NowPlayingCard } from './NowPlayingCard';
 import { Chat } from './Chat';
 import { ChatInput } from './ChatInput';
 import { PresenceList } from './PresenceList';
@@ -24,6 +26,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { playing, ready, resume, volume, setVolume, getFrequencyData, getAudioContext, getAudioSource } =
     useListenerAudio(supabase, station);
   const { heat, myVote, vote } = useHeatMeter(supabase, uid);
+  const nowPlaying = useNowPlaying(supabase);
 
   if (isKicked) {
     return (
@@ -46,6 +49,8 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
           getAudioSource={getAudioSource}
           playing={playing}
         />
+
+        <NowPlayingCard name={nowPlaying.name} art={nowPlaying.art} visible={nowPlaying.visible && playing} />
 
         {/* Browsers block autoplay until the listener interacts, so surface an explicit
             control. Shows "connecting" until the host stream attaches. */}

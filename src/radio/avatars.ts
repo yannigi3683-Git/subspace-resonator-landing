@@ -37,3 +37,12 @@ export const DEFAULT_NAMES = [
 export function randomDefaultName(): string {
   return DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)];
 }
+
+// A high-entropy suggestion: base name + a 3-digit suffix. With 20 bases x 900 suffixes,
+// two listeners who both accept the suggestion practically never collide (the room runs
+// pre-auth, so we can't read presence to pick an unused name; the suffix is the race-free way).
+export function randomUniqueName(): string {
+  const base = DEFAULT_NAMES[Math.floor(Math.random() * DEFAULT_NAMES.length)];
+  const suffix = Math.floor(Math.random() * 900) + 100; // 100-999
+  return `${base}${suffix}`;
+}

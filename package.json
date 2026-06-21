@@ -21,6 +21,7 @@
     "butterchurn-presets": "^2.4.7",
     "framer-motion": "^12.40.0",
     "lucide-react": "^1.17.0",
+    "music-metadata": "^11.13.0",
     "postcss": "^8.5.15",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",

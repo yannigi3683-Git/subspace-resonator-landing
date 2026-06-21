@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Disc3 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
@@ -55,7 +56,11 @@ export function DanceFloor({
   const reduced =
     typeof window !== 'undefined' &&
     (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ?? false);
-  const useButterchurn = !reduced && !!getAudioContext && !!getAudioSource;
+  const [vizFailed, setVizFailed] = useState(false);
+  // MilkDrop is the main backdrop; if it can't run (no WebGL / load error) we fall back to the
+  // lightweight radial visualizer so the floor is never blank.
+  const showButterchurn = !reduced && !!getAudioContext && !!getAudioSource && !vizFailed;
+  const showFallbackViz = !showButterchurn && !!getFrequencyData;
 
   return (
     <div className="relative w-full h-full overflow-hidden bg-[#05060f]">
@@ -68,18 +73,19 @@ export function DanceFloor({
       <div className="absolute inset-x-0 bottom-0 h-[38%] radio-grid" aria-hidden="true" />
 
       {/* Full-bleed MilkDrop (Butterchurn) visualizer — the main psychedelic backdrop */}
-      {useButterchurn && (
+      {showButterchurn && (
         <div className="absolute inset-0 z-[1] pointer-events-none" data-testid="butterchurn">
           <ButterchurnViz
             getAudioContext={getAudioContext!}
             getAudioSource={getAudioSource!}
             active={!!playing}
+            onFailed={() => setVizFailed(true)}
           />
         </div>
       )}
 
-      {/* Lightweight radial visualizer — fallback when MilkDrop can't run (reduced motion) */}
-      {!useButterchurn && getFrequencyData && (
+      {/* Lightweight radial visualizer — fallback when MilkDrop can't run (reduced motion / no WebGL) */}
+      {showFallbackViz && (
         <div
           className="absolute left-1/2 top-[60%] -translate-x-1/2 -translate-y-1/2 w-[72vmin] h-[72vmin] max-w-[520px] max-h-[520px] z-[2] pointer-events-none"
           data-testid="visualizer"

@@ -1,5 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { nextBitrateKbps, tuneOpus, QUALITY_PRESETS, BITRATE_FLOOR_KBPS } from './audioQuality';
+import { nextBitrateKbps, tuneOpus, QUALITY_PRESETS, BITRATE_FLOOR_KBPS, isBitrateAdapting } from './audioQuality';
+
+describe('isBitrateAdapting', () => {
+  it('is true only when current is between 1 and below the ceiling', () => {
+    expect(isBitrateAdapting(96, 128)).toBe(true);
+    expect(isBitrateAdapting(128, 128)).toBe(false); // at ceiling
+    expect(isBitrateAdapting(0, 128)).toBe(false); // not yet reporting
+  });
+});
 
 describe('nextBitrateKbps (adaptive control)', () => {
   const ceiling = 128;

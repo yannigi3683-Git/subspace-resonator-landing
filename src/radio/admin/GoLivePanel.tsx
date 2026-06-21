@@ -1,13 +1,16 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
-import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3 } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 import { shouldStartCrossfade } from '../rtc/crossfade';
-import { QUALITY_PRESETS, QUALITY_LABELS, type QualityKey } from '../rtc/audioQuality';
+import { QUALITY_PRESETS, QUALITY_LABELS, isBitrateAdapting, type QualityKey } from '../rtc/audioQuality';
 import { formatClock } from '../format';
+import { loadHostPrefs, saveHostPrefs } from '../hostPrefs';
+import { extractArtwork } from '../artwork';
+import type { NowPlayingMode } from '../nowPlaying';
 import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
@@ -36,13 +39,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [queue, setQueue] = useState<DeckTrack[]>([]);
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [currentTrackId, setCurrentTrackId] = useState('');
+  const [currentArtUrl, setCurrentArtUrl] = useState<string | null>(null);
+  const [npMode, setNpMode] = useState<NowPlayingMode>('always');
   const [filePlaying, setFilePlaying] = useState(false);
+  // Host-saved defaults (crossfade / jitter buffer), falling back to the built-ins.
+  const [savedPrefs, setSavedPrefs] = useState(loadHostPrefs);
   const [autoMix, setAutoMix] = useState(true);
-  const [crossfadeSec, setCrossfadeSec] = useState(6);
+  const [crossfadeSec, setCrossfadeSec] = useState(savedPrefs.crossfadeSec);
   const [quality, setQuality] = useState<QualityKey>('hq');
   const [autoPilot, setAutoPilot] = useState(true);
   const [stereoMode, setStereoMode] = useState(true);
-  const [bufferSec, setBufferSec] = useState(1.2);
+  const [bufferSec, setBufferSec] = useState(savedPrefs.bufferSec);
   const [currentBitrate, setCurrentBitrate] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
   const [deviceConnected, setDeviceConnected] = useState(false);
@@ -74,13 +81,22 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   // Control channel to listeners (jitter buffer setting; now-playing later). Re-broadcast on
   // an interval so late joiners pick up the current buffer.
   const npChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
-  const npLastSentRef = useRef(0);
+  // Separate broadcast channel for now-playing (track + art + display mode), kept off the
+  // jitter-buffer control topic so the listener can subscribe to each independently.
+  const nowPlayingChannelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
   const controlHeartbeatRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const bufferSecRef = useRef(1.2);
+  // Live now-playing facts read by publishNowPlaying() and the 4s heartbeat.
+  const npModeRef = useRef<NowPlayingMode>('always');
+  npModeRef.current = npMode;
+  const currentNameRef = useRef('');
+  const currentIdRef = useRef('');
+  const artThumbRef = useRef<string | null>(null); // data URL broadcast to listeners
+  const artObjUrlRef = useRef<string | null>(null); // object URL for the host's own display
+  const bufferSecRef = useRef(savedPrefs.bufferSec);
   bufferSecRef.current = bufferSec;
   const autoMixRef = useRef(false);
   autoMixRef.current = autoMix;
-  const crossfadeRef = useRef(6);
+  const crossfadeRef = useRef(savedPrefs.crossfadeSec);
   crossfadeRef.current = crossfadeSec;
   const fileGainRef = useRef(1);
   fileGainRef.current = fileGain;
@@ -219,6 +235,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       supabase.removeChannel(npChannelRef.current);
       npChannelRef.current = null;
     }
+    if (nowPlayingChannelRef.current) {
+      supabase.removeChannel(nowPlayingChannelRef.current);
+      nowPlayingChannelRef.current = null;
+    }
+  }
+
+  function clearArtwork() {
+    if (artObjUrlRef.current) {
+      URL.revokeObjectURL(artObjUrlRef.current);
+      artObjUrlRef.current = null;
+    }
+    artThumbRef.current = null;
+    setCurrentArtUrl(null);
   }
 
   function resetCrossfade() {
@@ -280,10 +309,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         if (status === 'SUBSCRIBED') publishBuffer(Math.round(bufferSecRef.current * 1000));
       });
       npChannelRef.current = channel;
-      controlHeartbeatRef.current = setInterval(
-        () => publishBuffer(Math.round(bufferSecRef.current * 1000)),
-        4000,
-      );
+
+      // Now-playing channel (track + art + display mode), pushed on join and on the heartbeat.
+      const npChannel = supabase.channel('room:nowplaying', { config: { broadcast: { self: false } } });
+      npChannel.subscribe((status) => {
+        if (status === 'SUBSCRIBED') publishNowPlaying();
+      });
+      nowPlayingChannelRef.current = npChannel;
+
+      controlHeartbeatRef.current = setInterval(() => {
+        publishBuffer(Math.round(bufferSecRef.current * 1000));
+        publishNowPlaying();
+      }, 4000);
 
       // Add selected line-in / virtual device (Traktor / Rekordbox virtual cable).
       // Track whether a device is actually in the mix so DISCONNECT INPUT reflects reality
@@ -355,6 +392,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setStatus('idle');
     setCurrentTrackName('');
     setCurrentTrackId('');
+    currentNameRef.current = '';
+    currentIdRef.current = '';
+    clearArtwork();
     setFilePlaying(false);
     setCurrentBitrate(0);
     setPosition({ cur: 0, dur: 0 });
@@ -365,19 +405,58 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   // ── File deck transport ──────────────────────────────────────────────
   // All transport swaps the .src of the single mixer-attached <audio> element; it never
   // creates a second MediaElementSource (forbidden per element by the Web Audio API).
-  function publishNowPlaying(name: string, cur: number, dur: number) {
-    npChannelRef.current?.send({ type: 'broadcast', event: 'np', payload: { name, cur, dur } });
-    npLastSentRef.current = Date.now();
+  function publishNowPlaying() {
+    nowPlayingChannelRef.current?.send({
+      type: 'broadcast',
+      event: 'np',
+      payload: { name: currentNameRef.current, art: artThumbRef.current, mode: npModeRef.current },
+    });
   }
 
   function publishBuffer(ms: number) {
     npChannelRef.current?.send({ type: 'broadcast', event: 'buffer', payload: { bufferMs: ms } });
   }
 
+  function handleNpMode(mode: NowPlayingMode) {
+    setNpMode(mode);
+    npModeRef.current = mode;
+    publishNowPlaying();
+  }
+
+  // Parse + broadcast the current track's embedded cover art. Guarded by track id so a slow
+  // parse from a previous track never overwrites the art of the one now playing.
+  async function refreshArtwork(file: File, trackId: string) {
+    clearArtwork();
+    publishNowPlaying(); // name now, art (if any) follows
+    try {
+      const art = await extractArtwork(file);
+      if (!art || currentIdRef.current !== trackId) {
+        art?.objectUrl && URL.revokeObjectURL(art.objectUrl);
+        return;
+      }
+      artObjUrlRef.current = art.objectUrl;
+      artThumbRef.current = art.thumbDataUrl;
+      setCurrentArtUrl(art.objectUrl);
+      publishNowPlaying();
+    } catch {
+      // Art is optional — leave the name-only now-playing in place.
+    }
+  }
+
   function handleBufferChange(sec: number) {
     setBufferSec(sec);
     publishBuffer(Math.round(sec * 1000));
   }
+
+  // Persist the current buffer + crossfade so the next broadcast opens at these values.
+  function handleSaveDefaults() {
+    const prefs = { bufferSec, crossfadeSec };
+    saveHostPrefs(prefs);
+    setSavedPrefs(prefs);
+  }
+
+  const defaultsDirty =
+    bufferSec !== savedPrefs.bufferSec || crossfadeSec !== savedPrefs.crossfadeSec;
 
   function handleAutoPilot(on: boolean) {
     setAutoPilot(on);
@@ -392,7 +471,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     el.src = cur.url;
     setCurrentTrackName(cur.name);
     setCurrentTrackId(cur.id);
-    publishNowPlaying(cur.name, 0, 0); // duration follows once metadata loads via timeupdate
+    currentNameRef.current = cur.name;
+    currentIdRef.current = cur.id;
+    void refreshArtwork(cur.file, cur.id); // sets art-less now-playing first, then art
     if (autoplay) {
       el.play().catch(() => {});
       setFilePlaying(true);
@@ -487,6 +568,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     if (cur) {
       setCurrentTrackName(cur.name);
       setCurrentTrackId(cur.id);
+      currentNameRef.current = cur.name;
+      currentIdRef.current = cur.id;
+      void refreshArtwork(cur.file, cur.id);
     }
     setFilePlaying(true);
     crossfadingRef.current = false;
@@ -589,6 +673,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   const isBusy = status === 'starting' || status === 'ending';
+  // The bitrate ceiling actually in force: auto-pilot rides up to HQ, manual pins the chosen tier.
+  const activeCeiling = autoPilot ? QUALITY_PRESETS.hq : QUALITY_PRESETS[quality];
 
   return (
     <section data-testid="go-live-panel" className="flex flex-col gap-6 p-6 section-border">
@@ -643,7 +729,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       </label>
 
       {/* Device select */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
         <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
           AUDIO INPUT (YOUR MICROPHONE, OR TRAKTOR / REKORDBOX VIRTUAL DEVICE)
         </span>
@@ -697,7 +783,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       </div>
 
       {/* Broadcast tuning: auto-pilot, manual quality/channels, listener buffer */}
-      <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-3 pt-5 border-t border-border/50">
         <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
           BROADCAST TUNING
         </span>
@@ -712,6 +798,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           AUTO-PILOT
           <span className="text-[10px] text-muted-foreground">(auto-tunes quality to your line)</span>
         </label>
+        {autoPilot && (
+          <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
+            Continuously tunes the bitrate to your connection while you broadcast, in real time.
+            No need to stop and restart. You see it move in the readout below when live.
+          </p>
+        )}
 
         {!autoPilot && (
           <>
@@ -759,7 +851,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               </div>
               {status === 'live' && (
                 <span className="font-mono text-[10px] text-muted-foreground">
-                  Channel change applies on next GO LIVE.
+                  Switching stereo / mono takes effect on your next GO LIVE (it re-negotiates the
+                  stream). Bitrate still adapts live.
                 </span>
               )}
             </div>
@@ -786,10 +879,28 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             Lower = tighter timing but more risk of cuts. Tune to taste.
           </span>
         </label>
+
+        {/* Persist buffer + crossfade as the opening defaults for future broadcasts. */}
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={handleSaveDefaults}
+            disabled={!defaultsDirty}
+            data-testid="save-defaults-btn"
+            className="font-mono text-[10px] tracking-widest border border-border px-3 min-h-[44px] hover:bg-primary/10 disabled:opacity-40 transition-colors"
+          >
+            SAVE AS MY DEFAULT
+          </button>
+          <span className="font-mono text-[10px] text-muted-foreground">
+            {defaultsDirty
+              ? `Saved: ${savedPrefs.bufferSec.toFixed(1)}s buffer / ${savedPrefs.crossfadeSec}s fade`
+              : 'These open on every broadcast.'}
+          </span>
+        </div>
       </div>
 
       {/* File deck */}
-      <div className="flex flex-col gap-2">
+      <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
         <div className="flex items-center justify-between">
           <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
             FILE DECK {queue.length > 0 && `(${queue.length})`}
@@ -912,7 +1023,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                 <input
                   type="range"
                   min={1}
-                  max={12}
+                  max={30}
                   step={1}
                   value={crossfadeSec}
                   onChange={(e) => setCrossfadeSec(Number(e.target.value))}
@@ -945,25 +1056,60 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
 
       {/* Live status: what's going out + output level + listener count */}
       {status === 'live' && (
-        <div className="flex flex-col gap-2">
+        <div className="flex flex-col gap-2 pt-5 border-t border-border/50">
           <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
             WHAT&apos;S GOING OUT
           </span>
           {currentTrackName ? (
-            <div className="flex items-center justify-between gap-2">
-              <p className="font-mono text-xs text-primary truncate min-w-0">
-                <span className="text-muted-foreground">NOW </span>
-                {currentTrackName}
-              </p>
-              {position.dur > 0 && (
-                <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
-                  {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 shrink-0 rounded-md overflow-hidden bg-muted/30 border border-border flex items-center justify-center">
+                {currentArtUrl ? (
+                  <img src={currentArtUrl} alt="" className="w-full h-full object-cover" />
+                ) : (
+                  <Disc3 className="w-5 h-5 text-primary" aria-hidden="true" strokeWidth={1.5} />
+                )}
+              </div>
+              <div className="min-w-0 flex-1 flex items-center justify-between gap-2">
+                <p className="font-mono text-xs text-primary truncate min-w-0">
+                  <span className="text-muted-foreground">NOW </span>
+                  {currentTrackName}
                 </p>
-              )}
+                {position.dur > 0 && (
+                  <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
+                    {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+                  </p>
+                )}
+              </div>
             </div>
           ) : (
             <p className="font-mono text-xs text-muted-foreground">Live input (mic / device)</p>
           )}
+
+          {/* What listeners see of now-playing (track + art). */}
+          <div className="flex items-center gap-2 flex-wrap mt-1">
+            <span className="font-mono text-[10px] tracking-widest text-muted-foreground">
+              SHOW TO LISTENERS
+            </span>
+            <div className="flex border border-border w-fit" role="group" aria-label="Now playing visibility">
+              {([['OFF', 'off'], ['ALWAYS', 'always'], ['PEEK', 'peek']] as const).map(([label, val]) => (
+                <button
+                  key={val}
+                  type="button"
+                  onClick={() => handleNpMode(val)}
+                  aria-pressed={npMode === val}
+                  className={[
+                    'font-mono text-[10px] tracking-widest px-3 min-h-[44px] transition-colors',
+                    npMode === val ? 'bg-primary/20 text-foreground' : 'text-muted-foreground hover:bg-primary/10',
+                  ].join(' ')}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            <span className="font-mono text-[10px] text-muted-foreground">
+              {npMode === 'peek' ? 'Pops in 15s each minute + on track change.' : npMode === 'off' ? 'Hidden from listeners.' : 'Always visible to listeners.'}
+            </span>
+          </div>
           {deckRef.current.next && (
             <p className="font-mono text-[11px] text-muted-foreground truncate">
               <span>NEXT </span>
@@ -979,8 +1125,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               LISTENERS: {listenerCount}
             </p>
             <p className="font-mono text-xs text-muted-foreground tabular-nums">
+              {autoPilot && <span className="text-primary">AUTO </span>}
               {currentBitrate ? `${currentBitrate} kbps` : '— kbps'}
-              {currentBitrate > 0 && currentBitrate < QUALITY_PRESETS[quality] && (
+              {isBitrateAdapting(currentBitrate, activeCeiling) && (
                 <span className="text-amber-400"> (adapting)</span>
               )}
             </p>
@@ -988,26 +1135,28 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         </div>
       )}
 
-      {/* GO LIVE / END */}
-      {(status === 'idle' || status === 'starting' || status === 'error') ? (
-        <button
-          onClick={handleGoLive}
-          disabled={isBusy}
-          data-testid="go-live-btn"
-          className="font-mono text-sm tracking-widest border border-primary px-6 min-h-[44px] hover:bg-primary/10 disabled:opacity-40 transition-colors"
-        >
-          {status === 'starting' ? 'CONNECTING...' : 'GO LIVE'}
-        </button>
-      ) : (
-        <button
-          onClick={handleEnd}
-          disabled={isBusy}
-          data-testid="end-btn"
-          className="font-mono text-sm tracking-widest border border-destructive px-6 min-h-[44px] hover:bg-destructive/10 disabled:opacity-40 transition-colors"
-        >
-          {status === 'ending' ? 'ENDING...' : 'END BROADCAST'}
-        </button>
-      )}
+      {/* GO LIVE / END — single primary action, pinned to the bottom of the console. */}
+      <div className="sticky bottom-0 -mx-6 -mb-6 px-6 py-4 bg-background/85 backdrop-blur border-t border-border">
+        {(status === 'idle' || status === 'starting' || status === 'error') ? (
+          <button
+            onClick={handleGoLive}
+            disabled={isBusy}
+            data-testid="go-live-btn"
+            className="w-full font-mono text-sm font-bold tracking-[0.3em] bg-primary text-primary-foreground px-6 min-h-[52px] rounded hover:bg-primary/90 disabled:opacity-40 transition-colors"
+          >
+            {status === 'starting' ? 'CONNECTING...' : 'GO LIVE'}
+          </button>
+        ) : (
+          <button
+            onClick={handleEnd}
+            disabled={isBusy}
+            data-testid="end-btn"
+            className="w-full font-mono text-sm font-bold tracking-[0.3em] bg-destructive text-destructive-foreground px-6 min-h-[52px] rounded hover:bg-destructive/90 disabled:opacity-40 transition-colors"
+          >
+            {status === 'ending' ? 'ENDING...' : 'END BROADCAST'}
+          </button>
+        )}
+      </div>
 
     </section>
   );

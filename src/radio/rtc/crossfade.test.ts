@@ -43,15 +43,16 @@ describe('shouldStartCrossfade', () => {
 });
 
 describe('clampCrossfadeSec', () => {
-  it('keeps values within 1–12', () => {
+  it('keeps values within 1–30', () => {
     expect(clampCrossfadeSec(6)).toBe(6);
     expect(clampCrossfadeSec(1)).toBe(1);
     expect(clampCrossfadeSec(12)).toBe(12);
+    expect(clampCrossfadeSec(30)).toBe(30);
   });
 
   it('clamps out-of-range values', () => {
     expect(clampCrossfadeSec(0)).toBe(1);
-    expect(clampCrossfadeSec(99)).toBe(12);
+    expect(clampCrossfadeSec(99)).toBe(30);
   });
 
   it('rounds fractional values and defaults NaN to 1', () => {

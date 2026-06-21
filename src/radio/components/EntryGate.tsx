@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
+import { Shuffle } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { AVATARS, randomDefaultName } from '../avatars';
+import { AVATARS, randomUniqueName } from '../avatars';
 import { createIdentity, saveIdentity } from '../identity';
 import type { Identity } from '../types';
 import { TurnstileWidget } from './TurnstileWidget';
@@ -12,7 +13,7 @@ interface EntryGateProps {
 
 export function EntryGate({ supabase, onEntry }: EntryGateProps) {
   const [selectedAvatarId, setSelectedAvatarId] = useState('');
-  const [name, setName] = useState(() => randomDefaultName());
+  const [name, setName] = useState(() => randomUniqueName());
   const [captchaToken, setCaptchaToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -80,17 +81,29 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
 
       <div className="w-full max-w-xs mb-6">
         <label htmlFor="entry-name" className="font-mono text-[#888] text-xs uppercase tracking-widest block mb-2">
-          Your name
+          Your name <span className="text-[#666] normal-case tracking-normal">(type your own or keep the suggestion)</span>
         </label>
-        <input
-          id="entry-name"
-          type="text"
-          maxLength={24}
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          className="w-full bg-[#1a0030] border border-[#333] text-white font-mono px-4 py-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] placeholder:text-[#555]"
-          placeholder="Your name"
-        />
+        <div className="flex gap-2">
+          <input
+            id="entry-name"
+            type="text"
+            maxLength={24}
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onFocus={(e) => e.target.select()}
+            className="flex-1 min-w-0 bg-[#1a0030] border border-[#333] text-white font-mono px-4 py-3 rounded-lg focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] placeholder:text-[#555]"
+            placeholder="Your name"
+          />
+          <button
+            type="button"
+            onClick={() => setName(randomUniqueName())}
+            aria-label="Shuffle a new name suggestion"
+            title="Shuffle a new suggestion"
+            className="shrink-0 w-12 flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg hover:text-white hover:border-[#7B2FBE] transition-colors min-h-[44px]"
+          >
+            <Shuffle className="w-4 h-4" aria-hidden="true" strokeWidth={1.5} />
+          </button>
+        </div>
       </div>
 
       <TurnstileWidget onToken={setCaptchaToken} />
