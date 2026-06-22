@@ -119,7 +119,7 @@ describe('Publisher audio bitrate (FR-4)', () => {
 });
 
 describe('Publisher ICE servers', () => {
-  it('builds the peer connection with the TURN server the broker returns', async () => {
+  it('forces relay and includes the TURN server when the broker returns one', async () => {
     let pcConfig: RTCConfiguration | undefined;
     vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
       pcConfig = cfg;
@@ -134,6 +134,23 @@ describe('Publisher ICE servers', () => {
     await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
 
     expect(pcConfig?.iceServers).toEqual(expect.arrayContaining([turn]));
+    // Host upload over a corporate firewall must relay or its direct UDP binding dies.
+    expect(pcConfig?.iceTransportPolicy).toBe('relay');
+  });
+
+  it('uses all policy when no TURN credentials are available', async () => {
+    let pcConfig: RTCConfiguration | undefined;
+    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
+      pcConfig = cfg;
+      return mockPc;
+    }));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const phase = JSON.parse(init.body as string).phase;
+      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: null }) });
+      return Promise.resolve({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) });
+    }));
+    await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
+
     expect(pcConfig?.iceTransportPolicy).toBe('all');
   });
 });
