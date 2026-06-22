@@ -40,7 +40,12 @@ export class Subscriber {
 
   async connect(): Promise<void> {
     const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all', iceServers });
+    const hasTurn = iceServers.some(s =>
+      (Array.isArray(s.urls) ? s.urls : [s.urls]).some(
+        (u: string) => u.startsWith('turn:') || u.startsWith('turns:'),
+      ),
+    );
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: hasTurn ? 'relay' : 'all', iceServers });
 
     this.pc.ontrack = (event) => {
       // Track arrived — ICE succeeded, cancel the stall timeout.

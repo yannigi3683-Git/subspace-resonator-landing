@@ -30,6 +30,39 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
+describe('Subscriber ICE transport policy', () => {
+  it('uses relay policy when TURN credentials are in the ice servers', async () => {
+    let pcConfig: RTCConfiguration | undefined;
+    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
+      pcConfig = cfg;
+      return mockPc;
+    }));
+    const turn = { urls: 'turn:turn.cloudflare.com:443?transport=tcp', username: 'u', credential: 'c' };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const phase = JSON.parse(init.body as string).phase;
+      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: turn }) });
+      return Promise.resolve({ ok: false, status: 500 });
+    }));
+    await new Subscriber({ onStreamReady: vi.fn(), onDispatch: vi.fn() }, '/api/rtc-session', async () => 'tok').connect();
+    expect(pcConfig?.iceTransportPolicy).toBe('relay');
+  });
+
+  it('uses all policy when no TURN credentials are available', async () => {
+    let pcConfig: RTCConfiguration | undefined;
+    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
+      pcConfig = cfg;
+      return mockPc;
+    }));
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const phase = JSON.parse(init.body as string).phase;
+      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: null }) });
+      return Promise.resolve({ ok: false, status: 500 });
+    }));
+    await new Subscriber({ onStreamReady: vi.fn(), onDispatch: vi.fn() }, '/api/rtc-session', async () => 'tok').connect();
+    expect(pcConfig?.iceTransportPolicy).toBe('all');
+  });
+});
+
 describe('Subscriber getStats candidateType', () => {
   it('returns relay candidateType when the active candidate pair is a relay', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('stop')));
