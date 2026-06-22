@@ -46,7 +46,7 @@ export function useListenerAudio(
   }, []);
 
   const resume = useCallback(() => {
-    audioRef.current?.play().then(() => setPlaying(true)).catch(() => {});
+    audioRef.current?.play().catch(() => {});
   }, []);
 
   const retry = useCallback(() => {
@@ -86,6 +86,11 @@ export function useListenerAudio(
         const audio = new Audio();
         audio.volume = volume;
         audioRef.current = audio;
+        // Source of truth for `playing` is the element's real events, not the one-shot
+        // play() promise (which rejects with AbortError on renegotiation/reconnect while
+        // audio actually starts, leaving the "TAP TO LISTEN" overlay stuck up).
+        audio.onplaying = () => setPlaying(true);
+        audio.onpause = () => setPlaying(false);
 
         const sub = new Subscriber(
           {
@@ -94,7 +99,7 @@ export function useListenerAudio(
               silentRetryCountRef.current = 0;
               setConnectionError(false);
               setReady(true);
-              audio.play().then(() => setPlaying(true)).catch(() => {});
+              audio.play().catch(() => {});
             },
             onDispatch: (event) => {
               if (event.type === 'DISCONNECTED' || event.type === 'ERROR') {
@@ -119,6 +124,8 @@ export function useListenerAudio(
 
         cleanupRef.current = () => {
           sub.disconnect();
+          audio.onplaying = null;
+          audio.onpause = null;
           audio.pause();
           audio.srcObject = null;
           audioRef.current = null;

@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import type { SubscriberStats } from '../rtc/subscriber';
 import { Volume2, Music2, MessageSquare } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -30,9 +30,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const [mobileTab, setMobileTab] = useState<'stage' | 'chat'>('stage');
   const [unread, setUnread] = useState(0);
   const prevMsgCount = useRef(messages.length);
-  const [debugOpen, setDebugOpen] = useState(false);
   const [rtcStats, setRtcStats] = useState<SubscriberStats | null>(null);
-  const toggleDebug = useCallback(() => setDebugOpen(o => !o), []);
 
   useEffect(() => {
     const newCount = messages.length;
@@ -43,13 +41,13 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   }, [messages.length, mobileTab]);
 
   useEffect(() => {
-    if (!debugOpen) return;
+    if (!ready) { setRtcStats(null); return; }
     const id = setInterval(async () => {
       const s = await getStats();
       setRtcStats(s);
     }, 2000);
     return () => clearInterval(id);
-  }, [debugOpen, getStats]);
+  }, [ready, getStats]);
 
   if (isKicked) {
     return (
@@ -119,28 +117,19 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
             </div>
           )}
 
-          {/* Debug stats toggle — dim, unobtrusive, corner */}
-          <button
-            type="button"
-            onClick={toggleDebug}
-            className="absolute bottom-4 right-4 z-20 font-mono text-[9px] text-white/20 hover:text-white/50 transition-colors select-none"
-          >
-            {debugOpen ? '[CLOSE DEBUG]' : '[DEBUG]'}
-          </button>
-          {debugOpen && (
-            <div className="absolute bottom-10 right-4 z-20 font-mono text-[10px] text-white/50 bg-black/80 px-2 py-1 rounded whitespace-nowrap">
-              {rtcStats ? (
-                <>
-                  BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
-                  LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
-                  JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
-                  RTT: {Math.round(rtcStats.rttMs)}ms
-                </>
-              ) : (
-                'waiting for stats...'
-              )}
-            </div>
-          )}
+          {/* Debug stats: always-on readable pill (temporary, for cut diagnosis) */}
+          <div className="absolute top-3 right-3 z-30 font-mono text-[10px] text-white/80 bg-black/70 border border-white/15 px-2.5 py-1.5 rounded-md whitespace-nowrap pointer-events-none">
+            {rtcStats ? (
+              <>
+                BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
+                LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
+                JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
+                RTT: {Math.round(rtcStats.rttMs)}ms
+              </>
+            ) : (
+              'connecting…'
+            )}
+          </div>
         </div>
       </div>
 
