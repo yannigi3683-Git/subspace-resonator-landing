@@ -45,6 +45,20 @@ export class LocalDeck {
     }
   }
 
+  move(fromIdx: number, toIdx: number): void {
+    if (fromIdx === toIdx || fromIdx < 0 || toIdx < 0 ||
+        fromIdx >= this.queue.length || toIdx >= this.queue.length) return;
+    const [track] = this.queue.splice(fromIdx, 1);
+    this.queue.splice(toIdx, 0, track);
+    if (this.currentIndex === fromIdx) {
+      this.currentIndex = toIdx;
+    } else if (fromIdx < this.currentIndex && toIdx >= this.currentIndex) {
+      this.currentIndex--;
+    } else if (fromIdx > this.currentIndex && toIdx <= this.currentIndex) {
+      this.currentIndex++;
+    }
+  }
+
   advance(): boolean {
     if (this.currentIndex >= this.queue.length - 1) return false;
     this.currentIndex++;

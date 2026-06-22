@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3 } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVertical } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
@@ -38,6 +38,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [deviceGain, setDeviceGain] = useState(1);
   const [fileGain, setFileGain] = useState(1);
   const [queue, setQueue] = useState<DeckTrack[]>([]);
+  const dragSrcIdx = useRef<number | null>(null);
+  const [dragOverIdx, setDragOverIdx] = useState<number | null>(null);
   const [currentTrackName, setCurrentTrackName] = useState('');
   const [currentTrackId, setCurrentTrackId] = useState('');
   const [currentArtUrl, setCurrentArtUrl] = useState<string | null>(null);
@@ -371,16 +373,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       retryTimerRef.current = null;
     }
 
-    // End sequence: cut off new subscribers FIRST (server takes the station off the air
-    // using the admin token), then tear down locally.
+    // End sequence: cut off new subscribers FIRST (server takes the station off the air),
+    // then tear down locally. Track whether the server write succeeded so we can warn the
+    // host if the station stayed marked live in the DB (e.g. expired AAL2 session → 403).
+    let endOk = false;
     try {
-      await fetch('/api/rtc-session', {
+      const res = await fetch('/api/rtc-session', {
         method: 'POST',
         headers: { Authorization: `Bearer ${await authToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ phase: 'end-broadcast' }),
       });
+      endOk = res.ok;
     } catch {
-      // Best-effort: even if the off-write fails, tear down the local broadcast below.
+      // Network error — fall through and tear down locally regardless.
     }
     publisherRef.current?.disconnect();
     mixerRef.current?.stop();
@@ -391,6 +396,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     resetCrossfade();
     closeControlChannel();
     setStatus('idle');
+    if (!endOk) {
+      setErrorMsg('Broadcast ended locally, but the station may still show as live. If the warning appears next visit, use "END PREVIOUS BROADCAST" to clear it.');
+    }
     setCurrentTrackName('');
     setCurrentTrackId('');
     currentNameRef.current = '';
@@ -656,6 +664,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setQueue([...deckRef.current.state.queue]);
   }
 
+  function handleMoveTrack(fromIdx: number, toIdx: number) {
+    deckRef.current.move(fromIdx, toIdx);
+    setQueue([...deckRef.current.state.queue]);
+  }
+
   function handleTrackGainChange(source: 'device' | 'file' | 'mic', value: number) {
     if (source === 'device') {
       setDeviceGain(value);
@@ -756,7 +769,26 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             {queue.map((t, i) => {
               const isCurrent = t.id === currentTrackId;
               return (
-                <li key={t.id} className="flex items-center gap-1">
+                <li
+                  key={t.id}
+                  draggable
+                  onDragStart={() => { dragSrcIdx.current = i; }}
+                  onDragOver={(e) => { e.preventDefault(); setDragOverIdx(i); }}
+                  onDrop={() => {
+                    if (dragSrcIdx.current !== null) handleMoveTrack(dragSrcIdx.current, i);
+                    dragSrcIdx.current = null;
+                    setDragOverIdx(null);
+                  }}
+                  onDragEnd={() => { dragSrcIdx.current = null; setDragOverIdx(null); }}
+                  className={[
+                    'flex items-center gap-1 rounded',
+                    dragOverIdx === i && dragSrcIdx.current !== i ? 'border-t-2 border-primary' : '',
+                  ].join(' ')}
+                >
+                  <GripVertical
+                    className="w-3 h-3 shrink-0 text-muted-foreground/40 cursor-grab"
+                    aria-hidden="true"
+                  />
                   <button
                     type="button"
                     onClick={() => handleJumpTo(t.id)}

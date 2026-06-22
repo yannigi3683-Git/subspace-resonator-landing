@@ -260,7 +260,9 @@ export async function POST(req: Request): Promise<Response> {
   if (phase === 'end-broadcast') {
     const check = await checkAdminAal2(identity.userId, identity.aal);
     if (!check.ok) return json({ error: 'forbidden', reason: check.reason }, 403);
-    const { error: stErr } = await getUserClient(token)
+    // Identity already verified above; use service-role client so the write succeeds
+    // even if the admin's AAL2 JWT has since downgraded to AAL1 during a long broadcast.
+    const { error: stErr } = await getSupabaseAdmin()
       .from('station')
       .update({ mode: 'off', live_session: null })
       .eq('id', true);
