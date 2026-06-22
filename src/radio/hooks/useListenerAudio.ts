@@ -31,6 +31,7 @@ export function useListenerAudio(
   const sessionTokenRef = useRef<string>('');
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
   const bufferMsRef = useRef(5000);
+  const silentRetryCountRef = useRef(0);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -43,6 +44,7 @@ export function useListenerAudio(
   }, []);
 
   const retry = useCallback(() => {
+    silentRetryCountRef.current = 0;
     setConnectionError(false);
     setRetryKey((k) => k + 1);
   }, []);
@@ -61,6 +63,7 @@ export function useListenerAudio(
 
   useEffect(() => {
     if (!cfSessionId) {
+      silentRetryCountRef.current = 0;
       cleanupRef.current?.();
       cleanupRef.current = null;
       setPlaying(false);
@@ -82,13 +85,21 @@ export function useListenerAudio(
           {
             onStreamReady: (stream: MediaStream) => {
               audio.srcObject = stream;
+              silentRetryCountRef.current = 0;
+              setConnectionError(false);
               setReady(true);
               audio.play().then(() => setPlaying(true)).catch(() => {});
             },
             onDispatch: (event) => {
               if (event.type === 'DISCONNECTED' || event.type === 'ERROR') {
                 setPlaying(false);
-                setConnectionError(true);
+                if (silentRetryCountRef.current < 3) {
+                  const attempt = ++silentRetryCountRef.current;
+                  setTimeout(() => setRetryKey((k) => k + 1), attempt * 3000);
+                } else {
+                  silentRetryCountRef.current = 0;
+                  setConnectionError(true);
+                }
               }
             },
           },

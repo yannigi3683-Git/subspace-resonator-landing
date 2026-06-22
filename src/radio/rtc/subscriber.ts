@@ -52,7 +52,8 @@ export class Subscriber {
     this.pc.onconnectionstatechange = () => {
       const s = this.pc?.connectionState;
       if (s === 'connected') this.callbacks.onDispatch({ type: 'CONNECTED' });
-      else if (s === 'disconnected' || s === 'failed') {
+      else if (s === 'failed') {
+        // 'disconnected' is transient — ICE may self-recover; only 'failed' is permanent.
         this.callbacks.onDispatch({ type: 'DISCONNECTED' });
       }
     };
