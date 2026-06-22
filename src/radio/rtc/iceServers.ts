@@ -1,33 +1,21 @@
-// Builds the ICE server list for both publisher and subscriber. Always includes a public
-// STUN server; adds Cloudflare TURN (minted server-side, short-lived) when available so the
-// connection can relay over TCP/TLS 443 on networks that kill the direct UDP path
-// (corporate firewall, CGNAT). On any failure it returns STUN-only — TURN is a fallback,
-// never a hard requirement, so a broker hiccup never blocks going live.
+// Builds the ICE server list for both publisher and subscriber: STUN-only.
+//
+// TURN is deliberately NOT added to the browser's candidate pool. With iceTransportPolicy
+// 'all', having both a direct pair and a relay pair lets ICE renominate (flap) between them
+// whenever consent-freshness / NAT rebinding / Wi-Fi power-save briefly breaks the active
+// pair. Each renomination pauses media 1-5s — the audio cuts on home Wi-Fi. With STUN-only
+// there is just one (direct) path, so a transient hiccup self-heals on the same pair.
+//
+// The server-side `ice-servers` phase + credential minting are left intact (unused) so a
+// future corporate-only relay path can be reintroduced as an explicit last resort, not in
+// the default pool. ponytail: STUN-only on purpose; add opt-in relay later if a restrictive
+// network actually needs it.
 
 const STUN: RTCIceServer = { urls: 'stun:stun.l.google.com:19302' };
 
-interface IceServersResponse {
-  iceServers: { urls: string | string[]; username?: string; credential?: string } | null;
-}
-
 export async function loadIceServers(
-  apiUrl: string,
-  getAuthToken: () => Promise<string>,
+  _apiUrl: string,
+  _getAuthToken: () => Promise<string>,
 ): Promise<RTCIceServer[]> {
-  try {
-    const res = await fetch(apiUrl, {
-      method: 'POST',
-      headers: {
-        Authorization: `Bearer ${await getAuthToken()}`,
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({ phase: 'ice-servers' }),
-    });
-    if (!res.ok) return [STUN];
-    const { iceServers } = (await res.json()) as IceServersResponse;
-    if (!iceServers) return [STUN];
-    return [STUN, iceServers];
-  } catch {
-    return [STUN];
-  }
+  return [STUN];
 }

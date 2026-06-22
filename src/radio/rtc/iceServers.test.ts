@@ -8,13 +8,13 @@ afterEach(() => {
 });
 
 describe('loadIceServers', () => {
-  it('merges the broker TURN entry with the STUN server', async () => {
+  it('ignores broker TURN and returns STUN-only (TURN in the pool causes ICE flapping)', async () => {
     const turn = { urls: 'turn:turn.cloudflare.com:443?transport=tcp', username: 'u', credential: 'c' };
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true, json: async () => ({ iceServers: turn }) }));
 
     const servers = await loadIceServers('/api/rtc-session', async () => 'tok');
 
-    expect(servers).toEqual([STUN, turn]);
+    expect(servers).toEqual([STUN]);
   });
 
   it('falls back to STUN-only when the broker returns no TURN', async () => {

@@ -152,7 +152,7 @@ describe('Publisher audio bitrate (FR-4)', () => {
 });
 
 describe('Publisher ICE servers', () => {
-  it('includes the TURN server and uses all policy when the broker returns TURN credentials', async () => {
+  it('omits broker TURN from the candidate pool and uses all policy (TURN flaps ICE on home WiFi)', async () => {
     let pcConfig: RTCConfiguration | undefined;
     vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
       pcConfig = cfg;
@@ -166,7 +166,7 @@ describe('Publisher ICE servers', () => {
     }));
     await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
 
-    expect(pcConfig?.iceServers).toEqual(expect.arrayContaining([turn]));
+    expect(pcConfig?.iceServers).not.toEqual(expect.arrayContaining([turn]));
     expect(pcConfig?.iceTransportPolicy).toBe('all');
   });
 
