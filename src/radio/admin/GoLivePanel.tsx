@@ -1166,8 +1166,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </span>
           <input
             type="range"
-            min={0.3}
-            max={5}
+            min={1}
+            max={10}
             step={0.1}
             value={bufferSec}
             onChange={(e) => handleBufferChange(Number(e.target.value))}

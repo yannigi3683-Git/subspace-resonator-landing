@@ -6,8 +6,12 @@ export interface UseListenerAudioResult {
   playing: boolean;
   /** True once the host's stream is attached, even if autoplay was blocked. */
   ready: boolean;
+  /** True when the connection failed or timed out. Show a retry button. */
+  connectionError: boolean;
   /** Manually start playback from a user gesture (defeats autoplay restrictions). */
   resume: () => void;
+  /** Re-attempt the WebRTC connection after a failure. */
+  retry: () => void;
   volume: number;
   setVolume: (v: number) => void;
   audioElement: HTMLAudioElement | null;
@@ -19,12 +23,14 @@ export function useListenerAudio(
 ): UseListenerAudioResult {
   const [playing, setPlaying] = useState(false);
   const [ready, setReady] = useState(false);
+  const [connectionError, setConnectionError] = useState(false);
+  const [retryKey, setRetryKey] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
-  const bufferMsRef = useRef(2000);
+  const bufferMsRef = useRef(5000);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -34,6 +40,11 @@ export function useListenerAudio(
 
   const resume = useCallback(() => {
     audioRef.current?.play().then(() => setPlaying(true)).catch(() => {});
+  }, []);
+
+  const retry = useCallback(() => {
+    setConnectionError(false);
+    setRetryKey((k) => k + 1);
   }, []);
 
   useEffect(() => {
@@ -54,6 +65,7 @@ export function useListenerAudio(
       cleanupRef.current = null;
       setPlaying(false);
       setReady(false);
+      setConnectionError(false);
       return;
     }
 
@@ -76,6 +88,7 @@ export function useListenerAudio(
             onDispatch: (event) => {
               if (event.type === 'DISCONNECTED' || event.type === 'ERROR') {
                 setPlaying(false);
+                setConnectionError(true);
               }
             },
           },
@@ -85,7 +98,7 @@ export function useListenerAudio(
         );
         subscriberRef.current = sub;
 
-        sub.connect().catch(() => {});
+        sub.connect().catch(() => { setConnectionError(true); });
 
         cleanupRef.current = () => {
           sub.disconnect();
@@ -98,8 +111,9 @@ export function useListenerAudio(
         };
       } catch {
         // WebRTC not available (tests, server-side)
+        setConnectionError(true);
       }
-    }).catch(() => {});
+    }).catch(() => { setConnectionError(true); });
 
     return () => {
       cancelled = true;
@@ -107,8 +121,9 @@ export function useListenerAudio(
       cleanupRef.current = null;
     };
     // volume intentionally excluded: setVolume updates audio.volume directly
+    // retryKey triggers a fresh connection attempt; cfSessionId guards against no broadcast
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfSessionId]);
+  }, [cfSessionId, retryKey]);
 
   // Listen for live broadcast settings from the host (jitter buffer changes) and apply them
   // to the active subscriber. Defensive: failures here never affect playback.
@@ -131,7 +146,9 @@ export function useListenerAudio(
   return {
     playing,
     ready,
+    connectionError,
     resume,
+    retry,
     volume,
     setVolume,
     audioElement: audioRef.current,

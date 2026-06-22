@@ -2,7 +2,7 @@ import { clampCrossfadeSec } from './rtc/crossfade';
 
 // Host-chosen broadcast defaults, persisted so each new GO LIVE opens where the host left off.
 export interface HostPrefs {
-  /** Listener jitter buffer in seconds (0.3–5). */
+  /** Listener jitter buffer in seconds (1–10). */
   bufferSec: number;
   /** Auto-mix crossfade length in seconds (1–30). */
   crossfadeSec: number;
@@ -10,11 +10,11 @@ export interface HostPrefs {
 
 const KEY = 'radio_host_prefs';
 
-export const DEFAULT_HOST_PREFS: HostPrefs = { bufferSec: 2.0, crossfadeSec: 12 };
+export const DEFAULT_HOST_PREFS: HostPrefs = { bufferSec: 5.0, crossfadeSec: 12 };
 
 function clampBufferSec(value: number): number {
   if (!Number.isFinite(value)) return DEFAULT_HOST_PREFS.bufferSec;
-  return Math.max(0.3, Math.min(5, value));
+  return Math.max(1, Math.min(10, value));
 }
 
 export function loadHostPrefs(): HostPrefs {

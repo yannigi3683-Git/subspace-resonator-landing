@@ -6,7 +6,7 @@ describe('hostPrefs', () => {
 
   it('returns built-in defaults when nothing is stored', () => {
     expect(loadHostPrefs()).toEqual(DEFAULT_HOST_PREFS);
-    expect(DEFAULT_HOST_PREFS).toEqual({ bufferSec: 2.0, crossfadeSec: 12 });
+    expect(DEFAULT_HOST_PREFS).toEqual({ bufferSec: 5.0, crossfadeSec: 12 });
   });
 
   it('round-trips saved values', () => {
@@ -17,7 +17,7 @@ describe('hostPrefs', () => {
   it('clamps out-of-range saved values on load', () => {
     saveHostPrefs({ bufferSec: 99, crossfadeSec: 99 });
     const prefs = loadHostPrefs();
-    expect(prefs.bufferSec).toBe(5);
+    expect(prefs.bufferSec).toBe(10);
     expect(prefs.crossfadeSec).toBe(30);
   });
 

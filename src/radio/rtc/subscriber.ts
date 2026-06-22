@@ -14,15 +14,13 @@ interface SubscribePullResponse {
 export class Subscriber {
   private pc: RTCPeerConnection | null = null;
   private receivers: RTCRtpReceiver[] = [];
+  private connectTimeoutId: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
-    // A one-way broadcast tolerates latency, so we buffer ~2.0s by default. A deeper buffer
-    // absorbs jitter and reduces cuts, but too deep makes the audio engine "catch up" after a
-    // burst (audible time-warp). 2.0s favours stability; the host can tune it live via the slider.
-    private bufferMs = 2000,
+    private bufferMs = 5000,
   ) {}
 
   // Change the jitter buffer live (host can raise it for everyone when cuts are reported).
@@ -32,9 +30,17 @@ export class Subscriber {
   }
 
   async connect(): Promise<void> {
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
+    this.pc = new RTCPeerConnection({
+      iceTransportPolicy: 'all',
+      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
+    });
 
     this.pc.ontrack = (event) => {
+      // Track arrived — ICE succeeded, cancel the stall timeout.
+      if (this.connectTimeoutId !== null) {
+        clearTimeout(this.connectTimeoutId);
+        this.connectTimeoutId = null;
+      }
       this.receivers.push(event.receiver);
       this.applyJitterBuffer(event.receiver);
       // Cloudflare Realtime delivers the track inside streams[0]
@@ -104,8 +110,16 @@ export class Subscriber {
 
     if (!answerRes.ok) {
       this.callbacks.onDispatch({ type: 'ERROR' });
+      return;
     }
-    // ontrack fires once ICE negotiation succeeds; CONNECTED dispatch happens there.
+
+    // ICE negotiation now runs asynchronously. If ontrack hasn't fired within 15s the
+    // connection stalled (NAT blocked, network issue, Safari quirk). Surface an error so
+    // the listener sees a retry button rather than being stuck at "CONNECTING AUDIO...".
+    this.connectTimeoutId = setTimeout(() => {
+      this.connectTimeoutId = null;
+      this.callbacks.onDispatch({ type: 'ERROR' });
+    }, 15_000);
   }
 
   // Enlarge the receiver's jitter buffer. Prefers the modern jitterBufferTarget (ms),
@@ -124,6 +138,10 @@ export class Subscriber {
   }
 
   disconnect(): void {
+    if (this.connectTimeoutId !== null) {
+      clearTimeout(this.connectTimeoutId);
+      this.connectTimeoutId = null;
+    }
     this.pc?.close();
     this.pc = null;
     this.receivers = [];
