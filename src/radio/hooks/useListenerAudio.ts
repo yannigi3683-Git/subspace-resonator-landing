@@ -17,6 +17,8 @@ export interface UseListenerAudioResult {
   setVolume: (v: number) => void;
   audioElement: HTMLAudioElement | null;
   getStats: () => Promise<SubscriberStats | null>;
+  /** Count of mid-stream buffer underruns (audio dropouts) since the broadcast started. */
+  stalls: number;
 }
 
 export function useListenerAudio(
@@ -28,6 +30,9 @@ export function useListenerAudio(
   const [connectionError, setConnectionError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
   const [volume, setVolumeState] = useState(1);
+  const [stalls, setStalls] = useState(0);
+  const stallsRef = useRef(0);
+  const hasPlayedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
@@ -67,6 +72,14 @@ export function useListenerAudio(
 
   const cfSessionId = station?.live_session?.cfSessionId;
 
+  // Reset the dropout counter per broadcast (not per silent retry, which is part of the
+  // same listening session and whose stalls we want to keep counting).
+  useEffect(() => {
+    stallsRef.current = 0;
+    hasPlayedRef.current = false;
+    setStalls(0);
+  }, [cfSessionId]);
+
   useEffect(() => {
     if (!cfSessionId) {
       silentRetryCountRef.current = 0;
@@ -89,8 +102,16 @@ export function useListenerAudio(
         // Source of truth for `playing` is the element's real events, not the one-shot
         // play() promise (which rejects with AbortError on renegotiation/reconnect while
         // audio actually starts, leaving the "TAP TO LISTEN" overlay stuck up).
-        audio.onplaying = () => setPlaying(true);
+        audio.onplaying = () => { hasPlayedRef.current = true; setPlaying(true); };
         audio.onpause = () => setPlaying(false);
+        // A `waiting`/`stalled` after playback started = a real mid-stream dropout
+        // (buffer underrun). Gating on hasPlayed excludes normal startup buffering.
+        audio.onwaiting = audio.onstalled = () => {
+          if (hasPlayedRef.current) {
+            stallsRef.current += 1;
+            setStalls(stallsRef.current);
+          }
+        };
 
         const sub = new Subscriber(
           {
@@ -126,6 +147,8 @@ export function useListenerAudio(
           sub.disconnect();
           audio.onplaying = null;
           audio.onpause = null;
+          audio.onwaiting = null;
+          audio.onstalled = null;
           audio.pause();
           audio.srcObject = null;
           audioRef.current = null;
@@ -177,5 +200,6 @@ export function useListenerAudio(
     setVolume,
     audioElement: audioRef.current,
     getStats,
+    stalls,
   };
 }

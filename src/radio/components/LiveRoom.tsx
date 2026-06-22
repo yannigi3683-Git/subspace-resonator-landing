@@ -23,7 +23,7 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId);
   const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
-  const { playing, ready, connectionError, resume, retry, volume, setVolume, getStats } =
+  const { playing, ready, connectionError, resume, retry, volume, setVolume, getStats, stalls } =
     useListenerAudio(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
 
@@ -123,6 +123,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
               <>
                 BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
                 LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
+                STALLS: {stalls}&nbsp;&nbsp;
                 JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
                 RTT: {Math.round(rtcStats.rttMs)}ms
               </>
