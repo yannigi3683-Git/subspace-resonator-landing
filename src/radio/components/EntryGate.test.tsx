@@ -26,10 +26,10 @@ describe('EntryGate', () => {
     expect(btn).toBeDisabled();
   });
 
-  it('TUNE IN enables after avatar selected (captcha auto-fires in test env)', async () => {
+  it('TUNE IN enables after avatar selected and name typed', async () => {
     render(<EntryGate supabase={supabase as never} onEntry={onEntry} />);
-    const radios = screen.getAllByRole('radio');
-    fireEvent.click(radios[0]);
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Yanni' } });
+    fireEvent.click(screen.getAllByRole('radio')[0]);
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /TUNE IN/i })).not.toBeDisabled();
     });
@@ -37,6 +37,7 @@ describe('EntryGate', () => {
 
   it('calls onEntry with identity and uid on success', async () => {
     render(<EntryGate supabase={supabase as never} onEntry={onEntry} />);
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Yanni' } });
     fireEvent.click(screen.getAllByRole('radio')[0]);
     const btn = await screen.findByRole('button', { name: /TUNE IN/i });
     await waitFor(() => expect(btn).not.toBeDisabled());
@@ -56,6 +57,7 @@ describe('EntryGate', () => {
       error: { message: 'Rate limit exceeded' },
     });
     render(<EntryGate supabase={supabase as never} onEntry={onEntry} />);
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Yanni' } });
     fireEvent.click(screen.getAllByRole('radio')[0]);
     const btn = await screen.findByRole('button', { name: /TUNE IN/i });
     await waitFor(() => expect(btn).not.toBeDisabled());

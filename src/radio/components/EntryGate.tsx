@@ -14,7 +14,7 @@ interface EntryGateProps {
 
 export function EntryGate({ supabase, onEntry }: EntryGateProps) {
   const [selectedAvatarId, setSelectedAvatarId] = useState('');
-  const [name, setName] = useState(() => randomUniqueName());
+  const [name, setName] = useState('');
   const [captchaToken, setCaptchaToken] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -22,7 +22,7 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
   // Captcha is best-effort: it produces a token only where the domain is allow-listed
   // (production). On preview/unlisted domains it can't run, so don't block entry on it —
   // the token is still passed when present, and the server enforces captcha when required.
-  const canSubmit = name.trim().length >= 1 && selectedAvatarId !== '';
+  const canSubmit = name.trim().length >= 2 && selectedAvatarId !== '';
 
   const handleTuneIn = useCallback(async () => {
     if (!canSubmit) return;
@@ -102,9 +102,8 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
               maxLength={24}
               value={name}
               onChange={(e) => setName(e.target.value)}
-              onFocus={(e) => e.target.select()}
               className="flex-1 min-w-0 bg-white/[0.06] border border-white/10 text-white font-mono px-4 py-3 rounded-xl focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] focus:border-[#7B2FBE] placeholder:text-white/20 backdrop-blur"
-              placeholder="Your name"
+              placeholder="Your name or handle..."
             />
             <button
               type="button"
