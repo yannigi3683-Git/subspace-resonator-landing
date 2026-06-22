@@ -54,6 +54,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [stereoMode, setStereoMode] = useState(true);
   const [bufferSec, setBufferSec] = useState(savedPrefs.bufferSec);
   const [currentBitrate, setCurrentBitrate] = useState(0);
+  const [broadcastLoss, setBroadcastLoss] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
   const [deviceConnected, setDeviceConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
@@ -293,6 +294,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           dispatchFsm(degraded ? { type: 'QUALITY_DEGRADED' } : { type: 'QUALITY_RECOVERED' });
         },
         onBitrate: (kbps) => setCurrentBitrate(kbps),
+        onStats: ({ lossFraction }) => setBroadcastLoss(lossFraction),
       },
       '/api/rtc-session',
       authToken,
@@ -1013,6 +1015,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
               {currentBitrate ? `${currentBitrate} kbps` : '-- kbps'}
               {isBitrateAdapting(currentBitrate, activeCeiling) && (
                 <span className="text-amber-400"> (adapting)</span>
+              )}
+              {broadcastLoss > 0 && (
+                <span className={broadcastLoss > 0.05 ? 'text-red-400' : 'text-amber-400'}>
+                  {' '}{(broadcastLoss * 100).toFixed(1)}% loss
+                </span>
               )}
             </p>
           </div>

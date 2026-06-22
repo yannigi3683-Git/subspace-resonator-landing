@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Station } from '../types';
+import type { SubscriberStats } from '../rtc/subscriber';
 
 export interface UseListenerAudioResult {
   playing: boolean;
@@ -15,6 +16,7 @@ export interface UseListenerAudioResult {
   volume: number;
   setVolume: (v: number) => void;
   audioElement: HTMLAudioElement | null;
+  getStats: () => Promise<SubscriberStats | null>;
 }
 
 export function useListenerAudio(
@@ -29,9 +31,13 @@ export function useListenerAudio(
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
-  const subscriberRef = useRef<{ setBufferMs: (ms: number) => void } | null>(null);
+  const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
   const bufferMsRef = useRef(5000);
   const silentRetryCountRef = useRef(0);
+
+  const getStats = useCallback(() => {
+    return subscriberRef.current?.getStats() ?? Promise.resolve(null);
+  }, []);
 
   const setVolume = useCallback((v: number) => {
     const clamped = Math.max(0, Math.min(1, v));
@@ -163,5 +169,6 @@ export function useListenerAudio(
     volume,
     setVolume,
     audioElement: audioRef.current,
+    getStats,
   };
 }

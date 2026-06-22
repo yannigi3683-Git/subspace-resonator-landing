@@ -1,4 +1,5 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
+import type { SubscriberStats } from '../rtc/subscriber';
 import { Volume2, Music2, MessageSquare } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Identity, Station } from '../types';
@@ -22,13 +23,16 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId);
   const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
-  const { playing, ready, connectionError, resume, retry, volume, setVolume } =
+  const { playing, ready, connectionError, resume, retry, volume, setVolume, getStats } =
     useListenerAudio(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
 
   const [mobileTab, setMobileTab] = useState<'stage' | 'chat'>('stage');
   const [unread, setUnread] = useState(0);
   const prevMsgCount = useRef(messages.length);
+  const [debugOpen, setDebugOpen] = useState(false);
+  const [rtcStats, setRtcStats] = useState<SubscriberStats | null>(null);
+  const toggleDebug = useCallback(() => setDebugOpen(o => !o), []);
 
   useEffect(() => {
     const newCount = messages.length;
@@ -37,6 +41,15 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
     }
     prevMsgCount.current = newCount;
   }, [messages.length, mobileTab]);
+
+  useEffect(() => {
+    if (!debugOpen) return;
+    const id = setInterval(async () => {
+      const s = await getStats();
+      setRtcStats(s);
+    }, 2000);
+    return () => clearInterval(id);
+  }, [debugOpen, getStats]);
 
   if (isKicked) {
     return (
@@ -103,6 +116,29 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
                 aria-label="Volume"
                 className="w-24 sm:w-32 accent-primary"
               />
+            </div>
+          )}
+
+          {/* Debug stats toggle — dim, unobtrusive, corner */}
+          <button
+            type="button"
+            onClick={toggleDebug}
+            className="absolute bottom-4 right-4 z-20 font-mono text-[9px] text-white/20 hover:text-white/50 transition-colors select-none"
+          >
+            {debugOpen ? '[CLOSE DEBUG]' : '[DEBUG]'}
+          </button>
+          {debugOpen && (
+            <div className="absolute bottom-10 right-4 z-20 font-mono text-[10px] text-white/50 bg-black/80 px-2 py-1 rounded whitespace-nowrap">
+              {rtcStats ? (
+                <>
+                  BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
+                  LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
+                  JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
+                  RTT: {Math.round(rtcStats.rttMs)}ms
+                </>
+              ) : (
+                'waiting for stats...'
+              )}
             </div>
           )}
         </div>

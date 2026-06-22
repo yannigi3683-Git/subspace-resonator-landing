@@ -8,6 +8,8 @@ export interface PublisherCallbacks {
   onFatal?: (reason: string) => void;
   /** Reports the current adaptive bitrate (kbps) each stats tick. */
   onBitrate?: (kbps: number) => void;
+  /** Reports outbound quality metrics each stats tick. */
+  onStats?: (s: { kbps: number; packetsLost: number; lossFraction: number }) => void;
 }
 
 interface PublishOfferResponse {
@@ -177,6 +179,7 @@ export class Publisher {
         void this.applyBitrate(next);
       }
       this.callbacks.onBitrate?.(this.currentKbps);
+      this.callbacks.onStats?.({ kbps: this.currentKbps, packetsLost, lossFraction });
 
       // Degraded when throughput collapses (stall) or loss is heavy.
       const degraded = bps < 20_000 || lossFraction > 0.08;

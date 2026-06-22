@@ -1,6 +1,13 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus } from './audioQuality';
 
+export interface SubscriberStats {
+  effectiveBufferMs: number;
+  packetsLost: number;
+  jitterMs: number;
+  rttMs: number;
+}
+
 export interface SubscriberCallbacks {
   onStreamReady: (stream: MediaStream) => void;
   onDispatch: (event: ConnectionEvent) => void;
@@ -135,6 +142,41 @@ export class Subscriber {
       }
     } catch {
       // Unsupported browser — falls back to the default buffer.
+    }
+  }
+
+  async getStats(): Promise<SubscriberStats | null> {
+    if (!this.pc) return null;
+    try {
+      const stats = await this.pc.getStats();
+      let effectiveBufferMs = 0;
+      let packetsLost = 0;
+      let jitterMs = 0;
+      let rttMs = 0;
+      stats.forEach((report) => {
+        if (report.type === 'inbound-rtp') {
+          const r = report as RTCInboundRtpStreamStats & {
+            jitterBufferDelay?: number;
+            jitterBufferEmittedCount?: number;
+          };
+          if (r.kind === 'audio') {
+            packetsLost = r.packetsLost ?? 0;
+            jitterMs = (r.jitter ?? 0) * 1000;
+            if ((r.jitterBufferEmittedCount ?? 0) > 0) {
+              effectiveBufferMs = ((r.jitterBufferDelay ?? 0) / r.jitterBufferEmittedCount!) * 1000;
+            }
+          }
+        }
+        if (report.type === 'candidate-pair') {
+          const r = report as RTCIceCandidatePairStats;
+          if (r.nominated && r.currentRoundTripTime !== undefined) {
+            rttMs = r.currentRoundTripTime * 1000;
+          }
+        }
+      });
+      return { effectiveBufferMs, packetsLost, jitterMs, rttMs };
+    } catch {
+      return null;
     }
   }
 
