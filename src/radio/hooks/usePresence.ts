@@ -1,12 +1,14 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PresenceEntry, Identity } from '../types';
+import { updateIdentity } from '../identity';
 
 export interface UsePresenceResult {
   presenceList: PresenceEntry[];
   count: number;
   isKicked: boolean;
   isBanned: boolean;
+  rename: (name: string, avatarId: string) => void;
 }
 
 /**
@@ -25,9 +27,11 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
   const [presenceList, setPresenceList] = useState<PresenceEntry[]>([]);
   const [isKicked, setIsKicked] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
+  const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
 
   useEffect(() => {
     const channel = supabase.channel('room:main', { config: { private: true } });
+    channelRef.current = channel;
 
     const syncPresence = () => {
       const state = channel.presenceState<{ uid: string; name: string; avatarId: string; position: { x: number; y: number } }>();
@@ -77,9 +81,21 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
       });
 
     return () => {
+      channelRef.current = null;
       supabase.removeChannel(channel);
     };
   }, [supabase, uid, identity.name, identity.avatarId, identity.deviceId, identity.position.x, identity.position.y]);
 
-  return { presenceList, count: presenceList.length, isKicked, isBanned };
+  const rename = useCallback((name: string, avatarId: string) => {
+    if (!channelRef.current) return;
+    updateIdentity(name, avatarId);
+    channelRef.current.track({
+      uid,
+      name,
+      avatarId,
+      position: identity.position,
+    }).catch(() => {});
+  }, [uid, identity.position.x, identity.position.y]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  return { presenceList, count: presenceList.length, isKicked, isBanned, rename };
 }

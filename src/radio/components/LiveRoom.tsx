@@ -22,7 +22,7 @@ interface LiveRoomProps {
 
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId);
-  const { presenceList, count, isKicked } = usePresence(supabase, identity, uid);
+  const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
   const { playing, ready, connectionError, resume, retry, volume, setVolume, getStats, stalls } =
     useListenerAudio(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
@@ -140,7 +140,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">Chat</p>
         </div>
         <Chat messages={messages} />
-        <PresenceList presenceList={presenceList} count={count} />
+        <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={rename} />
         <ChatInput
           onSend={sendMessage}
           sending={sending}

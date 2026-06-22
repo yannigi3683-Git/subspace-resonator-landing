@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { derivePosition, getOrCreateIdentity, saveIdentity, createIdentity } from './identity';
+import { derivePosition, getOrCreateIdentity, saveIdentity, createIdentity, updateIdentity } from './identity';
 
 // jsdom provides localStorage; mock crypto.randomUUID
 vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid-1234' });
@@ -53,5 +53,30 @@ describe('createIdentity', () => {
     const id = createIdentity('  ' + 'A'.repeat(30) + '  ', 'nebula');
     expect(id.name.length).toBeLessThanOrEqual(24);
     expect(id.name).toBe('A'.repeat(24));
+  });
+});
+
+describe('updateIdentity', () => {
+  it('updates name and avatarId, preserves deviceId and position', () => {
+    const original = createIdentity('Alice', 'nebula');
+    saveIdentity(original);
+    const updated = updateIdentity('Bob', 'vortex');
+    expect(updated.name).toBe('Bob');
+    expect(updated.avatarId).toBe('vortex');
+    expect(updated.deviceId).toBe(original.deviceId);
+    expect(updated.position).toEqual(original.position);
+  });
+
+  it('persists to localStorage', () => {
+    const original = createIdentity('Alice', 'nebula');
+    saveIdentity(original);
+    updateIdentity('Charlie', 'pulsar');
+    const stored = getOrCreateIdentity();
+    expect(stored?.name).toBe('Charlie');
+    expect(stored?.avatarId).toBe('pulsar');
+  });
+
+  it('throws if no identity stored', () => {
+    expect(() => updateIdentity('Bob', 'vortex')).toThrow();
   });
 });

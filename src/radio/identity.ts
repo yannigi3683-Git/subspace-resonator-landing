@@ -45,3 +45,11 @@ export function createIdentity(name: string, avatarId: string): Identity {
     position: derivePosition(deviceId),
   };
 }
+
+export function updateIdentity(name: string, avatarId: string): Identity {
+  const existing = getOrCreateIdentity();
+  if (!existing) throw new Error('No identity to update');
+  const updated = { ...existing, name, avatarId };
+  saveIdentity(updated);
+  return updated;
+}
