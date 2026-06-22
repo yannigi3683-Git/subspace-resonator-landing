@@ -102,17 +102,25 @@ interface CfTurnCredentials {
 async function generateTurnCredentials(): Promise<CfTurnCredentials['iceServers'] | null> {
   const keyId = cfCleanEnv(process.env.CF_TURN_KEY_ID);
   const apiToken = cfCleanEnv(process.env.CF_TURN_KEY_API_TOKEN);
-  if (!keyId || !apiToken) return null;
+  if (!keyId || !apiToken) {
+    console.error('[TURN] env vars missing: keyId=%s apiToken=%s', !!keyId, !!apiToken);
+    return null;
+  }
   try {
     const res = await fetch(`${CF_BASE}/turn/keys/${keyId}/credentials/generate`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ ttl: 86400 }),
     });
-    if (!res.ok) return null;
+    if (!res.ok) {
+      const text = await res.text().catch(() => '');
+      console.error('[TURN] CF credentials failed: %d %s', res.status, text);
+      return null;
+    }
     const data = (await res.json()) as CfTurnCredentials;
     return data.iceServers ?? null;
-  } catch {
+  } catch (err) {
+    console.error('[TURN] fetch threw:', err);
     return null;
   }
 }
