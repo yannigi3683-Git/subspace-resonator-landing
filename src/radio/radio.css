@@ -1,0 +1,162 @@
+/* ── Crowd motion ───────────────────────────────────────────── */
+@keyframes radio-dance {
+  0%, 100% { transform: translateY(0) rotate(-1.5deg); }
+  50% { transform: translateY(-6px) rotate(1.5deg); }
+}
+.radio-dance { animation: radio-dance 0.9s ease-in-out infinite; }
+
+@keyframes radio-bob {
+  0%, 100% { transform: translateY(0) rotate(-2deg); }
+  50% { transform: translateY(-9px) rotate(2deg); }
+}
+.radio-bob { animation: radio-bob 3s ease-in-out infinite; }
+
+/* ── Cosmic / deep-space dancefloor ─────────────────────────── */
+/* Layered nebula wash. */
+.radio-nebula {
+  background:
+    radial-gradient(55% 45% at 22% 12%, rgba(123, 47, 190, 0.40), transparent 70%),
+    radial-gradient(45% 40% at 82% 18%, rgba(38, 198, 218, 0.22), transparent 70%),
+    radial-gradient(70% 55% at 50% 100%, rgba(30, 27, 75, 0.65), transparent 78%);
+}
+
+/* Twinkling starfield, built from layered radial-gradient dots (no extra DOM). */
+.radio-stars {
+  background-image:
+    radial-gradient(1.2px 1.2px at 12% 22%, rgba(255, 255, 255, 0.9), transparent),
+    radial-gradient(1px 1px at 28% 64%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1.4px 1.4px at 44% 14%, rgba(255, 255, 255, 0.85), transparent),
+    radial-gradient(1px 1px at 58% 48%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.2px 1.2px at 72% 28%, rgba(255, 255, 255, 0.8), transparent),
+    radial-gradient(1px 1px at 86% 60%, rgba(255, 255, 255, 0.65), transparent),
+    radial-gradient(1.3px 1.3px at 18% 84%, rgba(255, 255, 255, 0.75), transparent),
+    radial-gradient(1px 1px at 64% 80%, rgba(255, 255, 255, 0.6), transparent),
+    radial-gradient(1.1px 1.1px at 92% 34%, rgba(255, 255, 255, 0.7), transparent),
+    radial-gradient(1px 1px at 38% 38%, rgba(255, 255, 255, 0.55), transparent);
+  background-repeat: no-repeat;
+  animation: radio-twinkle 6s ease-in-out infinite;
+}
+@keyframes radio-twinkle { 0%, 100% { opacity: 0.55; } 50% { opacity: 1; } }
+
+/* Aurora ribbon drifting behind the stage. */
+.radio-aurora {
+  background: linear-gradient(180deg, rgba(38, 198, 218, 0.20), rgba(123, 47, 190, 0.10) 45%, transparent 80%);
+  filter: blur(10px);
+  animation: radio-aurora 14s ease-in-out infinite;
+}
+@keyframes radio-aurora {
+  0%, 100% { transform: translateX(-3%); opacity: 0.7; }
+  50% { transform: translateX(3%); opacity: 1; }
+}
+
+/* Perspective floor grid, faded into the horizon. */
+.radio-grid {
+  background-image:
+    repeating-linear-gradient(90deg, rgba(38, 198, 218, 0.16) 0 1px, transparent 1px 44px),
+    repeating-linear-gradient(0deg, rgba(123, 47, 190, 0.14) 0 1px, transparent 1px 44px);
+  transform: perspective(320px) rotateX(62deg);
+  transform-origin: bottom center;
+  -webkit-mask-image: linear-gradient(180deg, transparent, #000 85%);
+  mask-image: linear-gradient(180deg, transparent, #000 85%);
+}
+.radio-floor-glow {
+  background: radial-gradient(75% 100% at 50% 100%, rgba(123, 47, 190, 0.28), transparent 72%);
+}
+
+/* ── Stage / DJ booth ───────────────────────────────────────── */
+.radio-booth-glow {
+  box-shadow: 0 0 28px rgba(38, 198, 218, 0.25), inset 0 0 14px rgba(123, 47, 190, 0.18);
+}
+@keyframes radio-spin { to { transform: rotate(360deg); } }
+.radio-spin { animation: radio-spin 3.5s linear infinite; }
+
+@keyframes radio-eq { 0%, 100% { height: 22%; } 50% { height: 100%; } }
+.radio-eq { height: 22%; animation: radio-eq 0.8s ease-in-out infinite; }
+
+@keyframes radio-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.85); } }
+.radio-pulse { animation: radio-pulse 1.4s ease-in-out infinite; }
+
+/* ── Stage ──────────────────────────────────────────────────── */
+.radio-stage-backdrop {
+  background:
+    radial-gradient(60% 100% at 50% 0%, rgba(38, 198, 218, 0.18), transparent 70%),
+    radial-gradient(42% 85% at 50% 0%, rgba(123, 47, 190, 0.24), transparent 75%);
+}
+/* Spotlight cone behind the DJ. */
+.radio-spotlight {
+  background: linear-gradient(180deg, rgba(38, 198, 218, 0.28), rgba(123, 47, 190, 0.10) 55%, transparent 80%);
+  clip-path: polygon(43% 0, 57% 0, 80% 100%, 20% 100%);
+  filter: blur(5px);
+  animation: radio-spot 7s ease-in-out infinite;
+}
+@keyframes radio-spot {
+  0%, 100% { opacity: 0.55; transform: scaleX(0.9); }
+  50% { opacity: 0.95; transform: scaleX(1.08); }
+}
+/* Glowing riser under the DJ. */
+.radio-riser {
+  background: radial-gradient(60% 100% at 50% 50%, rgba(123, 47, 190, 0.55), transparent 70%);
+  filter: blur(4px);
+}
+
+/* ── PA stack power glow (compositor-only: opacity/transform, no JS) ── */
+.radio-amp-glow {
+  background: radial-gradient(58% 50% at 50% 36%, rgba(38, 198, 218, 0.22), rgba(123, 47, 190, 0.12) 55%, transparent 72%);
+  filter: blur(8px);
+  animation: radio-amp-glow 9s ease-in-out infinite;
+}
+@keyframes radio-amp-glow {
+  0%, 100% { opacity: 0.45; transform: scale(0.96); }
+  50% { opacity: 0.8; transform: scale(1.04); }
+}
+
+/* ── Floating motes (ambient dancefloor life) ──────────────────── */
+.radio-mote {
+  border-radius: 9999px;
+  animation: radio-mote linear infinite;
+}
+@keyframes radio-mote {
+  0% { transform: translateY(0) translateX(0); opacity: 0; }
+  12% { opacity: 0.8; }
+  88% { opacity: 0.8; }
+  100% { transform: translateY(-140px) translateX(10px); opacity: 0; }
+}
+
+/* ── Reduced motion ─────────────────────────────────────────── */
+@media (prefers-reduced-motion: reduce) {
+  .radio-dance,
+  .radio-bob,
+  .radio-stars,
+  .radio-aurora,
+  .radio-spin,
+  .radio-eq,
+  .radio-pulse,
+  .radio-spot,
+  .radio-mote,
+  .radio-amp-glow,
+  .pixel-blink { animation: none; }
+}
+
+/* ── Retro / pixel aesthetic ────────────────────────────────── */
+.pixel { font-family: 'Press Start 2P', monospace; }
+
+@keyframes pixel-blink {
+  0%, 49% { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+.pixel-blink { animation: pixel-blink 1s step-end infinite; }
+
+/* CRT scanline overlay — apply to a positioned container */
+.scanlines::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 1px,
+    rgba(0, 0, 0, 0.12) 2px
+  );
+  pointer-events: none;
+  z-index: 100;
+}

@@ -22,13 +22,14 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 
 ## Tech Stack
 
-- **React 18** + **TypeScript** + **Vite 5**
+- **React 19** + **TypeScript 6** + **Vite 8** (Rolldown-based; MPA build with two entries: `index.html` landing + `radio.html` radio)
 - **Tailwind CSS v3** (not v4)
+- **Supabase** (`@supabase/supabase-js`, client in `src/lib/supabase.ts`, null-safe when env vars absent) — used by the Radio feature; project `lgcmbmlapksmdbkhkyyv`
 - **Framer Motion** — animations and hover effects
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — 16 test files, 63+ tests, all must pass before publishing
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows (2026-06-12 baseline: 18 files, 64 tests)
 
 ---
 
@@ -37,7 +38,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 ```
 npm run dev       # dev server at localhost:5173
 npm run build     # tsc -b && vite build  (TypeScript + bundle)
-npm run test      # vitest (57 tests)
+npm run test      # vitest (watch mode; use `npx vitest run` for single pass)
 npm run lint      # eslint
 npm run preview   # preview production build
 ```

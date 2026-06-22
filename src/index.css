@@ -129,6 +129,41 @@
   .logo-glitch-idle {
     animation: logoIdleGlitch 4s ease-in-out infinite, heroPulse 3s ease-in-out infinite;
   }
+
+  /* Host console range sliders */
+  .console-slider {
+    -webkit-appearance: none;
+    appearance: none;
+    background: transparent;
+    cursor: pointer;
+  }
+  .console-slider::-webkit-slider-runnable-track {
+    height: 4px;
+    border-radius: 2px;
+    background: hsl(var(--muted));
+  }
+  .console-slider::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    background: hsl(var(--primary));
+    margin-top: -5px;
+    box-shadow: 0 0 0 2px hsl(var(--background));
+  }
+  .console-slider::-moz-range-track {
+    height: 4px;
+    border-radius: 2px;
+    background: hsl(var(--muted));
+  }
+  .console-slider::-moz-range-thumb {
+    width: 14px;
+    height: 14px;
+    border-radius: 50%;
+    border: none;
+    background: hsl(var(--primary));
+    box-shadow: 0 0 0 2px hsl(var(--background));
+  }
 }
 
 @keyframes logoIdleGlitch {
