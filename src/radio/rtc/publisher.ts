@@ -46,15 +46,7 @@ export class Publisher {
 
   async connect(stream: MediaStream, title?: string): Promise<void> {
     const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
-    // Force relay when TURN is available: the host's direct UDP upload binding dies on a
-    // corporate firewall after 30-60s, dropping the source for every listener. Relaying over
-    // CF's TCP/TLS 443 survives. A one-way broadcast's latency budget makes the hop free.
-    const hasTurn = iceServers.some(s =>
-      (Array.isArray(s.urls) ? s.urls : [s.urls]).some(
-        (u: string) => u.startsWith('turn:') || u.startsWith('turns:'),
-      ),
-    );
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: hasTurn ? 'relay' : 'all', iceServers });
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all', iceServers });
 
     for (const track of stream.getAudioTracks()) {
       this.pc.addTrack(track, stream);

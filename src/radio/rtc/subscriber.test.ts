@@ -31,7 +31,7 @@ afterEach(() => {
 });
 
 describe('Subscriber ICE transport policy', () => {
-  it('uses relay policy when TURN credentials are in the ice servers', async () => {
+  it('uses all policy when TURN credentials are in the ice servers (TURN is fallback, not forced)', async () => {
     let pcConfig: RTCConfiguration | undefined;
     vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
       pcConfig = cfg;
@@ -44,7 +44,7 @@ describe('Subscriber ICE transport policy', () => {
       return Promise.resolve({ ok: false, status: 500 });
     }));
     await new Subscriber({ onStreamReady: vi.fn(), onDispatch: vi.fn() }, '/api/rtc-session', async () => 'tok').connect();
-    expect(pcConfig?.iceTransportPolicy).toBe('relay');
+    expect(pcConfig?.iceTransportPolicy).toBe('all');
   });
 
   it('uses all policy when no TURN credentials are available', async () => {

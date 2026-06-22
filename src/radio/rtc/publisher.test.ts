@@ -152,7 +152,7 @@ describe('Publisher audio bitrate (FR-4)', () => {
 });
 
 describe('Publisher ICE servers', () => {
-  it('forces relay and includes the TURN server when the broker returns one', async () => {
+  it('includes the TURN server and uses all policy when the broker returns TURN credentials', async () => {
     let pcConfig: RTCConfiguration | undefined;
     vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
       pcConfig = cfg;
@@ -167,8 +167,7 @@ describe('Publisher ICE servers', () => {
     await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
 
     expect(pcConfig?.iceServers).toEqual(expect.arrayContaining([turn]));
-    // Host upload over a corporate firewall must relay or its direct UDP binding dies.
-    expect(pcConfig?.iceTransportPolicy).toBe('relay');
+    expect(pcConfig?.iceTransportPolicy).toBe('all');
   });
 
   it('uses all policy when no TURN credentials are available', async () => {
