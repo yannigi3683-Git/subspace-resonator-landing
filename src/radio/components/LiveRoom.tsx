@@ -126,6 +126,9 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
                 STALLS: {stalls}&nbsp;&nbsp;
                 JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
                 RTT: {Math.round(rtcStats.rttMs)}ms
+                {rtcStats.candidateType && (
+                  <>&nbsp;&nbsp;<span className={rtcStats.candidateType === 'relay' ? 'text-green-400' : 'text-white/40'}>{rtcStats.candidateType === 'relay' ? 'RELAY' : 'DIRECT'}</span></>
+                )}
               </>
             ) : (
               'connecting…'

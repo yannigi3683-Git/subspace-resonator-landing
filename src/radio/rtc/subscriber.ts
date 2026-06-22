@@ -7,6 +7,7 @@ export interface SubscriberStats {
   packetsLost: number;
   jitterMs: number;
   rttMs: number;
+  candidateType: string | null;
 }
 
 export interface SubscriberCallbacks {
@@ -152,6 +153,8 @@ export class Subscriber {
       let packetsLost = 0;
       let jitterMs = 0;
       let rttMs = 0;
+      let candidateType: string | null = null;
+      let activePairLocalId: string | null = null;
       stats.forEach((report) => {
         if (report.type === 'inbound-rtp') {
           const r = report as RTCInboundRtpStreamStats & {
@@ -170,10 +173,15 @@ export class Subscriber {
           const r = report as RTCIceCandidatePairStats;
           if (r.nominated && r.currentRoundTripTime !== undefined) {
             rttMs = r.currentRoundTripTime * 1000;
+            activePairLocalId = r.localCandidateId ?? null;
           }
         }
       });
-      return { effectiveBufferMs, packetsLost, jitterMs, rttMs };
+      if (activePairLocalId) {
+        const localCand = stats.get(activePairLocalId) as { candidateType?: string } | undefined;
+        candidateType = localCand?.candidateType ?? null;
+      }
+      return { effectiveBufferMs, packetsLost, jitterMs, rttMs, candidateType };
     } catch {
       return null;
     }

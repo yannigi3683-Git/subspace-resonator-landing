@@ -7,6 +7,7 @@ let mockPc: {
   setRemoteDescription: ReturnType<typeof vi.fn>;
   createAnswer: ReturnType<typeof vi.fn>;
   setLocalDescription: ReturnType<typeof vi.fn>;
+  getStats: ReturnType<typeof vi.fn>;
   close: ReturnType<typeof vi.fn>;
   connectionState: string;
 };
@@ -18,6 +19,7 @@ beforeEach(() => {
     setRemoteDescription: vi.fn().mockResolvedValue(undefined),
     createAnswer: vi.fn().mockResolvedValue({ type: 'answer', sdp: 'v=0' }),
     setLocalDescription: vi.fn().mockResolvedValue(undefined),
+    getStats: vi.fn().mockResolvedValue(new Map()),
     close: vi.fn(),
     connectionState: 'new',
   };
@@ -26,6 +28,40 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllGlobals();
+});
+
+describe('Subscriber getStats candidateType', () => {
+  it('returns relay candidateType when the active candidate pair is a relay', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('stop')));
+    const sub = new Subscriber({ onStreamReady: vi.fn(), onDispatch: vi.fn() }, '/api/rtc-session', async () => 'tok');
+    await sub.connect();
+
+    const relayLocalId = 'local-relay-1';
+    const fakeStats = new Map([
+      ['pair-1', { type: 'candidate-pair', nominated: true, currentRoundTripTime: 0.05, localCandidateId: relayLocalId }],
+      [relayLocalId, { type: 'local-candidate', candidateType: 'relay' }],
+    ]);
+    mockPc.getStats = vi.fn().mockResolvedValue(fakeStats);
+
+    const stats = await sub.getStats();
+    expect(stats?.candidateType).toBe('relay');
+  });
+
+  it('returns host candidateType when the active pair is direct', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('stop')));
+    const sub = new Subscriber({ onStreamReady: vi.fn(), onDispatch: vi.fn() }, '/api/rtc-session', async () => 'tok');
+    await sub.connect();
+
+    const localId = 'local-host-1';
+    const fakeStats = new Map([
+      ['pair-1', { type: 'candidate-pair', nominated: true, currentRoundTripTime: 0.005, localCandidateId: localId }],
+      [localId, { type: 'local-candidate', candidateType: 'host' }],
+    ]);
+    mockPc.getStats = vi.fn().mockResolvedValue(fakeStats);
+
+    const stats = await sub.getStats();
+    expect(stats?.candidateType).toBe('host');
+  });
 });
 
 describe('Subscriber jitter buffer', () => {
