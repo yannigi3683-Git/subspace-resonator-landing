@@ -96,6 +96,39 @@ describe('Publisher HTTP error handling', () => {
   });
 });
 
+describe('Publisher connection state transitions', () => {
+  const connectLive = async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cfSessionId: 'cf-1', sdpAnswer: 'v=0\r\n' }) }),
+    );
+    const cb = makeCallbacks();
+    await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
+    return cb;
+  };
+
+  it('does NOT dispatch DISCONNECTED on a transient "disconnected" (it self-recovers)', async () => {
+    const cb = await connectLive();
+    mockPc.connectionState = 'disconnected';
+    mockPc.onconnectionstatechange?.();
+    expect(cb.onDispatch).not.toHaveBeenCalledWith({ type: 'DISCONNECTED' });
+  });
+
+  it('dispatches DISCONNECTED on "failed" (a permanent loss)', async () => {
+    const cb = await connectLive();
+    mockPc.connectionState = 'failed';
+    mockPc.onconnectionstatechange?.();
+    expect(cb.onDispatch).toHaveBeenCalledWith({ type: 'DISCONNECTED' });
+  });
+
+  it('dispatches CONNECTED on "connected"', async () => {
+    const cb = await connectLive();
+    mockPc.connectionState = 'connected';
+    mockPc.onconnectionstatechange?.();
+    expect(cb.onDispatch).toHaveBeenCalledWith({ type: 'CONNECTED' });
+  });
+});
+
 describe('Publisher audio bitrate (FR-4)', () => {
   it('caps the audio sender bitrate at 128 kbps for upload stability', async () => {
     const setParameters = vi.fn().mockResolvedValue(undefined);

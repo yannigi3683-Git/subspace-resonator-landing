@@ -253,6 +253,8 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const phase = body.phase as string | undefined;
+  // Diagnostic (temporary): surfaces which side is looping in a reconnect storm.
+  console.log('[rtc] phase=%s', phase);
 
   // ── PUBLISH OFFER ────────────────────────────────────────────────────────
   // Only the host (admin + aal2) may publish. Anyone can subscribe.

@@ -63,9 +63,12 @@ export class Publisher {
     this.pc.onconnectionstatechange = () => {
       const s = this.pc?.connectionState;
       if (s === 'connected') this.callbacks.onDispatch({ type: 'CONNECTED' });
-      else if (s === 'disconnected' || s === 'failed') {
-        this.callbacks.onDispatch({ type: 'DISCONNECTED' });
-      }
+      // 'disconnected' is transient — the same PC self-recovers without a re-publish. A
+      // re-publish mints a NEW CF session, which changes the station's cfSessionId and drops
+      // every listener into "CONNECTING AUDIO". On a relay/corporate path this blip recurs
+      // every ~20s, so reacting to it created an endless reconnect loop. Only 'failed' is
+      // a permanent loss worth tearing down for. (Matches the subscriber's handling.)
+      else if (s === 'failed') this.callbacks.onDispatch({ type: 'DISCONNECTED' });
     };
 
     const offer = await this.pc.createOffer();
