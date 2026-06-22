@@ -91,6 +91,32 @@ async function renegotiate(cfSessionId: string, sdpAnswer: string): Promise<void
   await cfPut(`/sessions/${cfSessionId}/renegotiate`, { sessionDescription: { type: 'answer', sdp: sdpAnswer } });
 }
 
+// Mint short-lived TURN credentials from Cloudflare Realtime TURN. Returns null when the
+// TURN key env vars are unset or CF errors, so the client cleanly falls back to STUN-only
+// rather than failing to connect. TURN is what survives a corporate firewall / CGNAT that
+// kills the direct UDP path (relays over TCP/TLS 443).
+interface CfTurnCredentials {
+  iceServers: { urls: string | string[]; username?: string; credential?: string };
+}
+
+async function generateTurnCredentials(): Promise<CfTurnCredentials['iceServers'] | null> {
+  const keyId = cfCleanEnv(process.env.CF_TURN_KEY_ID);
+  const apiToken = cfCleanEnv(process.env.CF_TURN_KEY_API_TOKEN);
+  if (!keyId || !apiToken) return null;
+  try {
+    const res = await fetch(`${CF_BASE}/turn/keys/${keyId}/credentials/generate`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${apiToken}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ttl: 86400 }),
+    });
+    if (!res.ok) return null;
+    const data = (await res.json()) as CfTurnCredentials;
+    return data.iceServers ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---- Supabase admin client (service-role key; never exposed to browser) ----
 
 // Strip BOM/non-ASCII that PowerShell UTF-16 encoding may prepend to env vars; such a
@@ -306,6 +332,14 @@ export async function POST(req: Request): Promise<Response> {
       console.error('[rtc-session subscribe-answer]', err);
       return json({ error: 'cf_error' }, 502);
     }
+  }
+
+  // ── ICE SERVERS ──────────────────────────────────────────────────────────
+  // Any authenticated session may request TURN credentials. The API token never
+  // leaves the server; the browser only ever sees short-lived (24h) relay creds.
+  if (phase === 'ice-servers') {
+    const iceServers = await generateTurnCredentials();
+    return json({ iceServers });
   }
 
   return json({ error: 'unknown_phase' }, 400);

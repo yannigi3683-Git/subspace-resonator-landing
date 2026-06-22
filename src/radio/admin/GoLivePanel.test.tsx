@@ -15,11 +15,14 @@ vi.mock('../hooks/useStation', () => ({ useStation: vi.fn(() => null) }));
 // GoLivePanel tests verify coordination logic (ordering, error handling, UI state).
 // RTC internals (WebRTC, AudioContext, getUserMedia) are tested in their own suites.
 
+// Captures the most recently constructed mixer so tests can assert resume() on tab return.
+const mixerInstanceRef: { current: { resume: ReturnType<typeof vi.fn> } | null } = { current: null };
+
 vi.mock('../rtc/hostMixer', () => ({
   // Must use a regular function (not arrow) — arrow functions can't be constructors.
   HostMixer: vi.fn().mockImplementation(function () {
     let fileCounter = 0;
-    return {
+    const instance = {
       start: vi.fn().mockResolvedValue({
         getTracks: () => [],
         getAudioTracks: () => [],
@@ -28,11 +31,14 @@ vi.mock('../rtc/hostMixer', () => ({
       addFileElement: vi.fn(() => `file-${++fileCounter}`),
       setGain: vi.fn(),
       rampGain: vi.fn(),
+      resume: vi.fn().mockResolvedValue(undefined),
       stop: vi.fn(),
       removeSource: vi.fn(),
       get analysis() { return null; },
       get entries() { return [] as const; },
     };
+    mixerInstanceRef.current = instance;
+    return instance;
   }),
 }));
 
@@ -347,6 +353,31 @@ describe('GoLivePanel', () => {
     act(() => { window.dispatchEvent(new Event('pagehide')); });
 
     expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('holds a screen wake lock while live and re-wakes the audio graph on tab return', async () => {
+    const release = vi.fn().mockResolvedValue(undefined);
+    const request = vi.fn().mockResolvedValue({ release });
+    Object.defineProperty(navigator, 'wakeLock', { value: { request }, configurable: true });
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-wl');
+    });
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'tok'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+
+    // Acquired on going live.
+    await waitFor(() => expect(request).toHaveBeenCalledWith('screen'));
+
+    // Returning to the foreground re-wakes the AudioContext and re-acquires the lock.
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+    await act(async () => { document.dispatchEvent(new Event('visibilitychange')); await Promise.resolve(); });
+
+    expect(mixerInstanceRef.current?.resume).toHaveBeenCalled();
+    expect(request.mock.calls.length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows a recovery banner and can clear a station left live by a previous session', async () => {

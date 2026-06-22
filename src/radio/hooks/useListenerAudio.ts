@@ -106,7 +106,9 @@ export function useListenerAudio(
         audio.onpause = () => setPlaying(false);
         // A `waiting`/`stalled` after playback started = a real mid-stream dropout
         // (buffer underrun). Gating on hasPlayed excludes normal startup buffering.
-        audio.onwaiting = audio.onstalled = () => {
+        // onstalled fires spuriously on MediaStream sources (GC pauses, silence, tab throttle).
+        // onwaiting is the accurate signal: fires only when the playout buffer genuinely runs dry.
+        audio.onwaiting = () => {
           if (hasPlayedRef.current) {
             stallsRef.current += 1;
             setStalls(stallsRef.current);

@@ -109,6 +109,14 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const tokenRef = useRef('');
   const statusRef = useRef<BroadcastStatus>('idle');
   statusRef.current = status;
+  // Screen wake lock held while live, so phone Chrome doesn't auto-lock the screen and
+  // suspend the audio graph mid-broadcast. Auto-released when the tab hides; re-acquired
+  // on return by the visibility handler below.
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  // Whether the deck is intended to be playing, so visibility-recovery only restarts
+  // playback the OS paused (not a track the host deliberately paused).
+  const filePlayingRef = useRef(false);
+  filePlayingRef.current = filePlaying;
 
   // The DB station row. Used only to detect a station left 'live' by a previous session
   // (e.g. the host pressed F5 mid-broadcast, which kills the connection but not the DB flag).
@@ -179,6 +187,38 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     window.addEventListener('pagehide', handler);
     return () => window.removeEventListener('pagehide', handler);
   }, []);
+
+  // While live, hold a screen wake lock and recover the audio graph when the tab returns
+  // to foreground. This is the fix for broadcasting from a phone: mobile Chrome suspends the
+  // AudioContext + pauses the deck element when the tab backgrounds (screen lock / app
+  // switch), which silently kills the broadcast until the host returns and presses play.
+  useEffect(() => {
+    if (status !== 'live') return;
+
+    const acquire = async () => {
+      try {
+        wakeLockRef.current = (await navigator.wakeLock?.request('screen')) ?? null;
+      } catch {
+        // Denied, unsupported (iOS Safari < 16.4), or not allowed while hidden — no-op.
+      }
+    };
+
+    const onVisible = () => {
+      if (document.visibilityState !== 'visible') return;
+      void mixerRef.current?.resume();
+      const el = audioElRef.current;
+      if (el && el.paused && filePlayingRef.current) el.play().catch(() => {});
+      void acquire(); // the lock auto-released while hidden; take it again
+    };
+
+    void acquire();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      wakeLockRef.current?.release().catch(() => {});
+      wakeLockRef.current = null;
+    };
+  }, [status]);
 
   const dispatchFsm = useCallback((event: ConnectionEvent) => {
     const { next, effects } = transition(fsmRef.current, event);
@@ -691,6 +731,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const isBusy = status === 'starting' || status === 'ending';
   // The bitrate ceiling actually in force: auto-pilot rides up to HQ, manual pins the chosen tier.
   const activeCeiling = autoPilot ? QUALITY_PRESETS.hq : QUALITY_PRESETS[quality];
+  const isTouch = typeof navigator !== 'undefined' && navigator.maxTouchPoints > 0;
 
   return (
     <section data-testid="go-live-panel" className="flex flex-col gap-6 p-6 section-border">
@@ -709,6 +750,13 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </span>
         )}
       </div>
+
+      {status === 'live' && isTouch && (
+        <p className="font-mono text-[11px] leading-relaxed text-amber-300/90">
+          Keep this tab open with the screen on while broadcasting from a phone. Locking the
+          screen or switching apps can pause the stream.
+        </p>
+      )}
 
       {errorMsg && (
         <p role="alert" className="font-mono text-xs text-destructive">

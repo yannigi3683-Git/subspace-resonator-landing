@@ -35,7 +35,7 @@ export class HostMixer {
 
   // AudioContext factory is injectable so tests can pass a mock.
   constructor(
-    private readonly createContext: () => AudioContext = () => new AudioContext(),
+    private readonly createContext: () => AudioContext = () => new AudioContext({ latencyHint: 'playback' }),
   ) {}
 
   // Must be called from within a user-gesture handler on iOS.
@@ -57,6 +57,12 @@ export class HostMixer {
     if (this.ctx.state === 'suspended') await this.ctx.resume();
 
     return this.destination.stream;
+  }
+
+  // Re-wake the audio graph after the OS suspended it (mobile background tab). No-op if
+  // the context is already running or torn down.
+  async resume(): Promise<void> {
+    if (this.ctx?.state === 'suspended') await this.ctx.resume();
   }
 
   // Add a hardware audio input (Traktor/Rekordbox virtual device, or mic).

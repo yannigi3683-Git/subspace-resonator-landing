@@ -1,5 +1,6 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus, nextBitrateKbps } from './audioQuality';
+import { loadIceServers } from './iceServers';
 
 export interface PublisherCallbacks {
   onSessionReady: (cfSessionId: string) => void;
@@ -44,7 +45,8 @@ export class Publisher {
   }
 
   async connect(stream: MediaStream, title?: string): Promise<void> {
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
+    const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all', iceServers });
 
     for (const track of stream.getAudioTracks()) {
       this.pc.addTrack(track, stream);

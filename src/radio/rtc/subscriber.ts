@@ -1,5 +1,6 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus } from './audioQuality';
+import { loadIceServers } from './iceServers';
 
 export interface SubscriberStats {
   effectiveBufferMs: number;
@@ -37,10 +38,8 @@ export class Subscriber {
   }
 
   async connect(): Promise<void> {
-    this.pc = new RTCPeerConnection({
-      iceTransportPolicy: 'all',
-      iceServers: [{ urls: 'stun:stun.l.google.com:19302' }],
-    });
+    const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all', iceServers });
 
     this.pc.ontrack = (event) => {
       // Track arrived — ICE succeeded, cancel the stall timeout.

@@ -110,6 +110,18 @@ describe('HostMixer', () => {
     expect(ctxMock.resume).toHaveBeenCalled();
   });
 
+  it('resume() re-wakes the context only when suspended', async () => {
+    await mixer.start();
+    ctxMock.resume.mockClear();
+
+    await mixer.resume(); // state 'running' → no-op
+    expect(ctxMock.resume).not.toHaveBeenCalled();
+
+    ctxMock.state = 'suspended';
+    await mixer.resume();
+    expect(ctxMock.resume).toHaveBeenCalled();
+  });
+
   // --- addFileElement ---
 
   it('addFileElement() creates a MediaElementSource and routes through a gain node', async () => {

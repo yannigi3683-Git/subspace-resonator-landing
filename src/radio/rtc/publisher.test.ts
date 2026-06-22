@@ -118,6 +118,26 @@ describe('Publisher audio bitrate (FR-4)', () => {
   });
 });
 
+describe('Publisher ICE servers', () => {
+  it('builds the peer connection with the TURN server the broker returns', async () => {
+    let pcConfig: RTCConfiguration | undefined;
+    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
+      pcConfig = cfg;
+      return mockPc;
+    }));
+    const turn = { urls: 'turn:turn.cloudflare.com:443?transport=tcp', username: 'u', credential: 'c' };
+    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
+      const phase = JSON.parse(init.body as string).phase;
+      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: turn }) });
+      return Promise.resolve({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) });
+    }));
+    await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
+
+    expect(pcConfig?.iceServers).toEqual(expect.arrayContaining([turn]));
+    expect(pcConfig?.iceTransportPolicy).toBe('all');
+  });
+});
+
 describe('Publisher adaptive quality', () => {
   it('forces stereo Opus in the published SDP offer', async () => {
     mockPc.createOffer.mockResolvedValue({
@@ -132,7 +152,12 @@ describe('Publisher adaptive quality', () => {
     const cb = makeCallbacks();
     await new Publisher(cb, '/api/rtc-session', async () => 'tok').connect(makeStream());
 
-    const body = JSON.parse((fetchMock.mock.calls[0][1] as RequestInit).body as string);
+    // connect() now fetches ICE servers first, so locate the publish-offer call by its body.
+    const offerCall = fetchMock.mock.calls.find((c) => {
+      try { return JSON.parse((c[1] as RequestInit).body as string).phase === 'publish-offer'; }
+      catch { return false; }
+    });
+    const body = JSON.parse((offerCall![1] as RequestInit).body as string);
     expect(body.sdpOffer).toMatch(/stereo=1/);
     expect(body.sdpOffer).toMatch(/useinbandfec=1/);
   });
