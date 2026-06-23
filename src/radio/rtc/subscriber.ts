@@ -23,6 +23,7 @@ export class Subscriber {
   private pc: RTCPeerConnection | null = null;
   private receivers: RTCRtpReceiver[] = [];
   private connectTimeoutId: ReturnType<typeof setTimeout> | null = null;
+  private trackArrived = false;
 
   constructor(
     private readonly callbacks: SubscriberCallbacks,
@@ -44,7 +45,9 @@ export class Subscriber {
     this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     this.pc.ontrack = (event) => {
-      // Track arrived — ICE succeeded, cancel the stall timeout.
+      // Track arrived — ICE succeeded, cancel the stall timeout. On a fast DIRECT path this
+      // can fire BEFORE the timeout is armed below, so also record arrival to suppress arming.
+      this.trackArrived = true;
       if (this.connectTimeoutId !== null) {
         clearTimeout(this.connectTimeoutId);
         this.connectTimeoutId = null;
@@ -125,10 +128,14 @@ export class Subscriber {
     // ICE negotiation now runs asynchronously. If ontrack hasn't fired within 15s the
     // connection stalled (NAT blocked, network issue, Safari quirk). Surface an error so
     // the listener sees a retry button rather than being stuck at "CONNECTING AUDIO...".
-    this.connectTimeoutId = setTimeout(() => {
-      this.connectTimeoutId = null;
-      this.callbacks.onDispatch({ type: 'ERROR' });
-    }, 15_000);
+    // Skip if the track already arrived (fast DIRECT path) — otherwise the timer fires a
+    // bogus ERROR 15s into a perfectly good stream.
+    if (!this.trackArrived) {
+      this.connectTimeoutId = setTimeout(() => {
+        this.connectTimeoutId = null;
+        this.callbacks.onDispatch({ type: 'ERROR' });
+      }, 15_000);
+    }
   }
 
   // Enlarge the receiver's jitter buffer. Prefers the modern jitterBufferTarget (ms),

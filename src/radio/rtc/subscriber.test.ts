@@ -49,6 +49,30 @@ describe('Subscriber ICE transport policy (Sunday anchor)', () => {
   });
 });
 
+describe('Subscriber connect timeout', () => {
+  it('does not fire a bogus ERROR once the track has arrived', async () => {
+    vi.useFakeTimers();
+    try {
+      const onDispatch = vi.fn();
+      const fetchMock = vi.fn()
+        .mockResolvedValueOnce({ ok: true, json: async () => ({ cfSessionId: 's', cfOffer: 'v=0' }) })
+        .mockResolvedValueOnce({ ok: true, json: async () => ({}) });
+      vi.stubGlobal('fetch', fetchMock);
+
+      const sub = new Subscriber({ onStreamReady: vi.fn(), onDispatch }, '/api/rtc-session', async () => 'tok');
+      await sub.connect();
+
+      // Track arrives (ICE succeeded), then well past the 15s stall timeout.
+      mockPc.ontrack!({ receiver: { jitterBufferTarget: null }, streams: [{}] });
+      vi.advanceTimersByTime(20_000);
+
+      expect(onDispatch).not.toHaveBeenCalledWith({ type: 'ERROR' });
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('Subscriber getStats candidateType', () => {
   it('returns relay candidateType when the active candidate pair is a relay', async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('stop')));

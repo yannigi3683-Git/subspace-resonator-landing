@@ -174,7 +174,9 @@ export function useListenerAudio(
               // surfaces a manual retry button; a mid-stream DISCONNECTED just pauses the flag.
               if (event.type === 'ERROR') {
                 setPlaying(false);
-                setConnectionError(true);
+                // Only surface CONNECTION FAILED for a genuine initial-connect failure.
+                // Once audio has played, a late ERROR is a stray signal, not a dead stream.
+                if (!hasPlayedRef.current) setConnectionError(true);
               } else if (event.type === 'DISCONNECTED') {
                 setPlaying(false);
               }
