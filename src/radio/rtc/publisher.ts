@@ -1,6 +1,5 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus, nextBitrateKbps } from './audioQuality';
-import { loadIceServers } from './iceServers';
 
 export interface PublisherCallbacks {
   onSessionReady: (cfSessionId: string) => void;
@@ -45,16 +44,11 @@ export class Publisher {
   }
 
   async connect(stream: MediaStream, title?: string): Promise<void> {
-    const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
-    // Force relay when TURN is available: the host's direct UDP upload binding dies on a
-    // corporate firewall after 30-60s, dropping the source for every listener. Relaying over
-    // CF's TCP/TLS 443 survives. A one-way broadcast's latency budget makes the hop free.
-    const hasTurn = iceServers.some(s =>
-      (Array.isArray(s.urls) ? s.urls : [s.urls]).some(
-        (u: string) => u.startsWith('turn:') || u.startsWith('turns:'),
-      ),
-    );
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: hasTurn ? 'relay' : 'all', iceServers });
+    // Sunday-anchor transport: policy 'all' with no explicit ICE servers (Cloudflare is
+    // ICE-lite and carries the reachable candidates in the offer/answer SDP). App STUN/TURN
+    // only adds competing candidate pairs that ICE renominates between, causing 1-5s media
+    // pauses for every listener. Matches the subscriber.
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     for (const track of stream.getAudioTracks()) {
       this.pc.addTrack(track, stream);

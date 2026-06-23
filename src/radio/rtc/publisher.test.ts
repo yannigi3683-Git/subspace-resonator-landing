@@ -151,40 +151,23 @@ describe('Publisher audio bitrate (FR-4)', () => {
   });
 });
 
-describe('Publisher ICE servers', () => {
-  it('forces relay and includes the TURN server when the broker returns one', async () => {
+describe('Publisher ICE transport policy (Sunday anchor)', () => {
+  it("uses policy 'all' with no explicit ICE servers and never fetches a TURN relay", async () => {
     let pcConfig: RTCConfiguration | undefined;
     vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
       pcConfig = cfg;
       return mockPc;
     }));
-    const turn = { urls: 'turn:turn.cloudflare.com:443?transport=tcp', username: 'u', credential: 'c' };
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
-      const phase = JSON.parse(init.body as string).phase;
-      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: turn }) });
-      return Promise.resolve({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) });
-    }));
-    await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
-
-    expect(pcConfig?.iceServers).toEqual(expect.arrayContaining([turn]));
-    // Host upload over a corporate firewall must relay or its direct UDP binding dies.
-    expect(pcConfig?.iceTransportPolicy).toBe('relay');
-  });
-
-  it('uses all policy when no TURN credentials are available', async () => {
-    let pcConfig: RTCConfiguration | undefined;
-    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function (cfg: RTCConfiguration) {
-      pcConfig = cfg;
-      return mockPc;
-    }));
-    vi.stubGlobal('fetch', vi.fn().mockImplementation((_url: string, init: RequestInit) => {
-      const phase = JSON.parse(init.body as string).phase;
-      if (phase === 'ice-servers') return Promise.resolve({ ok: true, json: async () => ({ iceServers: null }) });
-      return Promise.resolve({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) });
-    }));
+    const fetchSpy = vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cfSessionId: 'x', sdpAnswer: 'v=0' }) });
+    vi.stubGlobal('fetch', fetchSpy);
     await new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok').connect(makeStream());
 
     expect(pcConfig?.iceTransportPolicy).toBe('all');
+    expect(pcConfig?.iceServers).toBeUndefined();
+    const phases = fetchSpy.mock.calls.map((c) => {
+      try { return JSON.parse((c[1] as RequestInit).body as string).phase; } catch { return null; }
+    });
+    expect(phases).not.toContain('ice-servers');
   });
 });
 
