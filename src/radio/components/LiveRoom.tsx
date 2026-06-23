@@ -31,6 +31,8 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const [unread, setUnread] = useState(0);
   const prevMsgCount = useRef(messages.length);
   const [rtcStats, setRtcStats] = useState<SubscriberStats | null>(null);
+  const showDebug = typeof window !== 'undefined' &&
+    new URLSearchParams(window.location.search).has('debug');
 
   useEffect(() => {
     const newCount = messages.length;
@@ -41,13 +43,13 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   }, [messages.length, mobileTab]);
 
   useEffect(() => {
-    if (!ready) { setRtcStats(null); return; }
+    if (!ready || !showDebug) { setRtcStats(null); return; }
     const id = setInterval(async () => {
       const s = await getStats();
       setRtcStats(s);
     }, 2000);
     return () => clearInterval(id);
-  }, [ready, getStats]);
+  }, [ready, getStats, showDebug]);
 
   if (isKicked) {
     return (
@@ -124,23 +126,25 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
             </div>
           )}
 
-          {/* Debug stats: always-on readable pill (temporary, for cut diagnosis) */}
-          <div className="absolute top-3 right-3 z-30 font-mono text-[10px] text-white/80 bg-black/70 border border-white/15 px-2.5 py-1.5 rounded-md whitespace-nowrap pointer-events-none">
-            {rtcStats ? (
-              <>
-                BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
-                LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
-                STALLS: {stalls}&nbsp;&nbsp;
-                JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
-                RTT: {Math.round(rtcStats.rttMs)}ms
-                {rtcStats.candidateType && (
-                  <>&nbsp;&nbsp;<span className={rtcStats.candidateType === 'relay' ? 'text-green-400' : 'text-white/40'}>{rtcStats.candidateType === 'relay' ? 'RELAY' : 'DIRECT'}</span></>
-                )}
-              </>
-            ) : (
-              'connecting…'
-            )}
-          </div>
+          {/* Debug stats pill: only on /radio?debug (hidden from end users) */}
+          {showDebug && (
+            <div className="absolute top-3 right-3 z-30 font-mono text-[10px] text-white/80 bg-black/70 border border-white/15 px-2.5 py-1.5 rounded-md whitespace-nowrap pointer-events-none">
+              {rtcStats ? (
+                <>
+                  BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
+                  LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
+                  STALLS: {stalls}&nbsp;&nbsp;
+                  JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
+                  RTT: {Math.round(rtcStats.rttMs)}ms
+                  {rtcStats.candidateType && (
+                    <>&nbsp;&nbsp;<span className={rtcStats.candidateType === 'relay' ? 'text-green-400' : 'text-white/40'}>{rtcStats.candidateType === 'relay' ? 'RELAY' : 'DIRECT'}</span></>
+                  )}
+                </>
+              ) : (
+                'connecting…'
+              )}
+            </div>
+          )}
         </div>
       </div>
 
