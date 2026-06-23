@@ -49,6 +49,50 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+describe('useListenerAudio background audio (MediaSession keeps audio alive on screen lock)', () => {
+  let mediaSession: {
+    playbackState: string;
+    metadata: unknown;
+    setActionHandler: ReturnType<typeof vi.fn>;
+  };
+
+  beforeEach(() => {
+    mediaSession = { playbackState: 'none', metadata: null, setActionHandler: vi.fn() };
+    Object.defineProperty(navigator, 'mediaSession', { value: mediaSession, configurable: true });
+    vi.stubGlobal('MediaMetadata', vi.fn().mockImplementation((m: unknown) => m));
+  });
+
+  afterEach(() => {
+    delete (navigator as unknown as { mediaSession?: unknown }).mediaSession;
+    vi.unstubAllGlobals();
+  });
+
+  it('marks the audio element playsinline so mobile keeps it out of fullscreen', async () => {
+    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
+    await act(async () => {});
+    expect(result.current.audioElement!.getAttribute('playsinline')).toBe('');
+  });
+
+  it('claims an active media session on play (playbackState + action handlers)', async () => {
+    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
+    await act(async () => {});
+    const audio = result.current.audioElement;
+    act(() => { audio!.dispatchEvent(new Event('playing')); });
+    expect(mediaSession.playbackState).toBe('playing');
+    expect(mediaSession.setActionHandler).toHaveBeenCalledWith('play', expect.any(Function));
+    expect(mediaSession.setActionHandler).toHaveBeenCalledWith('pause', expect.any(Function));
+  });
+
+  it('marks the session paused when playback pauses', async () => {
+    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
+    await act(async () => {});
+    const audio = result.current.audioElement;
+    act(() => { audio!.dispatchEvent(new Event('playing')); });
+    act(() => { audio!.dispatchEvent(new Event('pause')); });
+    expect(mediaSession.playbackState).toBe('paused');
+  });
+});
+
 describe('useListenerAudio stall counting', () => {
   it('onwaiting increments stalls after playback starts', async () => {
     const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
