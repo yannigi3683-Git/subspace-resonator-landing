@@ -105,4 +105,20 @@ describe('Subscriber jitter buffer', () => {
     expect(receiver.jitterBufferTarget).toBe(1500);
     expect(onStreamReady).toHaveBeenCalled();
   });
+
+  it('clamps the target to the 4000ms spec max (values above are silently ignored by Chrome)', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('stop')));
+    const sub = new Subscriber(
+      { onStreamReady: vi.fn(), onDispatch: vi.fn() },
+      '/api/rtc-session',
+      async () => 'tok',
+      5000,
+    );
+    await sub.connect();
+
+    const receiver: { jitterBufferTarget: number | null } = { jitterBufferTarget: null };
+    mockPc.ontrack!({ receiver, streams: [{}] });
+
+    expect(receiver.jitterBufferTarget).toBe(4000);
+  });
 });

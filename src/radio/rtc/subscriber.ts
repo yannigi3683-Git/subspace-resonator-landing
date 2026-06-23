@@ -28,7 +28,7 @@ export class Subscriber {
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
-    private bufferMs = 5000,
+    private bufferMs = 2000,
   ) {}
 
   // Change the jitter buffer live (host can raise it for everyone when cuts are reported).
@@ -135,11 +135,14 @@ export class Subscriber {
   // falls back to playoutDelayHint (seconds) on older Chrome; no-ops where unsupported.
   private applyJitterBuffer(receiver: RTCRtpReceiver): void {
     try {
+      // jitterBufferTarget's spec range is 0-4000ms; Chrome silently ignores higher
+      // values, leaving the buffer at its ~30ms default (the cause of the periodic cuts).
+      const target = Math.min(this.bufferMs, 4000);
       const r = receiver as unknown as Record<string, unknown>;
       if ('jitterBufferTarget' in r) {
-        r.jitterBufferTarget = this.bufferMs; // ms (Chrome 114+)
+        r.jitterBufferTarget = target; // ms (Chrome 114+)
       } else if ('playoutDelayHint' in r) {
-        r.playoutDelayHint = this.bufferMs / 1000; // seconds (older Chrome)
+        r.playoutDelayHint = target / 1000; // seconds (older Chrome)
       }
     } catch {
       // Unsupported browser — falls back to the default buffer.

@@ -40,7 +40,7 @@ export function useListenerAudio(
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
-  const bufferMsRef = useRef(5000);
+  const bufferMsRef = useRef(2000);
   const silentRetryCountRef = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
