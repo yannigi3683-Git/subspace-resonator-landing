@@ -21,6 +21,41 @@ export interface UseListenerAudioResult {
   stalls: number;
 }
 
+// Registering action handlers + a 'playing' state claims audio focus, which is what makes
+// mobile browsers (Android Chrome) grant the audible-media background exemption and keep the
+// page out of the frozen lifecycle state when the screen locks. Without it the WebRTC
+// connection is suspended on lock and audio dies (or reconnects in a loop on screen dim).
+function setMediaSessionPlaying(audio: HTMLAudioElement, playing: boolean): void {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  const ms = navigator.mediaSession;
+  try {
+    ms.playbackState = playing ? 'playing' : 'paused';
+    if (!playing) return;
+    ms.setActionHandler('play', () => { void audio.play().catch(() => {}); });
+    ms.setActionHandler('pause', () => audio.pause());
+    if (!ms.metadata && typeof MediaMetadata !== 'undefined') {
+      ms.metadata = new MediaMetadata({
+        title: 'Subspace Radio',
+        artist: 'Subspace Resonator',
+        album: 'Live',
+      });
+    }
+  } catch {
+    // Older browsers may not support every action type — non-fatal.
+  }
+}
+
+function clearMediaSession(): void {
+  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
+  try {
+    navigator.mediaSession.playbackState = 'none';
+    navigator.mediaSession.setActionHandler('play', null);
+    navigator.mediaSession.setActionHandler('pause', null);
+  } catch {
+    // ignore
+  }
+}
+
 export function useListenerAudio(
   supabase: SupabaseClient,
   station: Station | null,
@@ -98,12 +133,20 @@ export function useListenerAudio(
       try {
         const audio = new Audio();
         audio.volume = volume;
+        audio.setAttribute('playsinline', '');
         audioRef.current = audio;
         // Source of truth for `playing` is the element's real events, not the one-shot
         // play() promise (which rejects with AbortError on renegotiation/reconnect while
         // audio actually starts, leaving the "TAP TO LISTEN" overlay stuck up).
-        audio.onplaying = () => { hasPlayedRef.current = true; setPlaying(true); };
-        audio.onpause = () => setPlaying(false);
+        audio.onplaying = () => {
+          hasPlayedRef.current = true;
+          setPlaying(true);
+          setMediaSessionPlaying(audio, true);
+        };
+        audio.onpause = () => {
+          setPlaying(false);
+          setMediaSessionPlaying(audio, false);
+        };
         // A `waiting`/`stalled` after playback started = a real mid-stream dropout
         // (buffer underrun). Gating on hasPlayed excludes normal startup buffering.
         // onstalled fires spuriously on MediaStream sources (GC pauses, silence, tab throttle).
@@ -155,6 +198,7 @@ export function useListenerAudio(
           audio.srcObject = null;
           audioRef.current = null;
           subscriberRef.current = null;
+          clearMediaSession();
           setPlaying(false);
           setReady(false);
         };
