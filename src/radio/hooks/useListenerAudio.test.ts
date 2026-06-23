@@ -49,47 +49,39 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe('useListenerAudio background audio (MediaSession keeps audio alive on screen lock)', () => {
-  let mediaSession: {
-    playbackState: string;
-    metadata: unknown;
-    setActionHandler: ReturnType<typeof vi.fn>;
-  };
-
-  beforeEach(() => {
-    mediaSession = { playbackState: 'none', metadata: null, setActionHandler: vi.fn() };
-    Object.defineProperty(navigator, 'mediaSession', { value: mediaSession, configurable: true });
-    vi.stubGlobal('MediaMetadata', vi.fn().mockImplementation((m: unknown) => m));
-  });
-
-  afterEach(() => {
-    delete (navigator as unknown as { mediaSession?: unknown }).mediaSession;
-    vi.unstubAllGlobals();
-  });
-
+describe('useListenerAudio playsinline (mobile keeps audio out of fullscreen)', () => {
   it('marks the audio element playsinline so mobile keeps it out of fullscreen', async () => {
     const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
     await act(async () => {});
     expect(result.current.audioElement!.getAttribute('playsinline')).toBe('');
   });
+});
 
-  it('claims an active media session on play (playbackState + action handlers)', async () => {
-    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
-    await act(async () => {});
-    const audio = result.current.audioElement;
-    act(() => { audio!.dispatchEvent(new Event('playing')); });
-    expect(mediaSession.playbackState).toBe('playing');
-    expect(mediaSession.setActionHandler).toHaveBeenCalledWith('play', expect.any(Function));
-    expect(mediaSession.setActionHandler).toHaveBeenCalledWith('pause', expect.any(Function));
+describe('useListenerAudio wake lock + Safari fallback', () => {
+  afterEach(() => {
+    delete (navigator as unknown as { wakeLock?: unknown }).wakeLock;
   });
 
-  it('marks the session paused when playback pauses', async () => {
+  it('acquires a screen wake lock when playback starts', async () => {
+    const request = vi.fn().mockResolvedValue({ release: vi.fn().mockResolvedValue(undefined), onrelease: null });
+    Object.defineProperty(navigator, 'wakeLock', { value: { request }, configurable: true });
+    Object.defineProperty(document, 'visibilityState', { value: 'visible', configurable: true });
+
     const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
     await act(async () => {});
     const audio = result.current.audioElement;
-    act(() => { audio!.dispatchEvent(new Event('playing')); });
-    act(() => { audio!.dispatchEvent(new Event('pause')); });
-    expect(mediaSession.playbackState).toBe('paused');
+    await act(async () => { audio!.dispatchEvent(new Event('playing')); });
+
+    expect(request).toHaveBeenCalledWith('screen');
+  });
+
+  it('sets playbackBlocked when a user-gesture play() is rejected (iOS Safari)', async () => {
+    HTMLAudioElement.prototype.play = vi.fn().mockRejectedValue(new DOMException('blocked', 'NotAllowedError'));
+    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
+    await act(async () => {});
+    expect(result.current.playbackBlocked).toBe(false);
+    await act(async () => { result.current.resume(); });
+    expect(result.current.playbackBlocked).toBe(true);
   });
 });
 

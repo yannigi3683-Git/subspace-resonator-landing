@@ -23,7 +23,7 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId);
   const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
-  const { playing, ready, connectionError, resume, retry, volume, setVolume, getStats, stalls } =
+  const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls } =
     useListenerAudio(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
 
@@ -87,15 +87,22 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
                   </button>
                 </div>
               ) : (
-                <button
-                  type="button"
-                  onClick={resume}
-                  disabled={!ready}
-                  data-testid="tap-to-listen"
-                  className="font-mono text-sm tracking-[0.3em] text-white border border-white/40 px-6 py-3 disabled:opacity-50"
-                >
-                  {ready ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
-                </button>
+                <div className="flex flex-col items-center gap-3 px-6 text-center">
+                  <button
+                    type="button"
+                    onClick={resume}
+                    disabled={!ready}
+                    data-testid="tap-to-listen"
+                    className="font-mono text-sm tracking-[0.3em] text-white border border-white/40 px-6 py-3 disabled:opacity-50"
+                  >
+                    {ready ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
+                  </button>
+                  {playbackBlocked && (
+                    <p className="font-mono text-[11px] leading-relaxed text-[#ffcc66] max-w-[240px]">
+                      Playback was blocked. Tap again, and check your phone's silent switch.
+                    </p>
+                  )}
+                </div>
               )}
             </div>
           )}

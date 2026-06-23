@@ -9,6 +9,8 @@ export interface UseListenerAudioResult {
   ready: boolean;
   /** True when the connection failed or timed out. Show a retry button. */
   connectionError: boolean;
+  /** True when a user-gesture .play() was rejected (iOS Safari). Show a tap-again hint. */
+  playbackBlocked: boolean;
   /** Manually start playback from a user gesture (defeats autoplay restrictions). */
   resume: () => void;
   /** Re-attempt the WebRTC connection after a failure. */
@@ -21,41 +23,6 @@ export interface UseListenerAudioResult {
   stalls: number;
 }
 
-// Registering action handlers + a 'playing' state claims audio focus, which is what makes
-// mobile browsers (Android Chrome) grant the audible-media background exemption and keep the
-// page out of the frozen lifecycle state when the screen locks. Without it the WebRTC
-// connection is suspended on lock and audio dies (or reconnects in a loop on screen dim).
-function setMediaSessionPlaying(audio: HTMLAudioElement, playing: boolean): void {
-  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
-  const ms = navigator.mediaSession;
-  try {
-    ms.playbackState = playing ? 'playing' : 'paused';
-    if (!playing) return;
-    ms.setActionHandler('play', () => { void audio.play().catch(() => {}); });
-    ms.setActionHandler('pause', () => audio.pause());
-    if (!ms.metadata && typeof MediaMetadata !== 'undefined') {
-      ms.metadata = new MediaMetadata({
-        title: 'Subspace Radio',
-        artist: 'Subspace Resonator',
-        album: 'Live',
-      });
-    }
-  } catch {
-    // Older browsers may not support every action type — non-fatal.
-  }
-}
-
-function clearMediaSession(): void {
-  if (typeof navigator === 'undefined' || !('mediaSession' in navigator)) return;
-  try {
-    navigator.mediaSession.playbackState = 'none';
-    navigator.mediaSession.setActionHandler('play', null);
-    navigator.mediaSession.setActionHandler('pause', null);
-  } catch {
-    // ignore
-  }
-}
-
 export function useListenerAudio(
   supabase: SupabaseClient,
   station: Station | null,
@@ -66,6 +33,7 @@ export function useListenerAudio(
   const [retryKey, setRetryKey] = useState(0);
   const [volume, setVolumeState] = useState(1);
   const [stalls, setStalls] = useState(0);
+  const [playbackBlocked, setPlaybackBlocked] = useState(false);
   const stallsRef = useRef(0);
   const hasPlayedRef = useRef(false);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -74,6 +42,35 @@ export function useListenerAudio(
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
   const bufferMsRef = useRef(5000);
   const silentRetryCountRef = useRef(0);
+  const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+
+  // Screen Wake Lock: keep the phone awake while a listener is engaged (screen on, chatting)
+  // so auto-lock doesn't freeze the page and suspend the WebRTC connection. Feature-detected;
+  // the OS auto-releases it when the tab hides, so we re-acquire on visibilitychange.
+  const acquireWakeLock = useCallback(async () => {
+    try {
+      if (
+        typeof navigator !== 'undefined' &&
+        'wakeLock' in navigator &&
+        typeof document !== 'undefined' &&
+        document.visibilityState === 'visible' &&
+        !wakeLockRef.current
+      ) {
+        const sentinel = await navigator.wakeLock.request('screen');
+        wakeLockRef.current = sentinel;
+        sentinel.onrelease = () => {
+          if (wakeLockRef.current === sentinel) wakeLockRef.current = null;
+        };
+      }
+    } catch {
+      // Unsupported (iOS < 16.4), denied, or tab hidden — non-fatal, audio still plays.
+    }
+  }, []);
+
+  const releaseWakeLock = useCallback(() => {
+    wakeLockRef.current?.release().catch(() => {});
+    wakeLockRef.current = null;
+  }, []);
 
   const getStats = useCallback(() => {
     return subscriberRef.current?.getStats() ?? Promise.resolve(null);
@@ -86,8 +83,16 @@ export function useListenerAudio(
   }, []);
 
   const resume = useCallback(() => {
-    audioRef.current?.play().catch(() => {});
-  }, []);
+    const audio = audioRef.current;
+    if (!audio) return;
+    audio.play().then(() => {
+      setPlaybackBlocked(false);
+      void acquireWakeLock();
+    }).catch(() => {
+      // iOS Safari can still refuse to start WebRTC audio even from a tap — surface a hint.
+      setPlaybackBlocked(true);
+    });
+  }, [acquireWakeLock]);
 
   const retry = useCallback(() => {
     silentRetryCountRef.current = 0;
@@ -120,6 +125,7 @@ export function useListenerAudio(
       silentRetryCountRef.current = 0;
       cleanupRef.current?.();
       cleanupRef.current = null;
+      releaseWakeLock();
       setPlaying(false);
       setReady(false);
       setConnectionError(false);
@@ -141,12 +147,10 @@ export function useListenerAudio(
         audio.onplaying = () => {
           hasPlayedRef.current = true;
           setPlaying(true);
-          setMediaSessionPlaying(audio, true);
+          setPlaybackBlocked(false);
+          void acquireWakeLock();
         };
-        audio.onpause = () => {
-          setPlaying(false);
-          setMediaSessionPlaying(audio, false);
-        };
+        audio.onpause = () => setPlaying(false);
         // A `waiting`/`stalled` after playback started = a real mid-stream dropout
         // (buffer underrun). Gating on hasPlayed excludes normal startup buffering.
         // onstalled fires spuriously on MediaStream sources (GC pauses, silence, tab throttle).
@@ -198,7 +202,7 @@ export function useListenerAudio(
           audio.srcObject = null;
           audioRef.current = null;
           subscriberRef.current = null;
-          clearMediaSession();
+          releaseWakeLock();
           setPlaying(false);
           setReady(false);
         };
@@ -232,14 +236,33 @@ export function useListenerAudio(
     return () => { supabase.removeChannel(ch); };
   }, [supabase]);
 
+  // On return to foreground: re-acquire the wake lock; if audio died while the screen was
+  // locked (WebRTC suspended on lock), reconnect in place — no page reload. retry() reuses the
+  // same join/signaling flow; returning to visible also satisfies iOS autoplay for the fresh stream.
   useEffect(() => {
-    return () => { cleanupRef.current?.(); };
-  }, []);
+    if (typeof document === 'undefined') return;
+    const onVisibility = () => {
+      if (document.visibilityState !== 'visible') return;
+      const audio = audioRef.current;
+      if (audio && !audio.paused) {
+        void acquireWakeLock();
+      } else if (cfSessionId && hasPlayedRef.current) {
+        retry();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+    return () => document.removeEventListener('visibilitychange', onVisibility);
+  }, [acquireWakeLock, retry, cfSessionId]);
+
+  useEffect(() => {
+    return () => { cleanupRef.current?.(); releaseWakeLock(); };
+  }, [releaseWakeLock]);
 
   return {
     playing,
     ready,
     connectionError,
+    playbackBlocked,
     resume,
     retry,
     volume,
