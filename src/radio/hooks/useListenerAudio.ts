@@ -41,7 +41,6 @@ export function useListenerAudio(
   const sessionTokenRef = useRef<string>('');
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
   const bufferMsRef = useRef(2000);
-  const silentRetryCountRef = useRef(0);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Screen Wake Lock: keep the phone awake while a listener is engaged (screen on, chatting)
@@ -95,7 +94,6 @@ export function useListenerAudio(
   }, [acquireWakeLock]);
 
   const retry = useCallback(() => {
-    silentRetryCountRef.current = 0;
     setConnectionError(false);
     setRetryKey((k) => k + 1);
   }, []);
@@ -122,7 +120,6 @@ export function useListenerAudio(
 
   useEffect(() => {
     if (!cfSessionId) {
-      silentRetryCountRef.current = 0;
       cleanupRef.current?.();
       cleanupRef.current = null;
       releaseWakeLock();
@@ -166,21 +163,20 @@ export function useListenerAudio(
           {
             onStreamReady: (stream: MediaStream) => {
               audio.srcObject = stream;
-              silentRetryCountRef.current = 0;
               setConnectionError(false);
               setReady(true);
               audio.play().catch(() => {});
             },
             onDispatch: (event) => {
-              if (event.type === 'DISCONNECTED' || event.type === 'ERROR') {
+              // Sunday behavior: do NOT tear down and rebuild the connection on a blip.
+              // Closing the PC and reconnecting is a multi-second audible gap; left alone,
+              // a transient ICE drop self-recovers silently. Only a hard connect-phase ERROR
+              // surfaces a manual retry button; a mid-stream DISCONNECTED just pauses the flag.
+              if (event.type === 'ERROR') {
                 setPlaying(false);
-                if (silentRetryCountRef.current < 3) {
-                  const attempt = ++silentRetryCountRef.current;
-                  setTimeout(() => setRetryKey((k) => k + 1), attempt * 3000);
-                } else {
-                  silentRetryCountRef.current = 0;
-                  setConnectionError(true);
-                }
+                setConnectionError(true);
+              } else if (event.type === 'DISCONNECTED') {
+                setPlaying(false);
               }
             },
           },
@@ -236,23 +232,17 @@ export function useListenerAudio(
     return () => { supabase.removeChannel(ch); };
   }, [supabase]);
 
-  // On return to foreground: re-acquire the wake lock; if audio died while the screen was
-  // locked (WebRTC suspended on lock), reconnect in place — no page reload. retry() reuses the
-  // same join/signaling flow; returning to visible also satisfies iOS autoplay for the fresh stream.
+  // On return to foreground: re-acquire the wake lock (the OS releases it when the tab hides).
+  // Sunday behavior: do NOT auto-reconnect here — a forced rebuild is an audible gap. If audio
+  // died while the screen was locked, the user taps to listen again.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const onVisibility = () => {
-      if (document.visibilityState !== 'visible') return;
-      const audio = audioRef.current;
-      if (audio && !audio.paused) {
-        void acquireWakeLock();
-      } else if (cfSessionId && hasPlayedRef.current) {
-        retry();
-      }
+      if (document.visibilityState === 'visible') void acquireWakeLock();
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
-  }, [acquireWakeLock, retry, cfSessionId]);
+  }, [acquireWakeLock]);
 
   useEffect(() => {
     return () => { cleanupRef.current?.(); releaseWakeLock(); };

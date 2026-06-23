@@ -1,6 +1,7 @@
 import { renderHook, act } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { useListenerAudio } from './useListenerAudio';
+import { Subscriber } from '../rtc/subscriber';
 
 // Intercept the dynamic import so the hook doesn't need real WebRTC.
 // vi.mock is hoisted, so it catches both static and dynamic imports of this path.
@@ -82,6 +83,23 @@ describe('useListenerAudio wake lock + Safari fallback', () => {
     expect(result.current.playbackBlocked).toBe(false);
     await act(async () => { result.current.resume(); });
     expect(result.current.playbackBlocked).toBe(true);
+  });
+});
+
+describe('useListenerAudio leaves the connection alone on a blip (Sunday behavior)', () => {
+  it('does NOT tear down or reconnect on a mid-stream DISCONNECTED', async () => {
+    vi.mocked(Subscriber).mockClear();
+    const { result } = renderHook(() => useListenerAudio(fakeSupabase(), liveStation));
+    await act(async () => {});
+    expect(vi.mocked(Subscriber)).toHaveBeenCalledTimes(1);
+
+    const callbacks = vi.mocked(Subscriber).mock.calls[0][0] as { onDispatch: (e: { type: string }) => void };
+    act(() => { result.current.audioElement!.dispatchEvent(new Event('playing')); });
+
+    await act(async () => { callbacks.onDispatch({ type: 'DISCONNECTED' }); });
+
+    // A reconnect would construct a second Subscriber. Still 1 = the PC was left alone.
+    expect(vi.mocked(Subscriber)).toHaveBeenCalledTimes(1);
   });
 });
 
