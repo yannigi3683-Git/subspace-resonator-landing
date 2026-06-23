@@ -1,6 +1,5 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus } from './audioQuality';
-import { loadIceServers } from './iceServers';
 
 export interface SubscriberStats {
   effectiveBufferMs: number;
@@ -39,13 +38,10 @@ export class Subscriber {
   }
 
   async connect(): Promise<void> {
-    const iceServers = await loadIceServers(this.apiUrl, this.getAuthToken);
-    const hasTurn = iceServers.some(s =>
-      (Array.isArray(s.urls) ? s.urls : [s.urls]).some(
-        (u: string) => u.startsWith('turn:') || u.startsWith('turns:'),
-      ),
-    );
-    this.pc = new RTCPeerConnection({ iceTransportPolicy: hasTurn ? 'relay' : 'all', iceServers });
+    // Sunday-anchor transport: policy 'all' with no explicit ICE servers (Cloudflare carries
+    // candidates in the offer/answer SDP). The post-Sunday forced-TURN-relay caused
+    // direct<->relay flapping and cuts, so the listener stays on Sunday's behaviour here.
+    this.pc = new RTCPeerConnection({ iceTransportPolicy: 'all' });
 
     this.pc.ontrack = (event) => {
       // Track arrived — ICE succeeded, cancel the stall timeout.
