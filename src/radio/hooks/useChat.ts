@@ -1,24 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatMessage, Identity } from '../types';
-import { validateMessage, chatSinceFloor } from '../chatRules';
-
-// Remember when this browser first saw a broadcast session, so a refresh reloads the
-// same broadcast's chat instead of wiping it. A new broadcast (new cfSessionId) has no
-// stored marker, so its chat starts empty.
-function sessionFirstSeen(sessionId: string | undefined): string | null {
-  if (!sessionId) return null;
-  try {
-    const key = `radio_chat_seen_${sessionId}`;
-    const saved = localStorage.getItem(key);
-    if (saved) return saved;
-    const nowIso = new Date().toISOString();
-    localStorage.setItem(key, nowIso);
-    return nowIso;
-  } catch {
-    return null;
-  }
-}
+import { validateMessage, chatReloadFloor } from '../chatRules';
 
 const MAX_MESSAGES = 100;
 
@@ -29,7 +12,7 @@ export interface UseChatResult {
   sendError: string | null;
 }
 
-export function useChat(supabase: SupabaseClient, identity: Identity, uid: string, sessionId?: string): UseChatResult {
+export function useChat(supabase: SupabaseClient, identity: Identity, uid: string, sessionId?: string, startedAt?: string): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -38,8 +21,9 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
     let cancelled = false;
     setMessages([]);
 
-    // Reload the current broadcast's chat (survives refresh; resets per broadcast/date).
-    const sinceIso = chatSinceFloor(sessionFirstSeen(sessionId), Date.now());
+    // Reload from the broadcast's start time so a mid-broadcast joiner sees the whole
+    // broadcast's chat; resets when a new broadcast starts (new startedAt).
+    const sinceIso = chatReloadFloor(startedAt, Date.now());
     supabase
       .from('chat_messages')
       .select('id, uid, display_name, avatar_id, body, is_host, created_at')
@@ -76,7 +60,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId]);
+  }, [supabase, sessionId, startedAt]);
 
   const sendMessage = useCallback(
     async (body: string) => {

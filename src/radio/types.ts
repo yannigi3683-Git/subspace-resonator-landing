@@ -3,7 +3,7 @@ export type StationMode = 'off' | 'live';
 export interface Station {
   mode: StationMode;
   live_title: string | null;
-  live_session: { cfSessionId: string } | null;
+  live_session: { cfSessionId: string; startedAt?: string } | null;
   slow_mode_s: number;
   locked: boolean;
 }

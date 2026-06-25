@@ -21,7 +21,7 @@ interface LiveRoomProps {
 }
 
 export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
-  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId);
+  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
   const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls } =
     useListenerAudio(supabase, station);

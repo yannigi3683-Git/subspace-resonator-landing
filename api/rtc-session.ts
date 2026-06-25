@@ -281,7 +281,7 @@ export async function POST(req: Request): Promise<Response> {
     const title = ((body.title as string | undefined) ?? '').slice(0, 80) || 'Subspace Radio Live';
     const { error: stErr } = await getUserClient(token)
       .from('station')
-      .update({ mode: 'live', live_title: title, live_session: { cfSessionId } })
+      .update({ mode: 'live', live_title: title, live_session: { cfSessionId, startedAt: new Date().toISOString() } })
       .eq('id', true);
     if (stErr) {
       console.error('[rtc-session publish-offer station]', stErr);

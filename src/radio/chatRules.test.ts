@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateMessage, formatSlowModeRemaining, chatSinceFloor } from './chatRules';
+import { validateMessage, formatSlowModeRemaining, chatReloadFloor } from './chatRules';
 
 describe('validateMessage', () => {
   it('rejects empty string', () => {
@@ -37,21 +37,19 @@ describe('formatSlowModeRemaining', () => {
   });
 });
 
-describe('chatSinceFloor', () => {
+describe('chatReloadFloor', () => {
   const now = new Date(2026, 5, 21, 15, 0, 0).getTime(); // local time, TZ-stable
-  const todayMidnight = new Date(2026, 5, 21).toISOString();
 
-  it('no session (null firstSeen) floors to now, so chat starts empty', () => {
-    expect(chatSinceFloor(null, now)).toBe(new Date(now).toISOString());
+  it('floors to the broadcast start time when present (mid-broadcast joiner sees full chat)', () => {
+    const startedAt = new Date(2026, 5, 21, 14, 30, 0).toISOString();
+    expect(chatReloadFloor(startedAt, now)).toBe(startedAt);
   });
 
-  it('keeps firstSeen when it is later than the start of today (refresh survives)', () => {
-    const firstSeen = new Date(2026, 5, 21, 14, 30, 0).toISOString();
-    expect(chatSinceFloor(firstSeen, now)).toBe(firstSeen);
+  it('falls back to now when startedAt is null (chat starts empty)', () => {
+    expect(chatReloadFloor(null, now)).toBe(new Date(now).toISOString());
   });
 
-  it('floors to start of today when firstSeen is from a previous day (date change resets)', () => {
-    const yesterday = new Date(2026, 5, 20, 23, 0, 0).toISOString();
-    expect(chatSinceFloor(yesterday, now)).toBe(todayMidnight);
+  it('falls back to now when startedAt is undefined (pre-startedAt session)', () => {
+    expect(chatReloadFloor(undefined, now)).toBe(new Date(now).toISOString());
   });
 });

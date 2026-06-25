@@ -17,13 +17,11 @@ export function formatSlowModeRemaining(ms: number): string {
   return `${s}s`;
 }
 
-// Earliest created_at to reload chat from. Chat is scoped to the current broadcast:
-// it persists across a page refresh (firstSeen of this session) but resets when the
-// broadcast ends (a new session has no firstSeen) or when the date changes (the
-// start-of-today floor advances past an older firstSeen).
-export function chatSinceFloor(firstSeen: string | null, now: number): string {
-  const d = new Date(now);
-  const todayMidnight = new Date(d.getFullYear(), d.getMonth(), d.getDate()).toISOString();
-  if (!firstSeen) return new Date(now).toISOString();
-  return firstSeen > todayMidnight ? firstSeen : todayMidnight;
+// Earliest created_at to reload chat from = the current broadcast's start time, so a
+// listener who joins mid-broadcast sees the whole broadcast's chat (not an empty box).
+// Falls back to "now" when the broadcast has no recorded start (a session published
+// before startedAt was tracked) — same as the old empty-on-join behaviour, self-heals
+// on the next go-live.
+export function chatReloadFloor(startedAt: string | null | undefined, now: number): string {
+  return startedAt ?? new Date(now).toISOString();
 }
