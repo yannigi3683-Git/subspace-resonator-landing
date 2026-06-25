@@ -27,16 +27,17 @@ export function Chat({ messages }: ChatProps) {
               className="flex-shrink-0 mt-0.5"
             />
             <div className="flex-1 min-w-0">
-              <span className="font-mono text-[11px] text-[#aaa] mr-1">
+              <span className="font-mono text-[13px] text-[#aaa] mr-1">
                 {msg.display_name}
               </span>
               {msg.is_host && (
-                <span className="font-mono text-[9px] bg-[#7B2FBE] text-white px-1 py-0.5 rounded mr-1 align-middle">
+                <span className="font-mono text-[10px] bg-[#7B2FBE] text-white px-1 py-0.5 rounded mr-1 align-middle">
                   HOST
                 </span>
               )}
               {/* SECURITY: msg.body is rendered as text content, never as HTML */}
-              <span className="font-mono text-white text-[12px] break-words">
+              {/* dir="auto" flips Hebrew to RTL per-message; Latin stays LTR (native, no detection) */}
+              <span dir="auto" className="font-mono text-white text-[14px] break-words">
                 {msg.body}
               </span>
             </div>

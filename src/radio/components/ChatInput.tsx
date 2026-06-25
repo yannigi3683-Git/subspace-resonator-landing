@@ -43,7 +43,8 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
           disabled={disabled}
           placeholder={disabled ? 'Chat is locked' : 'Say something...'}
           aria-label="Chat message"
-          className="flex-1 bg-[#1a0030] border border-[#333] text-white font-mono text-sm px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] disabled:opacity-40 placeholder:text-[#555]"
+          dir="auto"
+          className="flex-1 bg-[#1a0030] border border-[#333] text-white font-mono text-base px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] disabled:opacity-40 placeholder:text-[#555]"
         />
         <button
           type="button"
