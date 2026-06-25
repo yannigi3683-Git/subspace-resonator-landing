@@ -29,7 +29,7 @@ export class Subscriber {
     private readonly callbacks: SubscriberCallbacks,
     private readonly apiUrl = '/api/rtc-session',
     private readonly getAuthToken: () => Promise<string>,
-    private bufferMs = 2000,
+    private bufferMs = 3000,
   ) {}
 
   // Change the jitter buffer live (host can raise it for everyone when cuts are reported).

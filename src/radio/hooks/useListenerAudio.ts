@@ -40,7 +40,7 @@ export function useListenerAudio(
   const cleanupRef = useRef<(() => void) | null>(null);
   const sessionTokenRef = useRef<string>('');
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
-  const bufferMsRef = useRef(2000);
+  const bufferMsRef = useRef(3000);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
 
   // Screen Wake Lock: keep the phone awake while a listener is engaged (screen on, chatting)
