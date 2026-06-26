@@ -42,6 +42,10 @@ export function useListenerAudio(
   const subscriberRef = useRef<{ setBufferMs: (ms: number) => void; getStats: () => Promise<SubscriberStats | null> } | null>(null);
   const bufferMsRef = useRef(3000);
   const wakeLockRef = useRef<WakeLockSentinel | null>(null);
+  // Armed when the tab is hidden (phone lock / app switch). On a real lock the WebRTC stream is
+  // suspended and dies; the resume tap must then REBUILD the connection, not just replay the dead
+  // element — otherwise "TAP TO LISTEN" does nothing and only a refresh recovers audio.
+  const wasBackgroundedRef = useRef(false);
 
   // Screen Wake Lock: keep the phone awake while a listener is engaged (screen on, chatting)
   // so auto-lock doesn't freeze the page and suspend the WebRTC connection. Feature-detected;
@@ -82,6 +86,14 @@ export function useListenerAudio(
   }, []);
 
   const resume = useCallback(() => {
+    // Returning from a phone lock / background: the stream is likely dead, so a full reconnect
+    // (rebuild the Subscriber, same as a page refresh) is the only thing that restores audio.
+    if (wasBackgroundedRef.current) {
+      wasBackgroundedRef.current = false;
+      setConnectionError(false);
+      setRetryKey((k) => k + 1);
+      return;
+    }
     const audio = audioRef.current;
     if (!audio) return;
     audio.play().then(() => {
@@ -143,6 +155,7 @@ export function useListenerAudio(
         // audio actually starts, leaving the "TAP TO LISTEN" overlay stuck up).
         audio.onplaying = () => {
           hasPlayedRef.current = true;
+          wasBackgroundedRef.current = false;
           setPlaying(true);
           setPlaybackBlocked(false);
           void acquireWakeLock();
@@ -235,12 +248,13 @@ export function useListenerAudio(
   }, [supabase]);
 
   // On return to foreground: re-acquire the wake lock (the OS releases it when the tab hides).
-  // Sunday behavior: do NOT auto-reconnect here — a forced rebuild is an audible gap. If audio
-  // died while the screen was locked, the user taps to listen again.
+  // Sunday behavior: do NOT auto-reconnect here — a forced rebuild is an audible gap. But arm
+  // wasBackgrounded on hide so the user's resume tap reconnects (the stream usually died on lock).
   useEffect(() => {
     if (typeof document === 'undefined') return;
     const onVisibility = () => {
       if (document.visibilityState === 'visible') void acquireWakeLock();
+      else wasBackgroundedRef.current = true;
     };
     document.addEventListener('visibilitychange', onVisibility);
     return () => document.removeEventListener('visibilitychange', onVisibility);
