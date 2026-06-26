@@ -73,6 +73,15 @@
 @keyframes radio-eq { 0%, 100% { height: 22%; } 50% { height: 100%; } }
 .radio-eq { height: 22%; animation: radio-eq 0.8s ease-in-out infinite; }
 
+/* Now-playing marquee: slide a too-long track name left to reveal the end, pause, return.
+   Distance + duration are set inline from the measured overflow so short names don't move. */
+@keyframes radio-np-marquee {
+  0%, 12% { transform: translateX(0); }
+  48%, 60% { transform: translateX(calc(-1 * var(--np-marquee, 0px))); }
+  96%, 100% { transform: translateX(0); }
+}
+.radio-np-marquee { animation: radio-np-marquee var(--np-marquee-dur, 8s) linear infinite; will-change: transform; }
+
 @keyframes radio-pulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.35; transform: scale(0.85); } }
 .radio-pulse { animation: radio-pulse 1.4s ease-in-out infinite; }
 
@@ -134,6 +143,7 @@
   .radio-spot,
   .radio-mote,
   .radio-amp-glow,
+  .radio-np-marquee,
   .pixel-blink { animation: none; }
 }
 
