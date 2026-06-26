@@ -254,10 +254,31 @@ To verify events live: GA4 → Realtime → DebugView, then interact on the site
 
 ---
 
+## Subspace Radio (`/radio`, `radio.html`)
+
+Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (AdminConsole/GoLivePanel); listeners open `/radio` (LiveRoom). Transport = **Cloudflare Realtime SFU** (publisher → SFU → subscribers), signaling via `api/rtc-session.ts`; presence/chat/control via **Supabase** Realtime + RLS (project `lgcmbmlapksmdbkhkyyv`).
+
+**Audio transport (FROZEN — do not change without a real device test):**
+- Both `publisher.ts` and `subscriber.ts` use `new RTCPeerConnection({ iceTransportPolicy: 'all' })` with **no app STUN/TURN** (`loadIceServers` is NOT called). Cloudflare is ICE-lite and carries candidates in the SDP; adding app ICE servers caused 1-5s renomination cuts. `iceServers.ts` stays as a documented future opt-in relay path — unused, don't delete.
+- Listener **jitter buffer** starts at **3000ms** (`subscriber.ts` `bufferMs = 3000`, `useListenerAudio.ts` `useRef(3000)`), capped `Math.min(bufferMs, 4000)`. Host can broadcast a different buffer live (`room:control`/`buffer`); host slider default `hostPrefs.ts bufferSec = 5`. 2000ms underran → cuts; 3000ms is the proven floor.
+- Listener does NOT reactively reconnect on a transient blip ("Sunday leave-alone"). A real connect-phase ERROR shows TAP/RETRY; after a phone lock the resume tap rebuilds the connection (`wasBackgrounded` → `retryKey`).
+
+**Now-playing:** track name folds into the stage banner (`DanceFloor.tsx` → `NowPlaying.tsx`), peeks 15s/min (`nowPlaying.ts peekVisibleAt`), and **marquees** long titles (`.radio-np-marquee` in `radio.css`, overflow-measured). PA speakers sit just under the full-width banner (`PaStack`, `top-[88px]`).
+- **Latent feature — DO NOT delete:** host cover-art extraction (`artwork.ts`, `extractArtwork`) + the now-playing display-mode selector (`npMode` in `GoLivePanel.tsx`) are kept for future re-enable; the listener just ignores the broadcast `art`/`mode` fields. Old floating `NowPlayingCard.tsx` recoverable from git (`87d8fcc~1`).
+
+**Chat:** mid-broadcast joiners load the whole broadcast's history — floored at `station.live_session.startedAt` (written server-side on Go-Live in `api/rtc-session.ts`), see `chatReloadFloor` in `chatRules.ts`. Chat body has `dir="auto"` for Hebrew RTL.
+
+**Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
+
+**Stable tags:** `radio-stable-2026-06-25` (current prod), `guest-audio-stable-v1` / `radio-guest-stable-2026-06-23` (the audio-cut-fix reference). Roll back to a tag if prod regresses.
+
+---
+
 ## Known Future Tasks (not yet built)
 
 - **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
 - **Debut album JSON-LD** — add structured data once the album is released.
+- **Radio lock-screen audio** — server-side restream (HLS/Icecast/Cloudflare Stream Live) so listener audio survives a phone lock. Big, separate project; see the scoping spec under `docs/superpowers/specs/`.
 
 ---
 
