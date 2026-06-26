@@ -1,19 +1,17 @@
 import { useState, useEffect, useRef } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { nowPlayingVisible, type NowPlayingMode, type NowPlayingPayload } from '../nowPlaying';
+import { peekVisibleAt, type NowPlayingPayload } from '../nowPlaying';
 
 export interface UseNowPlayingResult {
   name: string;
-  art: string | null;
   visible: boolean;
 }
 
-// Listens for the host's now-playing broadcasts on the control channel and applies the
-// host-chosen display mode (off / always / peek) entirely on the listener side.
+// Listens for the host's now-playing broadcasts and reveals the current track name on the
+// fixed peek schedule (15s every 60s + on track change). The host's old art/mode fields are
+// ignored — the track name now folds into the stage banner instead of a separate card.
 export function useNowPlaying(supabase: SupabaseClient): UseNowPlayingResult {
-  const [state, setState] = useState<{ name: string; art: string | null; mode: NowPlayingMode }>(
-    { name: '', art: null, mode: 'always' },
-  );
+  const [name, setName] = useState('');
   const [visible, setVisible] = useState(false);
   const startRef = useRef(Date.now());
   const trackChangeRef = useRef(-1); // timestamp of last track change; -1 = none yet
@@ -21,11 +19,10 @@ export function useNowPlaying(supabase: SupabaseClient): UseNowPlayingResult {
   useEffect(() => {
     const ch = supabase.channel('room:nowplaying', { config: { broadcast: { self: false } } });
     ch.on('broadcast', { event: 'np' }, ({ payload }) => {
-      const p = (payload ?? {}) as Partial<NowPlayingPayload>;
-      setState((prev) => {
-        const name = p.name ?? '';
-        if (name && name !== prev.name) trackChangeRef.current = Date.now();
-        return { name, art: p.art ?? null, mode: (p.mode as NowPlayingMode) ?? 'always' };
+      const next = ((payload ?? {}) as Partial<NowPlayingPayload>).name ?? '';
+      setName((prev) => {
+        if (next && next !== prev) trackChangeRef.current = Date.now();
+        return next;
       });
     }).subscribe();
     return () => { supabase.removeChannel(ch); };
@@ -36,12 +33,12 @@ export function useNowPlaying(supabase: SupabaseClient): UseNowPlayingResult {
       const now = Date.now();
       const elapsed = now - startRef.current;
       const since = trackChangeRef.current >= 0 ? now - trackChangeRef.current : -1;
-      setVisible(state.name ? nowPlayingVisible(state.mode, elapsed, since) : false);
+      setVisible(name ? peekVisibleAt(elapsed, since) : false);
     };
     tick();
     const id = setInterval(tick, 1000);
     return () => clearInterval(id);
-  }, [state.mode, state.name]);
+  }, [name]);
 
-  return { name: state.name, art: state.art, visible };
+  return { name, visible };
 }

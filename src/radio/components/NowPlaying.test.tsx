@@ -27,4 +27,16 @@ describe('NowPlaying', () => {
     expect(screen.getByText('Subspace Theory B2B GaiaX')).toBeInTheDocument();
     expect(screen.getByText('NOW PLAYING')).toBeInTheDocument();
   });
+
+  it('swaps to the track name while it is in its peek window', () => {
+    render(<NowPlaying station={liveStation} nowPlaying={{ name: 'Galaxy 604', visible: true }} />);
+    expect(screen.getByText('Galaxy 604')).toBeInTheDocument();
+    expect(screen.queryByText('Subspace Theory B2B GaiaX')).not.toBeInTheDocument();
+  });
+
+  it('shows the station title (not the track) when the peek window is closed', () => {
+    render(<NowPlaying station={liveStation} nowPlaying={{ name: 'Galaxy 604', visible: false }} />);
+    expect(screen.getByText('Subspace Theory B2B GaiaX')).toBeInTheDocument();
+    expect(screen.queryByText('Galaxy 604')).not.toBeInTheDocument();
+  });
 });

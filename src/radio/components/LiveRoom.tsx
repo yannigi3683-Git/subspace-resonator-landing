@@ -8,7 +8,6 @@ import { usePresence } from '../hooks/usePresence';
 import { useListenerAudio } from '../hooks/useListenerAudio';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
-import { NowPlayingCard } from './NowPlayingCard';
 import { Chat } from './Chat';
 import { ChatInput } from './ChatInput';
 import { PresenceList } from './PresenceList';
@@ -69,9 +68,8 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
             presenceList={presenceList}
             station={station}
             uid={uid}
+            nowPlaying={{ name: nowPlaying.name, visible: nowPlaying.visible && playing }}
           />
-
-          <NowPlayingCard name={nowPlaying.name} art={nowPlaying.art} visible={nowPlaying.visible && playing} />
 
           {/* Audio overlay: connecting / ready / error states */}
           {!playing && (

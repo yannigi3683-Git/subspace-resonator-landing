@@ -18,6 +18,7 @@ interface DanceFloorProps {
   presenceList: PresenceEntry[];
   station: Station | null;
   uid: string;
+  nowPlaying?: { name: string; visible: boolean };
 }
 
 const GHOST_ENTRIES: PresenceEntry[] = [
@@ -40,6 +41,7 @@ export function DanceFloor({
   presenceList,
   station,
   uid,
+  nowPlaying,
 }: DanceFloorProps) {
   const visible = presenceList.length > 0 ? presenceList.slice(0, 150) : GHOST_ENTRIES;
   const isGhost = presenceList.length === 0;
@@ -114,7 +116,7 @@ export function DanceFloor({
             <span className="font-display text-sm text-white tracking-wide truncate">
               SUBSPACE RESONATOR
             </span>
-            <NowPlaying station={station} />
+            <NowPlaying station={station} nowPlaying={nowPlaying} />
           </div>
           {live && (
             <div className="ml-1 hidden sm:flex items-end gap-[3px] h-7 w-12 shrink-0" aria-hidden="true">
