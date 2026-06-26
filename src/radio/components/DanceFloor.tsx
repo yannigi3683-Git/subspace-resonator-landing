@@ -86,10 +86,10 @@ export function DanceFloor({
       </div>
 
       {/* ── FLANKING PA (static Turbosound Floodlight; CSS-only glow) ── */}
-      <div className="absolute top-[4%] left-[0.5%] z-[8] hidden min-[400px]:block w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[88px] left-[0.5%] z-[8] hidden min-[400px]:block w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
         <PaStack side="left" />
       </div>
-      <div className="absolute top-[4%] right-[0.5%] z-[8] hidden min-[400px]:block w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[88px] right-[0.5%] z-[8] hidden min-[400px]:block w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
         <PaStack side="right" />
       </div>
 
@@ -106,7 +106,7 @@ export function DanceFloor({
         </div>
 
         {/* Decks / now-playing console */}
-        <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md radio-booth-glow max-w-full min-[400px]:max-w-[calc(100%-13rem)] sm:max-w-[calc(100%-20rem)] lg:max-w-[calc(100%-28rem)]">
+        <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md radio-booth-glow w-full">
           <Disc3
             className={`w-7 h-7 shrink-0 text-[#26C6DA] ${live ? 'radio-spin' : ''}`}
             aria-hidden="true"
