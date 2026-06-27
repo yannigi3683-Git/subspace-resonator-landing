@@ -33,3 +33,13 @@ export function nowPlayingVisible(
   if (mode === 'always') return true;
   return peekVisibleAt(elapsedMs, sinceTrackChangeMs);
 }
+
+/** Listener-side visibility: nothing to show without a track name, otherwise honor the host mode. */
+export function resolveVisible(
+  name: string,
+  mode: NowPlayingMode,
+  elapsedMs: number,
+  sinceTrackChangeMs: number,
+): boolean {
+  return name ? nowPlayingVisible(mode, elapsedMs, sinceTrackChangeMs) : false;
+}

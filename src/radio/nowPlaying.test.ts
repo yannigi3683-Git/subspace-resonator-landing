@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { peekVisibleAt, nowPlayingVisible } from './nowPlaying';
+import { peekVisibleAt, nowPlayingVisible, resolveVisible } from './nowPlaying';
 
 describe('peekVisibleAt', () => {
   it('shows for the first 15s after a track change', () => {
@@ -29,5 +29,25 @@ describe('nowPlayingVisible', () => {
   it('peek defers to the timing window', () => {
     expect(nowPlayingVisible('peek', 5_000, -1)).toBe(true);
     expect(nowPlayingVisible('peek', 30_000, -1)).toBe(false);
+  });
+});
+
+describe('resolveVisible', () => {
+  it('an empty track name is never visible, even in always mode', () => {
+    expect(resolveVisible('', 'always', 0, -1)).toBe(false);
+    expect(resolveVisible('', 'peek', 5_000, -1)).toBe(false);
+  });
+
+  it('off hides a present track name', () => {
+    expect(resolveVisible('Track A', 'off', 5_000, 0)).toBe(false);
+  });
+
+  it('always shows a present track name continuously', () => {
+    expect(resolveVisible('Track A', 'always', 30_000, -1)).toBe(true);
+  });
+
+  it('peek follows the timing window for a present track name', () => {
+    expect(resolveVisible('Track A', 'peek', 5_000, -1)).toBe(true);
+    expect(resolveVisible('Track A', 'peek', 30_000, -1)).toBe(false);
   });
 });
