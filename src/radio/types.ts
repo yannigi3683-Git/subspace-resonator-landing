@@ -29,5 +29,8 @@ export interface PresenceEntry {
   uid: string;
   name: string;
   avatarId: string;
+  // Stable per-browser id (localStorage), survives anonymous re-auth. Used to collapse a stale
+  // presence ghost (old uid) and the current entry from the same device into one avatar.
+  deviceId?: string;
   position: { x: number; y: number };
 }

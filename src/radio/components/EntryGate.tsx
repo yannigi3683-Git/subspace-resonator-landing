@@ -29,16 +29,22 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
     setLoading(true);
     setError('');
     try {
-      const { data, error: authError } = await supabase.auth.signInAnonymously({
-        options: captchaToken ? { captchaToken } : {},
-      });
-      if (authError || !data.user) {
-        setError(authError?.message ?? 'Sign-in failed. Try again.');
-        return;
+      // Reuse the existing anonymous session if there is one (a per-broadcast re-pick keeps the
+      // same auth user), so we don't mint a new uid + anon user on every broadcast.
+      let userId = (await supabase.auth.getSession()).data.session?.user?.id ?? '';
+      if (!userId) {
+        const { data, error: authError } = await supabase.auth.signInAnonymously({
+          options: captchaToken ? { captchaToken } : {},
+        });
+        if (authError || !data.user) {
+          setError(authError?.message ?? 'Sign-in failed. Try again.');
+          return;
+        }
+        userId = data.user.id;
       }
       const identity = createIdentity(name.trim(), selectedAvatarId);
       saveIdentity(identity);
-      onEntry(identity, data.user.id);
+      onEntry(identity, userId);
     } catch {
       setError('Connection error. Check your network and try again.');
     } finally {

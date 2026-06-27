@@ -17,11 +17,19 @@ interface LiveRoomProps {
   identity: Identity;
   uid: string;
   station: Station;
+  onIdentityChange: (identity: Identity) => void;
 }
 
-export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
+export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
   const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
+
+  // A pencil avatar/name edit must reach chat too: rename updates presence + localStorage, but the
+  // chat send uses the `identity` prop, so lift the new values up to re-render the whole room.
+  const handleRename = (name: string, avatarId: string) => {
+    rename(name, avatarId);
+    onIdentityChange({ ...identity, name, avatarId });
+  };
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls } =
     useListenerAudio(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
@@ -152,7 +160,7 @@ export function LiveRoom({ supabase, identity, uid, station }: LiveRoomProps) {
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">Chat</p>
         </div>
         <Chat messages={messages} />
-        <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={rename} />
+        <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={handleRename} />
         <ChatInput
           onSend={sendMessage}
           sending={sending}

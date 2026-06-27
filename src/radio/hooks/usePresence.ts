@@ -12,15 +12,15 @@ export interface UsePresenceResult {
 }
 
 /**
- * Collapse presence entries that share a uid down to one (keeping the most recent).
- * Supabase presence is keyed per connection, so a refresh leaves a stale entry alongside
- * the fresh one until its leave fires — both carry the same stable uid. Without this, one
- * listener counts as two and the crowd shows duplicate avatars.
+ * Collapse presence entries from the same browser down to one (keeping the most recent).
+ * Supabase presence is keyed per connection, and anonymous re-auth mints a new uid, so a stale
+ * ghost (old uid) can sit beside the current entry (new uid) — both from the same device. Keying
+ * on the stable deviceId (falling back to uid for legacy/ghost entries) collapses that duplicate.
  */
-export function dedupeByUid(list: PresenceEntry[]): PresenceEntry[] {
-  const byUid = new Map<string, PresenceEntry>();
-  for (const entry of list) byUid.set(entry.uid, entry);
-  return [...byUid.values()];
+export function dedupeByDevice(list: PresenceEntry[]): PresenceEntry[] {
+  const byDevice = new Map<string, PresenceEntry>();
+  for (const entry of list) byDevice.set(entry.deviceId || entry.uid, entry);
+  return [...byDevice.values()];
 }
 
 export function usePresence(supabase: SupabaseClient, identity: Identity, uid: string): UsePresenceResult {
@@ -34,14 +34,15 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     channelRef.current = channel;
 
     const syncPresence = () => {
-      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; position: { x: number; y: number } }>();
+      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
       const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
         uid: p.uid,
         name: p.name,
         avatarId: p.avatarId,
+        deviceId: p.deviceId,
         position: p.position,
       }));
-      setPresenceList(dedupeByUid(list));
+      setPresenceList(dedupeByDevice(list));
     };
 
     channel
@@ -75,6 +76,7 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
             uid,
             name: identity.name,
             avatarId: identity.avatarId,
+            deviceId: identity.deviceId,
             position: identity.position,
           });
         }
@@ -82,6 +84,9 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
 
     return () => {
       channelRef.current = null;
+      // Drop this device's presence meta immediately so a tab close / rename re-subscribe
+      // doesn't leave a ghost lingering until the server's heartbeat timeout.
+      channel.untrack().catch(() => {});
       supabase.removeChannel(channel);
     };
   }, [supabase, uid, identity.name, identity.avatarId, identity.deviceId, identity.position.x, identity.position.y]);
@@ -93,6 +98,7 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
       uid,
       name,
       avatarId,
+      deviceId: identity.deviceId,
       position: identity.position,
     }).catch(() => {});
   }, [uid, identity.position.x, identity.position.y]); // eslint-disable-line react-hooks/exhaustive-deps

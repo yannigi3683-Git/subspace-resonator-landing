@@ -6,7 +6,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { RadioContext } from './RadioContext';
 import { useStation } from './hooks/useStation';
 import { useServerClock } from './hooks/useServerClock';
-import { getOrCreateIdentity } from './identity';
+import { getOrCreateIdentity, getIdentitySession, setIdentitySession, shouldForceReentry } from './identity';
 import type { Identity } from './types';
 import { EntryGate } from './components/EntryGate';
 import { StandbyScreen } from './components/StandbyScreen';
@@ -82,7 +82,11 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
     }
     supabase.auth.getSession().then(({ data: { session } }) => {
       const storedIdentity = getOrCreateIdentity();
-      if (session && storedIdentity) {
+      // Per-broadcast identity: a saved identity only carries over within the broadcast it was
+      // picked for. A different (or first) live broadcast forces a fresh name/avatar pick.
+      const liveId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
+      const force = shouldForceReentry(liveId, getIdentitySession());
+      if (session && storedIdentity && !force) {
         setIdentity(storedIdentity);
         setUid(session.user.id);
         setView('room');
@@ -90,7 +94,22 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
         setView('gate');
       }
     });
+    // station intentionally excluded from deps: the live-transition is handled by the effect below;
+    // this runs once on mount to decide the initial view.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
+
+  // A new broadcast starting (cfSessionId changes) forces re-entry even if the viewer was already
+  // in the room or sitting on standby. Keyed on the live broadcast id so the same broadcast never
+  // re-prompts; only a host go-live after an end-broadcast does.
+  const liveSessionId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
+  useEffect(() => {
+    if (view === 'banned' || view === 'loading') return;
+    if (shouldForceReentry(liveSessionId, getIdentitySession())) {
+      setIdentity(null);
+      setView('gate');
+    }
+  }, [liveSessionId, view]);
 
   if (view === 'loading') {
     return (
@@ -121,6 +140,9 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
       <EntryGate
         supabase={supabase}
         onEntry={(id, userId) => {
+          // Bind this pick to the current live broadcast so a close/reopen within the same
+          // broadcast skips the gate; the next broadcast (new id) forces a fresh pick.
+          if (liveSessionId) setIdentitySession(liveSessionId);
           setIdentity(id);
           setUid(userId);
           setView('room');
@@ -137,7 +159,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
             <p className="font-mono text-xs tracking-widest">LOADING...</p>
           </main>
         ) : station.mode === 'live' ? (
-          <LiveRoom supabase={supabase} identity={identity} uid={uid} station={station} />
+          <LiveRoom supabase={supabase} identity={identity} uid={uid} station={station} onIdentityChange={setIdentity} />
         ) : (
           <StandbyScreen supabase={supabase} getServerTime={getServerTime} />
         )}

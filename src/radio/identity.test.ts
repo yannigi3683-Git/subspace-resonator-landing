@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { derivePosition, getOrCreateIdentity, saveIdentity, createIdentity, updateIdentity } from './identity';
+import { derivePosition, getOrCreateIdentity, saveIdentity, createIdentity, updateIdentity, shouldForceReentry, getIdentitySession, setIdentitySession } from './identity';
 
 // jsdom provides localStorage; mock crypto.randomUUID
 vi.stubGlobal('crypto', { randomUUID: () => 'test-uuid-1234' });
@@ -78,5 +78,32 @@ describe('updateIdentity', () => {
 
   it('throws if no identity stored', () => {
     expect(() => updateIdentity('Bob', 'vortex')).toThrow();
+  });
+});
+
+describe('shouldForceReentry', () => {
+  it('forces when a live broadcast id differs from the saved one', () => {
+    expect(shouldForceReentry('cf-NEW', 'cf-OLD')).toBe(true);
+  });
+
+  it('forces when no identity-session is saved yet', () => {
+    expect(shouldForceReentry('cf-NEW', null)).toBe(true);
+  });
+
+  it('does not force within the same broadcast', () => {
+    expect(shouldForceReentry('cf-SAME', 'cf-SAME')).toBe(false);
+  });
+
+  it('does not force when the station is offline (no current session)', () => {
+    expect(shouldForceReentry(undefined, 'cf-OLD')).toBe(false);
+    expect(shouldForceReentry(null, null)).toBe(false);
+  });
+});
+
+describe('identity session marker', () => {
+  it('round-trips the broadcast id the identity was picked for', () => {
+    expect(getIdentitySession()).toBeNull();
+    setIdentitySession('cf-123');
+    expect(getIdentitySession()).toBe('cf-123');
   });
 });

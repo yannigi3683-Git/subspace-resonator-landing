@@ -306,6 +306,14 @@ export async function POST(req: Request): Promise<Response> {
       console.error('[rtc-session end-broadcast]', stErr);
       return json({ error: 'station_update_failed', detail: stErr.message }, 500);
     }
+    // Wipe the chat so the next broadcast starts clean and the table never accumulates.
+    // Best-effort: a failed wipe must not block taking the station off air. A delete needs a
+    // filter, so floor on the epoch to match every row.
+    const { error: chatErr } = await getSupabaseAdmin()
+      .from('chat_messages')
+      .delete()
+      .gte('created_at', new Date(0).toISOString());
+    if (chatErr) console.error('[rtc-session end-broadcast chat-wipe]', chatErr);
     return json({ ok: true });
   }
 

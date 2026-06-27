@@ -53,3 +53,31 @@ export function updateIdentity(name: string, avatarId: string): Identity {
   saveIdentity(updated);
   return updated;
 }
+
+const SESSION_KEY = 'radio_session';
+
+/** The broadcast (cfSessionId) the saved identity was last picked for, or null. */
+export function getIdentitySession(): string | null {
+  try {
+    return localStorage.getItem(SESSION_KEY);
+  } catch {
+    return null;
+  }
+}
+
+export function setIdentitySession(cfSessionId: string): void {
+  try {
+    localStorage.setItem(SESSION_KEY, cfSessionId);
+  } catch {}
+}
+
+/**
+ * Whether the viewer must re-pick name/avatar: only when a broadcast is live and its id differs
+ * from the one the saved identity was chosen for. Offline (no current id) never forces.
+ */
+export function shouldForceReentry(
+  currentSessionId: string | null | undefined,
+  savedSessionId: string | null | undefined,
+): boolean {
+  return !!currentSessionId && currentSessionId !== savedSessionId;
+}
