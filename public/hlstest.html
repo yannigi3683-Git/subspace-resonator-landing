@@ -1,0 +1,55 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Radio HLS Screen-Lock Test</title>
+  <style>
+    :root { color-scheme: dark; }
+    body { margin: 0; background: #0E0E10; color: #e6e6e6; font: 15px/1.5 system-ui, sans-serif; padding: 20px; }
+    h1 { font-size: 16px; letter-spacing: .08em; text-transform: uppercase; color: #9aa; }
+    button { font: inherit; padding: 16px 28px; margin: 8px 0; background: #1db954; color: #000; border: 0; border-radius: 10px; font-weight: 700; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; color: #8b8; background: #000; padding: 12px; border-radius: 8px; margin-top: 16px; max-height: 40vh; overflow: auto; }
+    .hint { color: #778; font-size: 13px; }
+    code { color: #cc9; }
+  </style>
+</head>
+<body>
+  <h1>Radio HLS Screen-Lock Test</h1>
+  <p class="hint">Open with the stream URL, e.g. <code>/hlstest.html?src=https://pub-xxxx.r2.dev/&lt;id&gt;/stream.m3u8</code></p>
+  <!-- iOS plays HLS natively in a VIDEO element (not audio — the iOS audio-only bug). playsinline
+       keeps it in-page. This is the isolated test of the ONE unproven gate: does native HLS audio
+       survive a phone screen-lock (the failure mode WebRTC MediaStream has). -->
+  <video id="v" playsinline controls style="width:100%;max-width:480px;background:#000;border-radius:10px"></video>
+  <div>
+    <button id="play">PLAY</button>
+    <span class="hint">then LOCK YOUR PHONE for 60s — audio should keep going.</span>
+  </div>
+  <div id="log"></div>
+  <script>
+    var v = document.getElementById('v');
+    var logEl = document.getElementById('log');
+    function log(m) { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+    var src = new URLSearchParams(location.search).get('src');
+    if (!src) { log('NO ?src= GIVEN. Append ?src=<playlist .m3u8 url>'); }
+    else {
+      log('src = ' + src);
+      log('native HLS support: ' + (v.canPlayType('application/vnd.apple.mpegurl') || 'NONE (non-Safari; use an iPhone for this test)'));
+      v.src = src;
+    }
+    ['loadedmetadata','playing','pause','waiting','stalled','error','ended'].forEach(function (e) {
+      v.addEventListener(e, function () {
+        log(new Date().toISOString().slice(11, 19) + '  ' + e + (e === 'error' && v.error ? ' code=' + v.error.code : ''));
+      });
+    });
+    document.getElementById('play').addEventListener('click', function () {
+      v.play().then(function () { log('play() ok'); }).catch(function (err) { log('play() rejected: ' + err.message); });
+    });
+    // Report roughly every 10s whether time is still advancing (proves audio survived a lock).
+    var last = -1;
+    setInterval(function () {
+      if (v.currentTime !== last) { log('t=' + v.currentTime.toFixed(1) + 's (advancing)'); last = v.currentTime; }
+    }, 10000);
+  </script>
+</body>
+</html>
