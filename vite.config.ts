@@ -43,5 +43,7 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test-setup.ts'],
     globals: true,
+    // restreamer/ is a standalone Node service tested with `node --test`, not vitest.
+    exclude: ['**/node_modules/**', '**/dist/**', 'restreamer/**'],
   },
 });

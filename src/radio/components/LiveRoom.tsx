@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
 import { usePresence } from '../hooks/usePresence';
-import { useListenerAudio } from '../hooks/useListenerAudio';
+import { useListenerTransport } from '../hooks/useListenerTransport';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
 import { Chat } from './Chat';
@@ -31,7 +31,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
     onIdentityChange({ ...identity, name, avatarId });
   };
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls } =
-    useListenerAudio(supabase, station);
+    useListenerTransport(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
 
   const [mobileTab, setMobileTab] = useState<'stage' | 'chat'>('stage');
