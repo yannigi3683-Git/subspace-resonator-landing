@@ -1,0 +1,19 @@
+{
+  "name": "subspace-radio-restreamer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Pulls the live Subspace Radio audio from the Cloudflare SFU and republishes it as deep-buffer HLS. Standalone Node service, NOT part of the Vite/Vercel build.",
+  "scripts": {
+    "start": "node src/index.mjs",
+    "selfcheck": "node src/selfcheck.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.45.0",
+    "werift": "^0.23.0"
+  },
+  "optionalDependencies": {
+    "@aws-sdk/client-s3": "^3.600.0"
+  }
+}
