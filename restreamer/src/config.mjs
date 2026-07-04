@@ -22,8 +22,10 @@ export function loadConfig(env = process.env) {
       secretAccessKey: clean(env.R2_SECRET_ACCESS_KEY),
       bucket: clean(env.R2_BUCKET),
     },
-    segmentSeconds: Number(clean(env.SEGMENT_SECONDS) || '6'),
-    hlsWindow: Number(clean(env.HLS_WINDOW) || '8'),
+    // 4s segments, 120s window: window must stay well ahead of the client's deep buffer (~30s)
+    // so a deep-buffer listener never falls off the back of the playlist (-> fragLoadError).
+    segmentSeconds: Number(clean(env.SEGMENT_SECONDS) || '4'),
+    hlsWindow: Number(clean(env.HLS_WINDOW) || '30'),
   };
   return cfg;
 }

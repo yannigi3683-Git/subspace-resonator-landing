@@ -32,9 +32,35 @@ export async function negotiatePull({ brokerUrl, token, rtpPort, host = '127.0.0
   });
 
   let rtpCount = 0;
+  let attached = false;
   pc.onTrack.subscribe((track) => {
+    if (track.kind !== 'audio' || attached) return;
+    attached = true;
+    // werift delivers RTP slightly out of order (network jitter, no jitter buffer on this path).
+    // ffmpeg's RTP demuxer panics on a backward sequence number ("missed 65534 packets") and its
+    // timestamps go non-monotonic -> the HLS segmenter stretches audio ~2x slow. Fix: re-stamp
+    // each packet in arrival order with our OWN monotonic sequence number and timestamp, advancing
+    // the timestamp by the original inter-packet delta (so variable Opus frame sizes are honored),
+    // falling back to one 20ms frame (960 @ 48kHz) when a delta looks like a reorder/garbage.
+    // ffmpeg then sees a pristine, monotonic Opus stream.
+    let seq = 0;
+    let outTs = 0;
+    let prevTs = null;
     track.onReceiveRtp.subscribe((rtp) => {
+      // Skip empty (0-byte) DTX/padding packets — forwarding them adds nothing but noise and
+      // trips ffmpeg's timestamp checks.
+      if (!rtp.payload || rtp.payload.length === 0) return;
       rtpCount++;
+      const orig = rtp.header.timestamp >>> 0;
+      if (prevTs !== null) {
+        let delta = (orig - prevTs) >>> 0; // unsigned 32-bit diff
+        if (delta === 0 || delta > 48000 * 5) delta = 960; // reorder/garbage -> assume 20ms
+        outTs = (outTs + delta) >>> 0;
+      }
+      prevTs = orig;
+      rtp.header.sequenceNumber = seq & 0xffff;
+      seq++;
+      rtp.header.timestamp = outTs;
       udp.send(rtp.serialize(), rtpPort, host);
     });
   });

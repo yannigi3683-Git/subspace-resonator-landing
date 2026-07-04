@@ -34,23 +34,24 @@ function clearSrc(el: HTMLMediaElement): HlsHandle {
 
 // Attaches streamUrl to el and returns a handle whose destroy() tears the transport down.
 // Caller still owns el.play() (must run inside the user's tap gesture on iOS) and volume.
+//
+// Priority: hls.js FIRST wherever it works (Android, desktop, iPad-with-MSE) — it gives real buffer
+// control. Native HLS is used ONLY when hls.js is unsupported, i.e. iPhone Safari (no MSE). Do NOT
+// select native off canPlayType: Android Chrome reports 'maybe' for the HLS mime but plays it janky
+// (slow-motion/cutting), so trusting canPlayType first breaks Android.
 export async function attachHls(el: HTMLMediaElement, streamUrl: string): Promise<HlsHandle> {
-  if (supportsNativeHls(el)) {
-    el.src = streamUrl;
-    return clearSrc(el);
-  }
   const { default: Hls } = await import('hls.js');
-  if (!Hls.isSupported()) {
-    // ponytail: last-ditch native attempt; if a browser has neither we can't help it.
-    el.src = streamUrl;
-    return clearSrc(el);
+  if (Hls.isSupported()) {
+    const hls = new Hls(HLS_CONFIG);
+    hls.loadSource(streamUrl);
+    hls.attachMedia(el);
+    return {
+      destroy() {
+        hls.destroy();
+      },
+    };
   }
-  const hls = new Hls(HLS_CONFIG);
-  hls.loadSource(streamUrl);
-  hls.attachMedia(el);
-  return {
-    destroy() {
-      hls.destroy();
-    },
-  };
+  // hls.js unsupported: iPhone Safari (native HLS) or, last-ditch, whatever the element accepts.
+  el.src = streamUrl;
+  return clearSrc(el);
 }

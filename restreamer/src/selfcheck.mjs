@@ -36,7 +36,7 @@ const server = await serveLocal({ dir, port: PORT });
 log('sink serving on', BASE);
 
 function lastSeg(m3u8) {
-  const segs = [...m3u8.matchAll(/stream(\d+)\.m4s/g)].map((m) => Number(m[1]));
+  const segs = [...m3u8.matchAll(/stream(\d+)\.ts/g)].map((m) => Number(m[1]));
   return segs.length ? Math.max(...segs) : -1;
 }
 
@@ -47,14 +47,13 @@ try {
     const r = await fetch(`${BASE}/stream.m3u8`).catch(() => null);
     if (r?.ok) {
       playlist = await r.text();
-      if (/\.m4s/.test(playlist)) break;
+      if (/\.ts/.test(playlist)) break;
     }
     await sleep(1000);
   }
   log('playlist:\n' + playlist.trim());
   assert.match(playlist, /#EXTM3U/, 'not a valid HLS playlist');
-  assert.match(playlist, /#EXT-X-MAP:URI="init\.mp4"/, 'missing fMP4 init map');
-  assert.match(playlist, /\.m4s/, 'no media segments');
+  assert.match(playlist, /\.ts/, 'no media segments');
   assert.doesNotMatch(playlist, /#EXT-X-ENDLIST/, 'stream is dead (has ENDLIST) — should be live');
 
   // Headers: playlist must be max-age=1 + CORS.
@@ -71,22 +70,21 @@ try {
   assert.ok(seg2 > seg1, 'no new segments produced — stream not live');
   log('OK: stream is live (new segments flowing)');
 
-  // Fetch init + one segment over HTTP, concat, decode-test with ffprobe/ffmpeg.
+  // Fetch one mpegts segment over HTTP and decode-test it (self-contained, no init needed).
   const pl = await (await fetch(`${BASE}/stream.m3u8`)).text();
   // Oldest listed segment is fully written (newest may still be flushing).
-  const seg = pl.split('\n').find((l) => l.trim().endsWith('.m4s')).trim();
-  const initBuf = Buffer.from(await (await fetch(`${BASE}/init.mp4`)).arrayBuffer());
+  const seg = pl.split('\n').find((l) => l.trim().endsWith('.ts')).trim();
   const segHead = await fetch(`${BASE}/${seg}`);
   assert.match(segHead.headers.get('cache-control') || '', /immutable/, 'segment not immutable-cached');
   const segBuf = Buffer.from(await (await fetch(`${BASE}/${seg}`)).arrayBuffer());
-  const probeFile = join(dir, '_probe.mp4');
-  await writeFile(probeFile, Buffer.concat([initBuf, segBuf]));
+  const probeFile = join(dir, '_probe.ts');
+  await writeFile(probeFile, segBuf);
   const decode = await new Promise((res) => {
     const p = spawn(FFMPEG, ['-hide_banner', '-v', 'error', '-i', probeFile, '-f', 'null', '-'], { stdio: 'inherit' });
     p.on('exit', res);
   });
   assert.equal(decode, 0, 'fetched HLS segment failed to decode');
-  log('OK: fetched-over-HTTP init+segment decodes clean');
+  log('OK: fetched-over-HTTP segment decodes clean');
 
   const meta = await new Promise((res) => {
     let out = '';

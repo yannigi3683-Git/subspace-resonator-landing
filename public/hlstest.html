@@ -3,53 +3,107 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>Radio HLS Screen-Lock Test</title>
+  <title>Radio HLS Test (iOS + Android)</title>
   <style>
     :root { color-scheme: dark; }
     body { margin: 0; background: #0E0E10; color: #e6e6e6; font: 15px/1.5 system-ui, sans-serif; padding: 20px; }
     h1 { font-size: 16px; letter-spacing: .08em; text-transform: uppercase; color: #9aa; }
-    button { font: inherit; padding: 16px 28px; margin: 8px 0; background: #1db954; color: #000; border: 0; border-radius: 10px; font-weight: 700; }
-    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; color: #8b8; background: #000; padding: 12px; border-radius: 8px; margin-top: 16px; max-height: 40vh; overflow: auto; }
+    button { font: inherit; padding: 16px 28px; margin: 8px 8px 8px 0; background: #1db954; color: #000; border: 0; border-radius: 10px; font-weight: 700; }
+    button.sec { background: #333; color: #eee; }
+    #log { white-space: pre-wrap; font-family: ui-monospace, monospace; font-size: 12px; color: #8b8; background: #000; padding: 12px; border-radius: 8px; margin-top: 16px; max-height: 32vh; overflow: auto; }
     .hint { color: #778; font-size: 13px; }
     code { color: #cc9; }
+    #pill { position: fixed; top: 8px; right: 8px; background: #111; border: 1px solid #2a2a2a; border-radius: 10px; padding: 10px 12px; font-family: ui-monospace, monospace; font-size: 12px; line-height: 1.7; min-width: 150px; }
+    #pill b { color: #1db954; }
+    #pill .k { color: #778; }
+    #buf { color: #7bf; font-weight: 700; }
   </style>
 </head>
 <body>
-  <h1>Radio HLS Screen-Lock Test</h1>
-  <p class="hint">Open with the stream URL, e.g. <code>/hlstest.html?src=https://pub-xxxx.r2.dev/&lt;id&gt;/stream.m3u8</code></p>
-  <!-- iOS plays HLS natively in a VIDEO element (not audio — the iOS audio-only bug). playsinline
-       keeps it in-page. This is the isolated test of the ONE unproven gate: does native HLS audio
-       survive a phone screen-lock (the failure mode WebRTC MediaStream has). -->
+  <div id="pill">
+    <div><span class="k">mode </span><b id="mode">-</b></div>
+    <div><span class="k">buffer </span><span id="buf">-</span> <span class="k">s ahead</span></div>
+    <div><span class="k">latency </span><span id="lat">-</span></div>
+    <div><span class="k">t </span><span id="t">-</span> <span class="k">state </span><span id="st">-</span></div>
+    <div><span class="k">stalls </span><span id="stall">0</span></div>
+  </div>
+
+  <h1>Radio HLS Test</h1>
+  <p class="hint">Works on iPhone (native HLS) and Android/desktop (hls.js). Deep buffer = ~15-30s behind live.</p>
   <video id="v" playsinline controls style="width:100%;max-width:480px;background:#000;border-radius:10px"></video>
   <div>
     <button id="play">PLAY</button>
-    <span class="hint">then LOCK YOUR PHONE for 60s — audio should keep going.</span>
+    <button id="lat0" class="sec">jump to live edge</button>
+    <span class="hint">then LOCK the phone 60s — audio should keep going.</span>
   </div>
   <div id="log"></div>
+
+  <script src="/hls.min.js"></script>
   <script>
     var v = document.getElementById('v');
     var logEl = document.getElementById('log');
-    function log(m) { logEl.textContent += m + '\n'; logEl.scrollTop = logEl.scrollHeight; }
+    function log(m) { logEl.textContent += new Date().toISOString().slice(11, 19) + '  ' + m + '\n'; logEl.scrollTop = logEl.scrollHeight; }
     var src = new URLSearchParams(location.search).get('src');
-    if (!src) { log('NO ?src= GIVEN. Append ?src=<playlist .m3u8 url>'); }
-    else {
-      log('src = ' + src);
-      log('native HLS support: ' + (v.canPlayType('application/vnd.apple.mpegurl') || 'NONE (non-Safari; use an iPhone for this test)'));
+    var hls = null;
+    var stalls = 0;
+
+    var HLS_CONFIG = {
+      lowLatencyMode: false, liveSyncDuration: 15, liveMaxLatencyDuration: 30,
+      maxBufferLength: 30, maxMaxBufferLength: 60, backBufferLength: 30,
+      maxLiveSyncPlaybackRate: 1, liveDurationInfinity: true
+    };
+
+    // Prefer hls.js whenever it works (Android, desktop, iPad-with-MSE) — real buffer control.
+    // Native HLS ONLY when hls.js is unsupported: that's iPhone Safari (no MSE). Android Chrome
+    // lies that it supports native HLS (canPlayType='maybe') but plays it janky, so never trust
+    // canPlayType first.
+    if (!src) {
+      log('NO ?src= GIVEN.');
+    } else if (window.Hls && window.Hls.isSupported()) {
+      document.getElementById('mode').textContent = 'hls.js';
+      log('hls.js (Android/desktop). src=' + src);
+      hls = new window.Hls(HLS_CONFIG);
+      hls.loadSource(src);
+      hls.attachMedia(v);
+      hls.on(window.Hls.Events.ERROR, function (e, d) {
+        log('hls.js ' + (d.fatal ? 'FATAL ' : '') + d.type + '/' + d.details);
+      });
+    } else if (v.canPlayType('application/vnd.apple.mpegurl')) {
+      document.getElementById('mode').textContent = 'NATIVE (iPhone)';
+      log('native HLS (iPhone Safari). src=' + src);
       v.src = src;
+    } else {
+      document.getElementById('mode').textContent = 'UNSUPPORTED';
+      log('no HLS support in this browser.');
     }
+
     ['loadedmetadata','playing','pause','waiting','stalled','error','ended'].forEach(function (e) {
       v.addEventListener(e, function () {
-        log(new Date().toISOString().slice(11, 19) + '  ' + e + (e === 'error' && v.error ? ' code=' + v.error.code : ''));
+        if (e === 'waiting') { stalls++; document.getElementById('stall').textContent = stalls; }
+        log(e + (e === 'error' && v.error ? ' code=' + v.error.code : ''));
       });
     });
     document.getElementById('play').addEventListener('click', function () {
       v.play().then(function () { log('play() ok'); }).catch(function (err) { log('play() rejected: ' + err.message); });
     });
-    // Report roughly every 10s whether time is still advancing (proves audio survived a lock).
-    var last = -1;
+    document.getElementById('lat0').addEventListener('click', function () {
+      try {
+        if (hls && hls.liveSyncPosition) { v.currentTime = hls.liveSyncPosition; }
+        else if (v.buffered.length) { v.currentTime = v.buffered.end(v.buffered.length - 1) - 1; }
+        log('jumped toward live edge');
+      } catch (e) { log('jump failed: ' + e.message); }
+    });
+
     setInterval(function () {
-      if (v.currentTime !== last) { log('t=' + v.currentTime.toFixed(1) + 's (advancing)'); last = v.currentTime; }
-    }, 10000);
+      var ahead = 0;
+      for (var i = 0; i < v.buffered.length; i++) {
+        if (v.currentTime >= v.buffered.start(i) && v.currentTime <= v.buffered.end(i) + 0.5) ahead = v.buffered.end(i) - v.currentTime;
+      }
+      document.getElementById('buf').textContent = ahead.toFixed(1);
+      document.getElementById('t').textContent = v.currentTime.toFixed(1);
+      document.getElementById('st').textContent = v.paused ? 'paused' : 'playing';
+      document.getElementById('lat').textContent = (hls && typeof hls.latency === 'number') ? hls.latency.toFixed(1) + 's' : 'n/a';
+    }, 500);
   </script>
 </body>
 </html>

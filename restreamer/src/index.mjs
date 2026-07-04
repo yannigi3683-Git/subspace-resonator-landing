@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
-import { startHls } from './hls.mjs';
+import { startHls, rtpInputArgs } from './hls.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
 
@@ -59,7 +59,7 @@ async function startFor(cfSessionId) {
 
   const ff = startHls({
     ffmpegPath: cfg.ffmpegPath,
-    inputArgs: ['-protocol_whitelist', 'file,udp,rtp', '-fflags', '+genpts', '-i', 'input.sdp'],
+    inputArgs: rtpInputArgs('input.sdp'),
     outDir,
     segmentSeconds: cfg.segmentSeconds,
     window: cfg.hlsWindow,
