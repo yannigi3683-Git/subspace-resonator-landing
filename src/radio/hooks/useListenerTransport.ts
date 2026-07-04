@@ -53,8 +53,17 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
     setPhase('webrtc');
   }, [streamUrl, cfSessionId]);
 
-  const { setVolume: setWebrtcVolume } = webrtc;
-  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay } = hls;
+  const { setVolume: setWebrtcVolume, audioElement: webrtcEl } = webrtc;
+  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession } = hls;
+
+  // Once HLS owns the audio, stop WebRTC entirely (free the audio focus) and claim the OS media
+  // session so playback survives a phone lock. Muting alone leaves WebRTC as the "active" media
+  // element, which the OS kills on lock while the hidden HLS video gets no background priority.
+  useEffect(() => {
+    if (phase !== 'hls') return;
+    webrtcEl?.pause();
+    claimMediaSession();
+  }, [phase, webrtcEl, claimMediaSession]);
 
   // Crossfade once HLS is healthy and WebRTC is already audible. Fires exactly once per session
   // (guarded by the ref), and the interval is never cancelled by a re-render.
@@ -104,5 +113,9 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
 
   if (!streamUrl) return { ...webrtc, transportInfo };
 
-  return { ...webrtc, resume, volume: userVolume, setVolume, transportInfo };
+  // After the handoff HLS carries playback (WebRTC is paused), so report its state.
+  const playing = phase === 'hls' ? hlsPlaying : webrtc.playing;
+  const ready = webrtc.ready || hlsReady;
+
+  return { ...webrtc, playing, ready, resume, volume: userVolume, setVolume, transportInfo };
 }
