@@ -30,7 +30,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
     rename(name, avatarId);
     onIdentityChange({ ...identity, name, avatarId });
   };
-  const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls } =
+  const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo } =
     useListenerTransport(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
 
@@ -135,20 +135,37 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
           {/* Debug stats pill: only on /radio?debug (hidden from end users) */}
           {showDebug && (
             <div className="absolute top-3 right-3 z-30 font-mono text-[10px] text-white/80 bg-black/70 border border-white/15 px-2.5 py-1.5 rounded-md whitespace-nowrap pointer-events-none">
-              {rtcStats ? (
-                <>
-                  BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
-                  LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
-                  STALLS: {stalls}&nbsp;&nbsp;
-                  JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
-                  RTT: {Math.round(rtcStats.rttMs)}ms
-                  {rtcStats.candidateType && (
-                    <>&nbsp;&nbsp;<span className={rtcStats.candidateType === 'relay' ? 'text-green-400' : 'text-white/40'}>{rtcStats.candidateType === 'relay' ? 'RELAY' : 'DIRECT'}</span></>
-                  )}
-                </>
-              ) : (
-                'connecting…'
-              )}
+              <div>
+                <span className="text-white/50">TRANSPORT: </span>
+                <span className={
+                  transportInfo.phase === 'hls' ? 'text-green-400'
+                    : transportInfo.phase === 'crossfading' ? 'text-yellow-300'
+                      : 'text-cyan-300'
+                }>
+                  {transportInfo.phase === 'hls' ? 'HLS (deep buffer)'
+                    : transportInfo.phase === 'crossfading' ? 'CROSSFADING…'
+                      : transportInfo.hlsAvailable ? 'WEBRTC → HLS' : 'WEBRTC'}
+                </span>
+                {transportInfo.hlsAvailable && (
+                  <>&nbsp;&nbsp;<span className="text-white/50">HLS-BUF:</span> {transportInfo.hlsBufferedAhead.toFixed(1)}s {transportInfo.hlsReady ? '✓' : '…'}</>
+                )}
+              </div>
+              <div>
+                {rtcStats ? (
+                  <>
+                    BUFFER: {Math.round(rtcStats.effectiveBufferMs)}ms&nbsp;&nbsp;
+                    LOST: {rtcStats.packetsLost}&nbsp;&nbsp;
+                    STALLS: {stalls}&nbsp;&nbsp;
+                    JITTER: {Math.round(rtcStats.jitterMs)}ms&nbsp;&nbsp;
+                    RTT: {Math.round(rtcStats.rttMs)}ms
+                    {rtcStats.candidateType && (
+                      <>&nbsp;&nbsp;<span className={rtcStats.candidateType === 'relay' ? 'text-green-400' : 'text-white/40'}>{rtcStats.candidateType === 'relay' ? 'RELAY' : 'DIRECT'}</span></>
+                    )}
+                  </>
+                ) : (
+                  'rtc: connecting…'
+                )}
+              </div>
             </div>
           )}
         </div>
