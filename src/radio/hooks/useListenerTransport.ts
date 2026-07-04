@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { Station } from '../types';
 import { useListenerAudio, type UseListenerAudioResult } from './useListenerAudio';
@@ -41,17 +41,27 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
 
   const [phase, setPhase] = useState<TransportPhase>('webrtc');
   const [userVolume, setUserVolume] = useState(1);
+  // Crossfade lives in a ref, NOT tied to an effect's cleanup: the ramp calls setPhase, and if the
+  // interval were owned by a phase-dependent effect, that state change would re-run the effect and
+  // its cleanup would kill the interval mid-fade (stuck on CROSSFADING forever).
+  const crossfadeRef = useRef<{ started: boolean; id: ReturnType<typeof setInterval> | null }>({ started: false, id: null });
 
   // Reset per broadcast / stream change.
-  useEffect(() => { setPhase('webrtc'); }, [streamUrl, cfSessionId]);
+  useEffect(() => {
+    if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id);
+    crossfadeRef.current = { started: false, id: null };
+    setPhase('webrtc');
+  }, [streamUrl, cfSessionId]);
 
   const { setVolume: setWebrtcVolume } = webrtc;
   const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay } = hls;
 
-  // Crossfade once HLS is healthy and WebRTC is already audible.
+  // Crossfade once HLS is healthy and WebRTC is already audible. Fires exactly once per session
+  // (guarded by the ref), and the interval is never cancelled by a re-render.
   useEffect(() => {
-    if (!streamUrl || phase !== 'webrtc') return;
+    if (!streamUrl || crossfadeRef.current.started) return;
     if (!(hlsReady && hlsPlaying && webrtc.playing)) return;
+    crossfadeRef.current.started = true;
     setPhase('crossfading');
     let i = 0;
     const id = setInterval(() => {
@@ -61,13 +71,17 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
       setHlsVolume(v.hls);
       if (i >= CROSSFADE_STEPS) {
         clearInterval(id);
+        crossfadeRef.current.id = null;
         setWebrtcVolume(0);
         setHlsVolume(userVolume);
         setPhase('hls');
       }
     }, CROSSFADE_MS / CROSSFADE_STEPS);
-    return () => clearInterval(id);
-  }, [streamUrl, phase, hlsReady, hlsPlaying, webrtc.playing, userVolume, setWebrtcVolume, setHlsVolume]);
+    crossfadeRef.current.id = id;
+  }, [streamUrl, hlsReady, hlsPlaying, webrtc.playing, userVolume, setWebrtcVolume, setHlsVolume]);
+
+  // Clear any in-flight crossfade on unmount.
+  useEffect(() => () => { if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id); }, []);
 
   // Start HLS (muted) inside the same user gesture that starts WebRTC, so iOS allows it later.
   const resume = useCallback(() => {
