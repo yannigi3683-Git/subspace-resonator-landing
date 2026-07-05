@@ -6,6 +6,8 @@ export interface HlsListener {
   ready: boolean;
   playing: boolean;
   bufferedAhead: number;
+  /** ms the playhead has been stuck while it should be advancing (0 = healthy). Drives fallback. */
+  stalledMs: number;
   /** Start playback. Called inside the user gesture (iOS); also auto-starts muted. */
   play: () => Promise<void>;
   setVolume: (v: number) => void;
@@ -24,6 +26,7 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
   const [ready, setReady] = useState(false);
   const [playing, setPlaying] = useState(false);
   const [bufferedAhead, setBufferedAhead] = useState(0);
+  const [stalledMs, setStalledMs] = useState(0);
   const elRef = useRef<HTMLVideoElement | null>(null);
   const handleRef = useRef<HlsHandle | null>(null);
 
@@ -34,6 +37,11 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
     el.autoplay = true;
     el.muted = true;
     el.volume = 0;
+    // Attach to the DOM (offscreen). A DETACHED muted video does not reliably muted-autoplay when
+    // created late (guest already in the room when streamUrl is published); an in-DOM muted+playsinline
+    // video autoplays per spec. This is what fixes the "join-before-streamUrl never upgrades" bug.
+    el.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;left:-9999px;';
+    document.body.appendChild(el);
     elRef.current = el;
 
     const tryPlay = () => { el.play().catch(() => {}); };
@@ -50,6 +58,11 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
     el.addEventListener('canplay', tryPlay);
     el.addEventListener('loadeddata', tryPlay);
 
+    // Stall detection: while the element is meant to be playing, watch the playhead advance. If it
+    // freezes (HLS window stopped growing — the restreamer PC died/slept), stalledMs climbs; the
+    // transport uses it to fall back to WebRTC instead of leaving the listener in silence.
+    let lastTime = el.currentTime;
+    let stalledSince = 0;
     const iv = setInterval(() => {
       let ahead = 0;
       for (let i = 0; i < el.buffered.length; i++) {
@@ -60,6 +73,16 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
       setBufferedAhead(ahead);
       if (ahead >= HEALTHY_BUFFER_S) setReady(true);
       if (el.paused) tryPlay();
+
+      const advanced = el.currentTime > lastTime + 0.05;
+      lastTime = el.currentTime;
+      if (el.paused || advanced) {
+        stalledSince = 0;
+        setStalledMs(0);
+      } else {
+        if (stalledSince === 0) stalledSince = Date.now();
+        setStalledMs(Date.now() - stalledSince);
+      }
     }, 500);
 
     return () => {
@@ -72,10 +95,12 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
       handleRef.current?.destroy();
       handleRef.current = null;
       el.pause();
+      el.remove();
       elRef.current = null;
       setReady(false);
       setPlaying(false);
       setBufferedAhead(0);
+      setStalledMs(0);
     };
   }, [streamUrl]);
 
@@ -112,5 +137,5 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
     handleRef.current = null;
   }, []);
 
-  return { ready, playing, bufferedAhead, play, setVolume, claimMediaSession, destroy };
+  return { ready, playing, bufferedAhead, stalledMs, play, setVolume, claimMediaSession, destroy };
 }

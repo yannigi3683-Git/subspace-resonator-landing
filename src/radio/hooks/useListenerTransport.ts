@@ -25,6 +25,13 @@ export function crossfadeVolumes(i: number, steps: number, userVolume: number): 
   return { webrtc: userVolume * (1 - t), hls: userVolume * t };
 }
 
+// Once HLS is the audible transport, a playhead stuck this long (restreamer PC died/slept) means the
+// deep buffer is dead -> fall back to live WebRTC rather than leave the listener in silence.
+const HLS_STALL_FALLBACK_MS = 10000;
+export function shouldFallback(stalledMs: number): boolean {
+  return stalledMs >= HLS_STALL_FALLBACK_MS;
+}
+
 const CROSSFADE_MS = 1500;
 const CROSSFADE_STEPS = 15;
 
@@ -54,7 +61,15 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   }, [streamUrl, cfSessionId]);
 
   const { setVolume: setWebrtcVolume, audioElement: webrtcEl } = webrtc;
-  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession } = hls;
+  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession, stalledMs: hlsStalledMs } = hls;
+
+  // A guest already listening on WebRTC when streamUrl is published never tapped the HLS element into
+  // life, and a late muted-autoplay can be flaky. Once HLS exists AND WebRTC is audible, kick HLS
+  // playback so its buffer fills and the crossfade can fire (the "join-before-streamUrl" fix).
+  useEffect(() => {
+    if (!streamUrl || !webrtc.playing) return;
+    void hlsPlay();
+  }, [streamUrl, webrtc.playing, hlsPlay]);
 
   // Once HLS owns the audio, stop WebRTC entirely (free the audio focus) and claim the OS media
   // session so playback survives a phone lock. Muting alone leaves WebRTC as the "active" media
@@ -64,6 +79,18 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
     webrtcEl?.pause();
     claimMediaSession();
   }, [phase, webrtcEl, claimMediaSession]);
+
+  // HLS-death recovery: if HLS is the active transport but its playhead has been frozen too long
+  // (the restreamer PC slept/crashed), fall back to live WebRTC. Rebuild WebRTC (retry) since it was
+  // paused/possibly stale; route volume back to it. A fresh streamUrl later re-arms the crossfade.
+  const { retry: webrtcRetry } = webrtc;
+  useEffect(() => {
+    if (phase !== 'hls' || !shouldFallback(hlsStalledMs)) return;
+    setPhase('webrtc');
+    setHlsVolume(0);
+    setWebrtcVolume(userVolume);
+    webrtcRetry();
+  }, [phase, hlsStalledMs, userVolume, setHlsVolume, setWebrtcVolume, webrtcRetry]);
 
   // Crossfade once HLS is healthy and WebRTC is already audible. Fires exactly once per session
   // (guarded by the ref), and the interval is never cancelled by a re-render.

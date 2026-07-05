@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decideAction } from './station.mjs';
+import { decideAction, hasStaleStreamUrl } from './station.mjs';
 
 const live = (id) => ({ mode: 'live', live_session: { cfSessionId: id } });
 const off = { mode: 'off', live_session: null };
@@ -33,4 +33,18 @@ test('missing/garbage station row is safe (no crash, stop if running)', () => {
   assert.deepEqual(decideAction('A', null), { action: 'stop' });
   assert.deepEqual(decideAction(null, undefined), { action: 'none' });
   assert.deepEqual(decideAction(null, { mode: 'live', live_session: null }), { action: 'none' });
+});
+
+test('hasStaleStreamUrl: off-air with a lingering streamUrl is stale', () => {
+  assert.equal(hasStaleStreamUrl({ mode: 'off', live_session: { streamUrl: 'http://x/s.m3u8' } }), true);
+});
+
+test('hasStaleStreamUrl: live with a streamUrl is NOT stale (startFor overwrites it)', () => {
+  assert.equal(hasStaleStreamUrl({ mode: 'live', live_session: { cfSessionId: 'A', streamUrl: 'http://x/s.m3u8' } }), false);
+});
+
+test('hasStaleStreamUrl: no streamUrl / garbage is never stale', () => {
+  assert.equal(hasStaleStreamUrl({ mode: 'off', live_session: null }), false);
+  assert.equal(hasStaleStreamUrl(null), false);
+  assert.equal(hasStaleStreamUrl(undefined), false);
 });

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { crossfadeVolumes } from './useListenerTransport';
+import { crossfadeVolumes, shouldFallback } from './useListenerTransport';
 
 describe('crossfadeVolumes', () => {
   it('starts fully on WebRTC', () => {
@@ -18,5 +18,16 @@ describe('crossfadeVolumes', () => {
   });
   it('clamps steps beyond the end (never negative / overshoot)', () => {
     expect(crossfadeVolumes(99, 15, 1)).toEqual({ webrtc: 0, hls: 1 });
+  });
+});
+
+describe('shouldFallback', () => {
+  it('stays on HLS while the playhead is healthy', () => {
+    expect(shouldFallback(0)).toBe(false);
+    expect(shouldFallback(9999)).toBe(false);
+  });
+  it('falls back to WebRTC once stalled past the threshold', () => {
+    expect(shouldFallback(10000)).toBe(true);
+    expect(shouldFallback(30000)).toBe(true);
   });
 });

@@ -8,7 +8,7 @@ import { writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
-import { makeStationClient, watchStation, decideAction, setStreamUrl } from './station.mjs';
+import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
 import { startHls, rtpInputArgs } from './hls.mjs';
 import { serveLocal } from './sink/local.mjs';
@@ -36,7 +36,7 @@ async function waitForSegments(dir, timeoutMs = 20000) {
   const start = Date.now();
   while (Date.now() - start < timeoutMs) {
     const files = await readdir(dir).catch(() => []);
-    if (files.some((f) => f.endsWith('.m4s'))) return true;
+    if (files.some((f) => f.endsWith('.ts'))) return true;
     await sleep(500);
   }
   throw new Error('no HLS segments produced within timeout');
@@ -76,7 +76,17 @@ async function startFor(cfSessionId) {
     sink = { publicUrl: `${base}/stream.m3u8`, stop() { server.close(); } };
   }
 
-  await waitForSegments(outDir);
+  // If the stream never comes up, tear down THIS attempt's resources before bubbling the error —
+  // otherwise ffmpeg keeps holding the RTP port and the next attempt fails to bind.
+  try {
+    await waitForSegments(outDir);
+  } catch (e) {
+    try { ff.kill('SIGKILL'); } catch {}
+    pull.close();
+    sink.stop();
+    if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+    throw e;
+  }
   await setStreamUrl(supabase, sink.publicUrl);
   log('streamUrl published:', sink.publicUrl, '(rtp packets so far', pull.rtpCount() + ')');
 
@@ -103,6 +113,18 @@ async function startFor(cfSessionId) {
 
 async function teardown() {
   if (running) { log('END', running.cfSessionId); await running.stop(); running = null; }
+}
+
+// On boot, clear a streamUrl left over from a crashed/killed run (station is off but still points
+// at a dead HLS stream) so listeners aren't chasing it before the next show starts.
+try {
+  const boot = await fetchStation(supabase);
+  if (hasStaleStreamUrl(boot)) {
+    await setStreamUrl(supabase, null);
+    log('cleared stale streamUrl from a previous run');
+  }
+} catch (e) {
+  log('startup stale-streamUrl check failed', e.message);
 }
 
 watchStation(supabase, async (station) => {

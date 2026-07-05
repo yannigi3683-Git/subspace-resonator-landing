@@ -14,6 +14,13 @@ export function decideAction(runningSessionId, station) {
   return { action: 'none' };
 }
 
+// True when a streamUrl is advertised but the station is NOT live for it (a stale pointer left by a
+// crashed/killed restreamer). On boot we clear it so listeners aren't chasing a dead HLS stream.
+export function hasStaleStreamUrl(station) {
+  if (!station?.live_session?.streamUrl) return false;
+  return !(station.mode === 'live' && station.live_session.cfSessionId);
+}
+
 export function makeStationClient({ supabaseUrl, supabaseSecretKey }) {
   return createClient(supabaseUrl, supabaseSecretKey, { auth: { persistSession: false } });
 }
