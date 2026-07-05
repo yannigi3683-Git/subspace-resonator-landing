@@ -34,14 +34,22 @@ export async function startR2Sink({ outDir, r2, publicBaseUrl, prefix, log = () 
 
   async function scan() {
     const files = await readdir(outDir);
-    // Segments + init first, playlist last.
+    // Segments + init first, playlist last. A segment can be deleted by ffmpeg's rolling window
+    // between readdir and stat/read (ENOENT); skip that one file — it must NOT abort the whole scan,
+    // or the playlist (uploaded last) stops refreshing and listeners starve.
     for (const f of files.filter((f) => f !== 'stream.m3u8')) {
-      const size = (await stat(join(outDir, f))).size;
-      if (seen.get(f) === size) continue;
-      await put(f, false);
-      seen.set(f, size);
+      try {
+        const size = (await stat(join(outDir, f))).size;
+        if (seen.get(f) === size) continue;
+        await put(f, false);
+        seen.set(f, size);
+      } catch (e) {
+        if (e?.code !== 'ENOENT') throw e; // vanished segment is fine; anything else is real
+      }
     }
-    if (files.includes('stream.m3u8')) await put('stream.m3u8', true);
+    if (files.includes('stream.m3u8')) await put('stream.m3u8', true).catch((e) => {
+      if (e?.code !== 'ENOENT') throw e;
+    });
   }
 
   const iv = setInterval(() => scan().catch((e) => log('r2 scan', e.message)), 1000);
