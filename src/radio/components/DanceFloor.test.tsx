@@ -1,7 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor, gridSlot } from './DanceFloor';
+import { DanceFloor, gridSlot, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
+
+type Slot = ReturnType<typeof gridSlot>;
+
+// Mirrors the footprint math in gridSlot: the label is wider than the avatar,
+// and adds its height + gap below it once shown.
+function footprintOf(slot: Slot) {
+  return {
+    w: slot.hasLabel ? LABEL_W : slot.size,
+    h: slot.hasLabel ? slot.size + LABEL_GAP + LABEL_H : slot.size,
+  };
+}
+
+function footprintsOverlap(a: Slot, b: Slot, boxW: number, boxH: number) {
+  const dx = Math.abs(((a.px - b.px) / 100) * boxW);
+  const dy = Math.abs(((a.py - b.py) / 100) * boxH);
+  const fa = footprintOf(a);
+  const fb = footprintOf(b);
+  return dx < (fa.w + fb.w) / 2 && dy < (fa.h + fb.h) / 2;
+}
 
 const liveStation = {
   mode: 'live',
@@ -45,20 +64,64 @@ describe('DanceFloor', () => {
     expect(screen.getByText(/off air/i)).toBeInTheDocument();
   });
 
-  it('never overlaps crowd tiles, at any count or screen size', () => {
-    for (const total of [2, 15, 30]) {
-      for (const [boxW, boxH] of [[340, 560], [430, 700], [1400, 800]]) {
+  it('never overlaps crowd tile footprints (avatar + label), at any count or screen size', () => {
+    for (const total of [2, 4, 8, 15, 30]) {
+      for (const [boxW, boxH] of [[340, 560], [375, 667], [430, 700], [1400, 800]]) {
         const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, boxW, boxH));
         for (let a = 0; a < slots.length; a++) {
           for (let b = a + 1; b < slots.length; b++) {
-            const dx = ((slots[a].px - slots[b].px) / 100) * boxW;
-            const dy = ((slots[a].py - slots[b].py) / 100) * boxH;
-            const dist = Math.hypot(dx, dy);
-            const minGap = (slots[a].size + slots[b].size) / 2;
-            expect(dist).toBeGreaterThanOrEqual(minGap - 0.01);
+            expect(footprintsOverlap(slots[a], slots[b], boxW, boxH)).toBe(false);
           }
         }
       }
     }
+  });
+
+  it('keeps labels visible for a typical guest count on a narrow phone', () => {
+    const boxW = 375;
+    const boxH = 667;
+    const total = 4;
+    const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, boxW, boxH));
+    for (const slot of slots) {
+      expect(slot.hasLabel).toBe(true);
+    }
+    for (let a = 0; a < slots.length; a++) {
+      for (let b = a + 1; b < slots.length; b++) {
+        expect(footprintsOverlap(slots[a], slots[b], boxW, boxH)).toBe(false);
+      }
+    }
+  });
+
+  it('does not reshuffle the crowd order when a device reconnects with a new uid', () => {
+    const guests: PresenceEntry[] = [
+      { uid: 'u1', deviceId: 'd1', name: 'Guy', avatarId: 'nebula', position: { x: 0, y: 0 } },
+      { uid: 'u2', deviceId: 'd2', name: 'Dvir', avatarId: 'nebula', position: { x: 0, y: 0 } },
+      { uid: 'u3', deviceId: 'd3', name: 'Asaf', avatarId: 'nebula', position: { x: 0, y: 0 } },
+    ];
+    const { container, rerender } = render(
+      <DanceFloor presenceList={guests} station={liveStation} uid="u1" />,
+    );
+    const namesBefore = Array.from(container.querySelectorAll('.radio-slot')).map(
+      (el) => el.textContent,
+    );
+
+    // Anonymous re-auth on d2's device: uid changes, deviceId doesn't. A uid-keyed
+    // sort would move this guest (and reshuffle the others) since 'zzz...' sorts
+    // after 'u3'; a deviceId-keyed sort keeps d1 < d2 < d3 unchanged.
+    const reconnected = guests.map((g) => (g.deviceId === 'd2' ? { ...g, uid: 'zzz-reconnected' } : g));
+    rerender(<DanceFloor presenceList={reconnected} station={liveStation} uid="u1" />);
+    const namesAfter = Array.from(container.querySelectorAll('.radio-slot')).map(
+      (el) => el.textContent,
+    );
+
+    expect(namesAfter).toEqual(namesBefore);
+  });
+
+  it('routes the no-listener ghost preview through the same grid layout as live guests', () => {
+    const { container } = render(<DanceFloor presenceList={[]} station={liveStation} uid="u1" />);
+    const tiles = container.querySelectorAll('.radio-slot');
+    expect(tiles.length).toBe(3);
+    const lefts = Array.from(tiles).map((el) => (el as HTMLElement).style.left);
+    expect(new Set(lefts).size).toBe(3);
   });
 });

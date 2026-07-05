@@ -21,11 +21,36 @@ const CROWD_RENDER_CAP = 30;
 
 // Floor band the crowd is confined to (percent of the DanceFloor box), clear
 // of the central visualizer and the stage riser above it.
-const FLOOR_BAND = { left: 12, top: 74, width: 76, height: 21 };
+const FLOOR_BAND = { left: 6, top: 70, width: 88, height: 25 };
 
 // Fallback box size for the very first paint (before ResizeObserver reports
 // real dimensions) and for jsdom in tests, which never measures a layout.
 const FALLBACK_BOX = { w: 400, h: 600 };
+
+// A full-size crowd tile's real rendered footprint: the label below the
+// avatar is wider than the avatar circle, and the tile's height is the
+// avatar plus the gap plus the label. Sizing cells off this (not the avatar
+// alone) is what keeps name labels from colliding even when the avatars
+// themselves are correctly spaced.
+export const AVATAR_BASE = 44;
+export const LABEL_W = 84;
+export const LABEL_GAP = 6;
+export const LABEL_H = 14;
+const FOOTPRINT_W = LABEL_W;
+const FOOTPRINT_H = AVATAR_BASE + LABEL_GAP + LABEL_H;
+
+// Pick a grid that fits everyone at full size if the band is big enough;
+// only fall back to the density-driven (shrinking) layout once it isn't.
+function computeGridDims(total: number, bandWpx: number, bandHpx: number) {
+  const fullCols = Math.max(1, Math.floor(bandWpx / FOOTPRINT_W));
+  const fullRows = Math.max(1, Math.floor(bandHpx / FOOTPRINT_H));
+  if (fullCols * fullRows >= total) {
+    const cols = Math.max(1, Math.min(fullCols, total));
+    return { cols, rows: Math.max(1, Math.ceil(total / cols)) };
+  }
+  const cols = Math.max(1, Math.round(Math.sqrt((total * bandWpx) / bandHpx)));
+  return { cols, rows: Math.max(1, Math.ceil(total / cols)) };
+}
 
 // Tracks the real pixel size of an element so the crowd grid can be computed
 // in actual px, not just band percentages — a phone (narrow, tall) and a
@@ -56,25 +81,30 @@ function useMeasuredSize(ref: RefObject<HTMLElement | null>) {
 export function gridSlot(index: number, total: number, uid: string, boxW: number, boxH: number) {
   const bandWpx = (boxW * FLOOR_BAND.width) / 100;
   const bandHpx = (boxH * FLOOR_BAND.height) / 100;
-  const cols = Math.max(1, Math.round(Math.sqrt((total * bandWpx) / bandHpx)));
-  const rows = Math.max(1, Math.ceil(total / cols));
+  const { cols, rows } = computeGridDims(total, bandWpx, bandHpx);
   const col = index % cols;
   const row = Math.floor(index / cols);
 
   const cellWpx = bandWpx / cols;
   const cellHpx = bandHpx / rows;
-  const size = Math.round(clamp(0.6 * Math.min(cellWpx, cellHpx), 16, 44));
+  const size = Math.round(clamp(0.6 * Math.min(cellWpx, cellHpx), 16, AVATAR_BASE));
+  // Only show the label if its footprint (label width, avatar+gap+label height)
+  // actually fits the cell — otherwise it would spill into the neighboring tile.
+  const hasLabel = cellWpx >= LABEL_W && cellHpx >= size + LABEL_GAP + LABEL_H;
+
+  const footprintWpx = hasLabel ? LABEL_W : size;
+  const footprintHpx = hasLabel ? size + LABEL_GAP + LABEL_H : size;
 
   const h = hashUid(uid);
-  const maxJitterXpx = 0.25 * (cellWpx - size);
-  const maxJitterYpx = 0.25 * (cellHpx - size);
+  const maxJitterXpx = Math.max(0, 0.25 * (cellWpx - footprintWpx));
+  const maxJitterYpx = Math.max(0, 0.25 * (cellHpx - footprintHpx));
   const jitterXpx = ((h % 100) / 100 - 0.5) * 2 * maxJitterXpx;
   const jitterYpx = (((h >> 8) % 100) / 100 - 0.5) * 2 * maxJitterYpx;
 
   const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
   const py = FLOOR_BAND.top + ((cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
 
-  return { px, py, size };
+  return { px, py, size, hasLabel };
 }
 
 interface DanceFloorProps {
@@ -110,7 +140,9 @@ export function DanceFloor({
   const overflow = Math.max(0, presenceList.length - CROWD_RENDER_CAP);
   const visible = isGhost
     ? GHOST_ENTRIES
-    : [...presenceList].sort((a, b) => a.uid.localeCompare(b.uid)).slice(0, CROWD_RENDER_CAP);
+    : [...presenceList]
+        .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
+        .slice(0, CROWD_RENDER_CAP);
   const live = station?.mode === 'live';
   const floorRef = useRef<HTMLDivElement>(null);
   const box = useMeasuredSize(floorRef);
@@ -218,11 +250,11 @@ export function DanceFloor({
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        const { px, py, size } = gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const { px, py, size, hasLabel } = gridSlot(i, visible.length, entry.uid, box.w, box.h);
         return (
           <div
             key={entry.uid}
-            className="absolute z-[5] flex flex-col items-center"
+            className="radio-slot absolute z-[5] flex flex-col items-center"
             style={{
               left: `${px}%`,
               top: `${py}%`,
@@ -236,7 +268,7 @@ export function DanceFloor({
             >
               <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
             </div>
-            {size >= 36 && (
+            {hasLabel && (
               <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
                 {entry.name.slice(0, 14)}
               </span>

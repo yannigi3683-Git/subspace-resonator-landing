@@ -11,6 +11,9 @@
 }
 .radio-bob { animation: radio-bob 3s ease-in-out infinite; }
 
+/* Crowd tile wrapper: smooth the left/top jump when the grid re-slots on join/leave. */
+.radio-slot { transition: left 450ms ease, top 450ms ease; }
+
 /* ── Cosmic / deep-space dancefloor ─────────────────────────── */
 /* Layered nebula wash. */
 .radio-nebula {
@@ -145,6 +148,7 @@
   .radio-amp-glow,
   .radio-np-marquee,
   .pixel-blink { animation: none; }
+  .radio-slot { transition: none; }
 }
 
 /* ── Retro / pixel aesthetic ────────────────────────────────── */
