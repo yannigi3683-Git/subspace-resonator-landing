@@ -14,11 +14,11 @@ export function rtpInputArgs(sdpFile = 'input.sdp') {
 // inputArgs = the ffmpeg args up to and including `-i <source>` (RTP SDP for the service,
 // a lavfi tone for the self-check). Everything after is the fixed HLS output contract. Run in
 // outDir with relative output names so segments + playlist land together with clean relative URIs.
-export function startHls({ ffmpegPath, inputArgs, outDir, segmentSeconds = 6, window = 8 }) {
+export function startHls({ ffmpegPath, inputArgs, outDir, segmentSeconds = 6, window = 8, aacBitrate = '192k' }) {
   const args = [
     '-hide_banner', '-loglevel', 'warning',
     ...inputArgs,
-    '-c:a', 'aac', '-b:a', '128k', '-ar', '48000', '-ac', '2',
+    '-c:a', 'aac', '-b:a', aacBitrate, '-ar', '48000', '-ac', '2',
     '-f', 'hls',
     '-hls_time', String(segmentSeconds),
     '-hls_list_size', String(window),

@@ -63,6 +63,7 @@ async function startFor(cfSessionId) {
     outDir,
     segmentSeconds: cfg.segmentSeconds,
     window: cfg.hlsWindow,
+    aacBitrate: cfg.aacBitrate,
   });
 
   await pull.commit(); // media starts now that ffmpeg is listening

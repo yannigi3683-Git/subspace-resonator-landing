@@ -26,6 +26,10 @@ export function loadConfig(env = process.env) {
     // so a deep-buffer listener never falls off the back of the playlist (-> fragLoadError).
     segmentSeconds: Number(clean(env.SEGMENT_SECONDS) || '4'),
     hlsWindow: Number(clean(env.HLS_WINDOW) || '30'),
+    // Delivered AAC bitrate. 192k default (near-transparent for the Opus-decoded signal); drop to
+    // 128k if listener bandwidth on the free r2.dev ever gets tight. Opus upload ceiling is separate
+    // (host UI: STABLE/BALANCED/HQ + Auto-pilot).
+    aacBitrate: clean(env.AAC_BITRATE) || '192k',
   };
   return cfg;
 }
