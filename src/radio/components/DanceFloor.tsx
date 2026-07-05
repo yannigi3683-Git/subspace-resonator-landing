@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState, type RefObject } from 'react';
 import { Disc3 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
@@ -13,6 +14,68 @@ function hashUid(uid: string): number {
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
+
+// Render cap: past this many listeners we stop placing individual tiles and
+// show a "+N in the crowd" badge instead.
+const CROWD_RENDER_CAP = 30;
+
+// Floor band the crowd is confined to (percent of the DanceFloor box), clear
+// of the central visualizer and the stage riser above it.
+const FLOOR_BAND = { left: 12, top: 74, width: 76, height: 21 };
+
+// Fallback box size for the very first paint (before ResizeObserver reports
+// real dimensions) and for jsdom in tests, which never measures a layout.
+const FALLBACK_BOX = { w: 400, h: 600 };
+
+// Tracks the real pixel size of an element so the crowd grid can be computed
+// in actual px, not just band percentages — a phone (narrow, tall) and a
+// desktop window (wide, short) need very different row/column splits to
+// avoid overlap, and percentages alone can't tell the two apart.
+function useMeasuredSize(ref: RefObject<HTMLElement | null>) {
+  const [box, setBox] = useState(FALLBACK_BOX);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const r = el.getBoundingClientRect();
+      if (r.width > 0 && r.height > 0) setBox({ w: r.width, h: r.height });
+    };
+    measure();
+    const ro = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(measure) : null;
+    ro?.observe(el);
+    return () => ro?.disconnect();
+  }, [ref]);
+  return box;
+}
+
+// Deterministic row/column slot for a listener within the visible (stably
+// sorted) crowd, computed in real pixels so it holds at any viewport size.
+// Avatar size is derived from the cell it's given (smaller cells -> smaller
+// avatars), and jitter is capped at a fraction of the slack left after
+// sizing the avatar, so two adjacent tiles can never actually touch.
+export function gridSlot(index: number, total: number, uid: string, boxW: number, boxH: number) {
+  const bandWpx = (boxW * FLOOR_BAND.width) / 100;
+  const bandHpx = (boxH * FLOOR_BAND.height) / 100;
+  const cols = Math.max(1, Math.round(Math.sqrt((total * bandWpx) / bandHpx)));
+  const rows = Math.max(1, Math.ceil(total / cols));
+  const col = index % cols;
+  const row = Math.floor(index / cols);
+
+  const cellWpx = bandWpx / cols;
+  const cellHpx = bandHpx / rows;
+  const size = Math.round(clamp(0.6 * Math.min(cellWpx, cellHpx), 16, 44));
+
+  const h = hashUid(uid);
+  const maxJitterXpx = 0.25 * (cellWpx - size);
+  const maxJitterYpx = 0.25 * (cellHpx - size);
+  const jitterXpx = ((h % 100) / 100 - 0.5) * 2 * maxJitterXpx;
+  const jitterYpx = (((h >> 8) % 100) / 100 - 0.5) * 2 * maxJitterYpx;
+
+  const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
+  const py = FLOOR_BAND.top + ((cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
+
+  return { px, py, size };
+}
 
 interface DanceFloorProps {
   presenceList: PresenceEntry[];
@@ -43,12 +106,17 @@ export function DanceFloor({
   uid,
   nowPlaying,
 }: DanceFloorProps) {
-  const visible = presenceList.length > 0 ? presenceList.slice(0, 150) : GHOST_ENTRIES;
   const isGhost = presenceList.length === 0;
+  const overflow = Math.max(0, presenceList.length - CROWD_RENDER_CAP);
+  const visible = isGhost
+    ? GHOST_ENTRIES
+    : [...presenceList].sort((a, b) => a.uid.localeCompare(b.uid)).slice(0, CROWD_RENDER_CAP);
   const live = station?.mode === 'live';
+  const floorRef = useRef<HTMLDivElement>(null);
+  const box = useMeasuredSize(floorRef);
 
   return (
-    <div className="relative w-full h-full overflow-hidden bg-[#05060f]">
+    <div ref={floorRef} className="relative w-full h-full overflow-hidden bg-[#05060f]">
       {/* Atmosphere layers (decorative) */}
       <div className="absolute inset-0 radio-nebula" aria-hidden="true" />
       <div className="absolute inset-0 radio-stars" aria-hidden="true" />
@@ -145,14 +213,12 @@ export function DanceFloor({
       </div>
 
       {/* ── DANCEFLOOR CROWD ─────────────────────────────────── */}
-      {visible.map((entry) => {
+      {visible.map((entry, i) => {
         const isSelf = entry.uid === uid;
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        // Keep the crowd in the lower floor band, clear of the central visualizer.
-        const px = 12 + clamp(entry.position.x, 0, 100) * 0.76;
-        const py = 74 + clamp(entry.position.y, 0, 100) * 0.21;
+        const { px, py, size } = gridSlot(i, visible.length, entry.uid, box.w, box.h);
         return (
           <div
             key={entry.uid}
@@ -168,14 +234,24 @@ export function DanceFloor({
               className={`radio-bob ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
               style={{ animationDelay: delay, animationDuration: duration }}
             >
-              <Avatar avatarId={entry.avatarId} size={isSelf ? 56 : 44} label={entry.name} />
+              <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
             </div>
-            <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
-              {entry.name.slice(0, 14)}
-            </span>
+            {size >= 36 && (
+              <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
+                {entry.name.slice(0, 14)}
+              </span>
+            )}
           </div>
         );
       })}
+
+      {overflow > 0 && (
+        <div className="absolute z-[6] bottom-2 inset-x-0 flex justify-center pointer-events-none">
+          <span className="pixel text-[10px] text-white/50">
+            +{overflow} in the crowd
+          </span>
+        </div>
+      )}
     </div>
   );
 }

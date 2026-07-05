@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor } from './DanceFloor';
+import { DanceFloor, gridSlot } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
 const liveStation = {
@@ -43,5 +43,22 @@ describe('DanceFloor', () => {
     );
     expect(screen.getByText(/standby/i)).toBeInTheDocument();
     expect(screen.getByText(/off air/i)).toBeInTheDocument();
+  });
+
+  it('never overlaps crowd tiles, at any count or screen size', () => {
+    for (const total of [2, 15, 30]) {
+      for (const [boxW, boxH] of [[340, 560], [430, 700], [1400, 800]]) {
+        const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, boxW, boxH));
+        for (let a = 0; a < slots.length; a++) {
+          for (let b = a + 1; b < slots.length; b++) {
+            const dx = ((slots[a].px - slots[b].px) / 100) * boxW;
+            const dy = ((slots[a].py - slots[b].py) / 100) * boxH;
+            const dist = Math.hypot(dx, dy);
+            const minGap = (slots[a].size + slots[b].size) / 2;
+            expect(dist).toBeGreaterThanOrEqual(minGap - 0.01);
+          }
+        }
+      }
+    }
   });
 });
