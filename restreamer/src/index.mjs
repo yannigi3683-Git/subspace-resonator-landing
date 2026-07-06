@@ -3,7 +3,7 @@
 // the deep-buffer stream. When the show ends (or the broadcast id changes), tears everything down
 // and clears streamUrl so listeners fall back to WebRTC. One broadcast at a time.
 import { createClient } from '@supabase/supabase-js';
-import { mkdtempSync, rmSync, existsSync } from 'node:fs';
+import { mkdtempSync } from 'node:fs';
 import { writeFile, readdir } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -11,6 +11,7 @@ import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
 import { startHls, rtpInputArgs } from './hls.mjs';
+import { makeCleanup } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
 
@@ -77,15 +78,14 @@ async function startFor(cfSessionId) {
     sink = { publicUrl: `${base}/stream.m3u8`, stop() { server.close(); } };
   }
 
+  const cleanupResources = makeCleanup({ ff, pull, sink, outDir });
+
   // If the stream never comes up, tear down THIS attempt's resources before bubbling the error —
   // otherwise ffmpeg keeps holding the RTP port and the next attempt fails to bind.
   try {
     await waitForSegments(outDir);
   } catch (e) {
-    try { ff.kill('SIGKILL'); } catch {}
-    pull.close();
-    sink.stop();
-    if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+    cleanupResources();
     throw e;
   }
   await setStreamUrl(supabase, sink.publicUrl);
@@ -95,10 +95,7 @@ async function startFor(cfSessionId) {
     cfSessionId,
     async stop() {
       await setStreamUrl(supabase, null).catch((e) => log('clear streamUrl', e.message));
-      try { ff.kill('SIGKILL'); } catch {}
-      pull.close();
-      sink.stop();
-      if (existsSync(outDir)) rmSync(outDir, { recursive: true, force: true });
+      cleanupResources();
     },
   };
 
@@ -107,6 +104,7 @@ async function startFor(cfSessionId) {
     if (running?.cfSessionId === cfSessionId) {
       log('ffmpeg exited', code, '- will restart on next poll');
       setStreamUrl(supabase, null).catch(() => {});
+      cleanupResources();
       running = null;
     }
   });
