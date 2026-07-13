@@ -589,10 +589,13 @@ const MusicPlayer = () => {
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40"
         style={{ background: "linear-gradient(180deg, hsl(0,0%,8%), hsl(0,0%,3%))", borderTop: "1px solid hsl(0,0%,18%)" }}>
         {/* Progress bar — full width, tappable to seek */}
-        <div className="w-full h-[3px] bg-border cursor-pointer relative" onClick={handleProgressClick}
+        {/* py + -my keeps the 3px visual line but gives a >=24px touch target */}
+        <div className="w-full py-[11px] -my-[11px] cursor-pointer relative" onClick={handleProgressClick}
           onKeyDown={handleProgressKey} tabIndex={0} role="slider" aria-label="Seek"
           aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
+          <div className="w-full h-[3px] bg-border relative">
+            <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
+          </div>
         </div>
         {/* Controls */}
         <div className="flex items-center gap-0.5 px-3"

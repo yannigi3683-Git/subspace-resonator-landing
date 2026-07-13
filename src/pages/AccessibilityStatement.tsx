@@ -10,7 +10,7 @@ export default function AccessibilityStatement() {
 
   return (
     <div className="min-h-screen bg-background text-foreground">
-      <div className="container max-w-3xl py-16 md:py-24">
+      <main className="container max-w-3xl py-16 md:py-24">
         <a
           href="/"
           className="inline-flex items-center gap-2 text-[11px] tracking-[0.25em] uppercase text-muted-foreground hover:text-primary transition-colors mb-10"
@@ -78,7 +78,7 @@ export default function AccessibilityStatement() {
             </p>
           </section>
         </div>
-      </div>
+      </main>
     </div>
   );
 }
