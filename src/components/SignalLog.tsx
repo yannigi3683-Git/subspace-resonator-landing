@@ -56,7 +56,6 @@ const LogRow = ({ r }: { r: Release }) => {
       href={r.url}
       target="_blank"
       rel="noopener noreferrer"
-      aria-label={`${r.title}, open release`}
       onClick={() => trackEvent("release_click", { title: r.title })}
       className={`group ${ROW_GRID} items-center outline-none focus-visible:ring-1 focus-visible:ring-primary/60 rounded-sm`}
     >
@@ -71,7 +70,7 @@ const LogRow = ({ r }: { r: Release }) => {
 
 const LogGroup = ({ label, rows }: { label: string; rows: Release[] }) => (
   <div>
-    <p className="text-[11px] tracking-[0.25em] text-muted-foreground/70 mb-3 font-mono uppercase">
+    <p className="text-[11px] tracking-[0.25em] text-muted-foreground mb-3 font-mono uppercase">
       {label}
     </p>
     <div>

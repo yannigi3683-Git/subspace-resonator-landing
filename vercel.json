@@ -1,5 +1,9 @@
 {
-  "rewrites": [{ "source": "/radio", "destination": "/radio.html" }],
+  "rewrites": [
+    { "source": "/radio", "destination": "/radio.html" },
+    { "source": "/privacy", "destination": "/index.html" },
+    { "source": "/accessibility", "destination": "/index.html" }
+  ],
   "headers": [
     {
       "source": "/(.*)",
