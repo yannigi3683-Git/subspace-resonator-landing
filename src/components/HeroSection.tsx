@@ -30,9 +30,8 @@ const HeroSection = () => {
           href="#music"
           onClick={handleScroll}
           className="mt-6 text-xs tracking-[0.35em] text-primary uppercase border border-primary/40 px-6 py-2 hover:border-primary hover:bg-primary/5 transition-colors"
-          aria-label="Scroll to music player"
         >
-          LISTEN ↓
+          LISTEN <span aria-hidden="true">↓</span>
         </a>
       </div>
     </section>
