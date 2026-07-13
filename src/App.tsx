@@ -11,6 +11,7 @@ import GallerySection from './components/GallerySection';
 import SocialMatrix from './components/SocialMatrix';
 import liveAlpha from './assets/live-alpha.webp';
 import AccessibilityMenu from './components/AccessibilityMenu';
+import CookieConsent from './components/CookieConsent';
 import AdminPanel from './components/admin/AdminPanel';
 import { useReleases, useSocials } from './lib/siteContent';
 
@@ -115,6 +116,7 @@ export default function App() {
 
         <a href="#main-content" className="skip-link">Skip to main content</a>
         <AccessibilityMenu />
+        <CookieConsent />
         <AdminPanel />
         <div className="relative z-10">
           <SiteHeader />
@@ -144,6 +146,11 @@ export default function App() {
                 <a href="tel:+972507974184" className="hover:text-primary transition-colors">
                   +972-50-7974184
                 </a>
+              </p>
+              <p className="text-[11px] text-muted-foreground mt-3 tracking-[0.2em]">
+                <a href="/accessibility" className="hover:text-primary transition-colors">ACCESSIBILITY</a>
+                {' '}·{' '}
+                <a href="/privacy" className="hover:text-primary transition-colors">PRIVACY</a>
               </p>
             </div>
           </footer>

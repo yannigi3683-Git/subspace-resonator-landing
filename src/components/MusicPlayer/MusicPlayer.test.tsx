@@ -24,9 +24,9 @@ describe('MusicPlayer', () => {
     expect(btns.length).toBeGreaterThan(0);
   });
 
-  it('progress bar is present', () => {
+  it('progress/seek bar is present', () => {
     render(<MusicPlayer />);
-    const bars = screen.getAllByRole('progressbar');
+    const bars = screen.getAllByRole('slider', { name: /seek/i });
     expect(bars.length).toBeGreaterThan(0);
   });
 
@@ -35,6 +35,17 @@ describe('MusicPlayer', () => {
     expect(screen.getByRole('link', { name: /bandcamp/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /youtube/i })).toBeInTheDocument();
     expect(screen.getByRole('link', { name: /spotify/i })).toBeInTheDocument();
+  });
+
+  it('seek bars are keyboard-operable sliders', () => {
+    render(<MusicPlayer />);
+    const sliders = screen.getAllByRole('slider', { name: /seek/i });
+    expect(sliders.length).toBeGreaterThan(0);
+    sliders.forEach((s) => {
+      expect(s).toHaveAttribute('tabindex', '0');
+      // no widget/duration yet -> handler must early-return, never throw
+      expect(() => fireEvent.keyDown(s, { key: 'ArrowRight' })).not.toThrow();
+    });
   });
 });
 

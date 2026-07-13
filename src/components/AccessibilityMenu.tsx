@@ -212,6 +212,7 @@ const AccessibilityMenu = () => {
             <p>We strive to comply with WCAG 2.1 Level AA. If you encounter any barrier on this site, please contact us so we can help and improve.</p>
             <p>Email: <a href="mailto:subspaceresonator@gmail.com" className="text-primary hover:underline">subspaceresonator@gmail.com</a></p>
             <p>Phone: <a href="tel:+972507974184" className="text-primary hover:underline">+972-50-7974184</a></p>
+            <p><a href="/accessibility" className="text-primary hover:underline">Full accessibility statement</a></p>
             <p className="pt-2">Shortcut: <span className="text-foreground">Alt + A</span></p>
           </div>
         </div>
