@@ -1,13 +1,17 @@
 import { useState, useEffect, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatMessage, Identity } from '../types';
-import { validateMessage, chatReloadFloor } from '../chatRules';
+import { validateMessage, chatReloadFloor, buildReplySnippet } from '../chatRules';
 
 const MAX_MESSAGES = 100;
 
+export interface SendOptions {
+  replyTo?: ChatMessage | null;
+}
+
 export interface UseChatResult {
   messages: ChatMessage[];
-  sendMessage: (body: string) => Promise<void>;
+  sendMessage: (body: string, opts?: SendOptions) => Promise<void>;
   sending: boolean;
   sendError: string | null;
 }
@@ -26,7 +30,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
     const sinceIso = chatReloadFloor(startedAt, Date.now());
     supabase
       .from('chat_messages')
-      .select('id, uid, display_name, avatar_id, body, is_host, created_at')
+      .select('id, uid, display_name, avatar_id, body, is_host, created_at, reply_to_id, reply_to_name, reply_to_body')
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: false })
       .limit(MAX_MESSAGES)
@@ -63,7 +67,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
   }, [supabase, sessionId, startedAt]);
 
   const sendMessage = useCallback(
-    async (body: string) => {
+    async (body: string, opts?: SendOptions) => {
       const { valid, error } = validateMessage(body);
       if (!valid) {
         setSendError(error ?? 'Invalid message');
@@ -72,6 +76,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       setSendError(null);
       setSending(true);
       try {
+        const replyTo = opts?.replyTo;
         const { error: dbError } = await supabase.from('chat_messages').insert({
           uid,
           device_id: identity.deviceId,
@@ -79,6 +84,9 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
           avatar_id: identity.avatarId,
           body: body.trim(),
           is_host: false,
+          reply_to_id: replyTo?.id ?? null,
+          reply_to_name: replyTo?.display_name ?? null,
+          reply_to_body: replyTo ? buildReplySnippet(replyTo) : null,
         });
         if (dbError) {
           if (dbError.code === '23514') {

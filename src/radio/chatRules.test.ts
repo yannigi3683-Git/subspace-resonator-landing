@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateMessage, formatSlowModeRemaining, chatReloadFloor } from './chatRules';
+import { validateMessage, formatSlowModeRemaining, chatReloadFloor, buildReplySnippet } from './chatRules';
 
 describe('validateMessage', () => {
   it('rejects empty string', () => {
@@ -34,6 +34,26 @@ describe('formatSlowModeRemaining', () => {
     expect(formatSlowModeRemaining(3000)).toBe('3s');
     expect(formatSlowModeRemaining(3001)).toBe('4s');
     expect(formatSlowModeRemaining(1)).toBe('1s');
+  });
+});
+
+describe('buildReplySnippet', () => {
+  it('returns the body unchanged when short', () => {
+    expect(buildReplySnippet({ body: 'hey there' })).toBe('hey there');
+  });
+
+  it('trims surrounding whitespace', () => {
+    expect(buildReplySnippet({ body: '  padded  ' })).toBe('padded');
+  });
+
+  it('truncates a long body to 140 chars with an ellipsis', () => {
+    const snip = buildReplySnippet({ body: 'x'.repeat(300) });
+    expect(snip.length).toBe(140);
+    expect(snip.endsWith('…')).toBe(true);
+  });
+
+  it('returns "GIF" for a gif message regardless of body', () => {
+    expect(buildReplySnippet({ body: 'a cat', gif_url: 'https://media.tenor.com/abc.gif' })).toBe('GIF');
   });
 });
 

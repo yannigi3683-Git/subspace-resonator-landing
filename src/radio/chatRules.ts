@@ -12,6 +12,16 @@ export function validateMessage(body: string): ValidationResult {
   return { valid: true };
 }
 
+const SNIPPET_MAX = 140;
+
+// Denormalized quoted-reply preview stored on the replying message, so rendering a
+// reply needs no join and survives even when the parent scrolls out of the client window.
+export function buildReplySnippet(msg: { body: string; gif_url?: string | null }): string {
+  if (msg.gif_url) return 'GIF';
+  const b = msg.body.trim();
+  return b.length > SNIPPET_MAX ? b.slice(0, SNIPPET_MAX - 1) + '…' : b;
+}
+
 export function formatSlowModeRemaining(ms: number): string {
   const s = Math.ceil(ms / 1000);
   return `${s}s`;

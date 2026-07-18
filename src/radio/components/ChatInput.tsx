@@ -1,7 +1,8 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Smile } from 'lucide-react';
+import { Smile, X } from 'lucide-react';
 import { formatSlowModeRemaining } from '../chatRules';
 import { EMOJI } from '../emojiSet';
+import type { ChatMessage } from '../types';
 
 interface ChatInputProps {
   onSend: (body: string) => Promise<void>;
@@ -9,15 +10,22 @@ interface ChatInputProps {
   sendError: string | null;
   slowModeRemainingMs?: number;
   disabled?: boolean;
+  replyTo?: ChatMessage | null;
+  onCancelReply?: () => void;
 }
 
 const MAX_BODY = 500;
 
-export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false }: ChatInputProps) {
+export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiWrapRef = useRef<HTMLDivElement>(null);
+
+  // Focus the composer when the user starts a reply.
+  useEffect(() => {
+    if (replyTo) textareaRef.current?.focus();
+  }, [replyTo]);
 
   const isBlocked = slowModeRemainingMs > 0 || disabled || sending;
 
@@ -76,6 +84,20 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
 
   return (
     <div className="px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] border-t border-[#1a1a2e]">
+      {replyTo && (
+        <div className="flex items-center gap-2 mb-2 pl-2 border-l-2 border-[#7B2FBE] text-[11px] min-w-0">
+          <span className="text-[#888] shrink-0">Replying to</span>
+          <span className="text-[#a875d8] truncate">{replyTo.display_name}</span>
+          <button
+            type="button"
+            onClick={onCancelReply}
+            aria-label="Cancel reply"
+            className="ml-auto shrink-0 p-1 text-[#888] hover:text-white"
+          >
+            <X size={14} />
+          </button>
+        </div>
+      )}
       <div className="flex gap-2 items-end">
         <div ref={emojiWrapRef} className="relative">
           <button

@@ -64,6 +64,11 @@ create table if not exists chat_messages (
 alter table chat_messages enable row level security;
 create index if not exists chat_messages_created_idx on chat_messages (created_at desc);
 
+-- 4a. Reply-to (denormalized snippet: render needs no join, survives the client window)
+alter table chat_messages add column if not exists reply_to_id   uuid references chat_messages(id) on delete set null;
+alter table chat_messages add column if not exists reply_to_name text check (reply_to_name is null or char_length(reply_to_name) <= 24);
+alter table chat_messages add column if not exists reply_to_body text check (reply_to_body is null or char_length(reply_to_body) <= 140);
+
 -- 5. Admin audit (rows written only by the station trigger)
 create table if not exists admin_audit (
   id uuid primary key default gen_random_uuid(),

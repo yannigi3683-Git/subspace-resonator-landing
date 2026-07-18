@@ -38,6 +38,19 @@ describe('Chat', () => {
     expect(document.querySelector('img[src="x"]')).toBeNull();
   });
 
+  it('renders a quoted reply stub when reply_to fields are present', () => {
+    render(<Chat messages={[makeMsg({ reply_to_name: 'Bob', reply_to_body: 'earlier point' })]} />);
+    expect(screen.getByText('Bob')).toBeInTheDocument();
+    expect(screen.getByText('earlier point')).toBeInTheDocument();
+  });
+
+  it('shows a Reply affordance only when onReply is provided', () => {
+    const { rerender } = render(<Chat messages={[makeMsg()]} />);
+    expect(screen.queryByLabelText('Reply to Alice')).toBeNull();
+    rerender(<Chat messages={[makeMsg()]} onReply={() => {}} />);
+    expect(screen.getByLabelText('Reply to Alice')).toBeInTheDocument();
+  });
+
   it('renders multiple messages', () => {
     render(
       <Chat

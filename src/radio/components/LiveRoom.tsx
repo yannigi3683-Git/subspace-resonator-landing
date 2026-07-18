@@ -2,7 +2,7 @@ import { useState, useEffect, useRef } from 'react';
 import type { SubscriberStats } from '../rtc/subscriber';
 import { Volume2, Music2, MessageSquare } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { Identity, Station } from '../types';
+import type { ChatMessage, Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
 import { usePresence } from '../hooks/usePresence';
 import { useListenerTransport } from '../hooks/useListenerTransport';
@@ -33,6 +33,9 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo } =
     useListenerTransport(supabase, station);
   const nowPlaying = useNowPlaying(supabase);
+
+  const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
+  const handleSend = (body: string) => sendMessage(body, { replyTo }).then(() => setReplyTo(null));
 
   const [mobileTab, setMobileTab] = useState<'stage' | 'chat'>('stage');
   const [unread, setUnread] = useState(0);
@@ -176,13 +179,15 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
         <div className="px-3 py-2 border-b border-[#1a1a2e]">
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">Chat</p>
         </div>
-        <Chat messages={messages} />
+        <Chat messages={messages} onReply={setReplyTo} />
         <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={handleRename} />
         <ChatInput
-          onSend={sendMessage}
+          onSend={handleSend}
           sending={sending}
           sendError={sendError}
           disabled={station.locked}
+          replyTo={replyTo}
+          onCancelReply={() => setReplyTo(null)}
         />
       </div>
 

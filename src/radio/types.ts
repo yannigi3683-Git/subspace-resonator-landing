@@ -23,6 +23,9 @@ export interface ChatMessage {
   body: string;
   is_host: boolean;
   created_at: string;
+  reply_to_id?: string | null;
+  reply_to_name?: string | null;
+  reply_to_body?: string | null;
 }
 
 export interface PresenceEntry {
