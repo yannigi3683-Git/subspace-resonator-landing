@@ -28,6 +28,13 @@ export interface ChatMessage {
   reply_to_body?: string | null;
 }
 
+export interface Reaction {
+  id: string;
+  message_id: string;
+  uid: string;
+  emoji: string;
+}
+
 export interface PresenceEntry {
   uid: string;
   name: string;

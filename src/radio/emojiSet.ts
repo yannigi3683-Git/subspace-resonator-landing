@@ -10,3 +10,6 @@ export const EMOJI: string[] = [
   '🙌', '👏', '🤙', '🤘', '✌️', '👍', '👎', '🙏',
   '❤️', '🧡', '💜', '💚', '💙', '🖤', '💖', '💯',
 ];
+
+// Quick-tap reaction set (message reaction pills).
+export const REACTIONS: string[] = ['🔥', '❤️', '👍', '😂', '🙌'];

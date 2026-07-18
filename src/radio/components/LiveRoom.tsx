@@ -4,6 +4,7 @@ import { Volume2, Music2, MessageSquare } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatMessage, Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
+import { useReactions } from '../hooks/useReactions';
 import { usePresence } from '../hooks/usePresence';
 import { useListenerTransport } from '../hooks/useListenerTransport';
 import { useNowPlaying } from '../hooks/useNowPlaying';
@@ -22,6 +23,7 @@ interface LiveRoomProps {
 
 export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
+  const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
   const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
 
   // A pencil avatar/name edit must reach chat too: rename updates presence + localStorage, but the
@@ -179,7 +181,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
         <div className="px-3 py-2 border-b border-[#1a1a2e]">
           <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">Chat</p>
         </div>
-        <Chat messages={messages} onReply={setReplyTo} />
+        <Chat messages={messages} onReply={setReplyTo} reactions={reactions} onToggleReaction={toggleReaction} />
         <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={handleRename} />
         <ChatInput
           onSend={handleSend}

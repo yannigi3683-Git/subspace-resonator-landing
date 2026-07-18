@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateMessage, formatSlowModeRemaining, chatReloadFloor, buildReplySnippet } from './chatRules';
+import { validateMessage, formatSlowModeRemaining, chatReloadFloor, buildReplySnippet, aggregateReactions } from './chatRules';
 
 describe('validateMessage', () => {
   it('rejects empty string', () => {
@@ -54,6 +54,39 @@ describe('buildReplySnippet', () => {
 
   it('returns "GIF" for a gif message regardless of body', () => {
     expect(buildReplySnippet({ body: 'a cat', gif_url: 'https://media.tenor.com/abc.gif' })).toBe('GIF');
+  });
+});
+
+describe('aggregateReactions', () => {
+  it('returns an empty map for no rows', () => {
+    expect(aggregateReactions([], 'me')).toEqual({});
+  });
+
+  it('counts repeated emoji on the same message', () => {
+    const rows = [
+      { message_id: 'm1', emoji: '🔥', uid: 'a' },
+      { message_id: 'm1', emoji: '🔥', uid: 'b' },
+    ];
+    expect(aggregateReactions(rows, 'me')).toEqual({ m1: [{ emoji: '🔥', count: 2, mine: false }] });
+  });
+
+  it('flags mine when my uid is among the reactors', () => {
+    const rows = [
+      { message_id: 'm1', emoji: '❤️', uid: 'me' },
+      { message_id: 'm1', emoji: '❤️', uid: 'b' },
+    ];
+    expect(aggregateReactions(rows, 'me').m1).toEqual([{ emoji: '❤️', count: 2, mine: true }]);
+  });
+
+  it('separates by message and by emoji', () => {
+    const rows = [
+      { message_id: 'm1', emoji: '🔥', uid: 'a' },
+      { message_id: 'm1', emoji: '👍', uid: 'a' },
+      { message_id: 'm2', emoji: '🔥', uid: 'a' },
+    ];
+    const out = aggregateReactions(rows, 'me');
+    expect(out.m1).toHaveLength(2);
+    expect(out.m2).toEqual([{ emoji: '🔥', count: 1, mine: false }]);
   });
 });
 

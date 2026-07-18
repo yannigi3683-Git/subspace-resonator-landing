@@ -51,6 +51,18 @@ describe('Chat', () => {
     expect(screen.getByLabelText('Reply to Alice')).toBeInTheDocument();
   });
 
+  it('renders reaction pills with counts when reactions are provided', () => {
+    render(
+      <Chat
+        messages={[makeMsg({ id: 'm1' })]}
+        onToggleReaction={() => {}}
+        reactions={{ m1: [{ emoji: '🔥', count: 3, mine: false }] }}
+      />,
+    );
+    expect(screen.getByText('🔥')).toBeInTheDocument();
+    expect(screen.getByText('3')).toBeInTheDocument();
+  });
+
   it('renders multiple messages', () => {
     render(
       <Chat

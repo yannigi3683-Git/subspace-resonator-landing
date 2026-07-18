@@ -22,6 +22,34 @@ export function buildReplySnippet(msg: { body: string; gif_url?: string | null }
   return b.length > SNIPPET_MAX ? b.slice(0, SNIPPET_MAX - 1) + '…' : b;
 }
 
+export interface ReactionRow {
+  message_id: string;
+  emoji: string;
+  uid: string;
+}
+
+export interface ReactionSummary {
+  emoji: string;
+  count: number;
+  mine: boolean;
+}
+
+// Collapse raw reaction rows into per-message emoji tallies, marking which the
+// current user has already added (so a tap toggles removal). Insertion order kept.
+export function aggregateReactions(rows: ReactionRow[], myUid: string): Record<string, ReactionSummary[]> {
+  const byMsg: Record<string, Map<string, ReactionSummary>> = {};
+  for (const r of rows) {
+    const m = (byMsg[r.message_id] ??= new Map());
+    const cur = m.get(r.emoji) ?? { emoji: r.emoji, count: 0, mine: false };
+    cur.count += 1;
+    if (r.uid === myUid) cur.mine = true;
+    m.set(r.emoji, cur);
+  }
+  const out: Record<string, ReactionSummary[]> = {};
+  for (const [mid, m] of Object.entries(byMsg)) out[mid] = [...m.values()];
+  return out;
+}
+
 export function formatSlowModeRemaining(ms: number): string {
   const s = Math.ceil(ms / 1000);
   return `${s}s`;

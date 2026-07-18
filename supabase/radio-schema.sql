@@ -69,6 +69,19 @@ alter table chat_messages add column if not exists reply_to_id   uuid references
 alter table chat_messages add column if not exists reply_to_name text check (reply_to_name is null or char_length(reply_to_name) <= 24);
 alter table chat_messages add column if not exists reply_to_body text check (reply_to_body is null or char_length(reply_to_body) <= 140);
 
+-- 4b. Reactions (emoji tap on a message; cascades away when the parent message is TTL-deleted)
+create table if not exists chat_reactions (
+  id uuid primary key default gen_random_uuid(),
+  message_id uuid not null references chat_messages(id) on delete cascade,
+  uid uuid not null,
+  device_id text not null,
+  emoji text not null check (char_length(emoji) between 1 and 8),
+  created_at timestamptz not null default now(),
+  unique (message_id, uid, emoji)
+);
+alter table chat_reactions enable row level security;
+create index if not exists chat_reactions_msg_idx on chat_reactions (message_id);
+
 -- 5. Admin audit (rows written only by the station trigger)
 create table if not exists admin_audit (
   id uuid primary key default gen_random_uuid(),
@@ -123,6 +136,17 @@ language sql stable security definer set search_path = public as $$
                 (select slow_mode_s from station))))
 $$;
 
+-- Reactions gate: no slow-mode, just ban + station-live (mirrors chat_allowed's non-rate parts).
+create or replace function reaction_allowed(_device_id text) returns boolean
+language sql stable security definer set search_path = public as $$
+  select
+    not exists (select 1 from bans b where b.uid = auth.uid() or b.device_id = _device_id)
+    and exists (
+      select 1 from station s
+      where s.mode <> 'off'
+        and (not s.locked or has_role(auth.uid(), 'admin')))
+$$;
+
 -- 7. RLS policies (drop-then-create: valid Postgres, idempotent)
 drop policy if exists station_read on station;
 create policy station_read on station for select using (true);
@@ -158,6 +182,15 @@ create policy chat_insert on chat_messages for insert to authenticated
 drop policy if exists chat_delete on chat_messages;
 create policy chat_delete on chat_messages for delete using (is_admin_aal2());
 
+drop policy if exists reactions_read on chat_reactions;
+create policy reactions_read on chat_reactions for select using (true);
+drop policy if exists reactions_insert on chat_reactions;
+create policy reactions_insert on chat_reactions for insert to authenticated
+  with check (uid = auth.uid() and reaction_allowed(device_id));
+drop policy if exists reactions_delete on chat_reactions;
+create policy reactions_delete on chat_reactions for delete to authenticated
+  using (uid = auth.uid() or is_admin_aal2());
+
 drop policy if exists audit_read on admin_audit;
 create policy audit_read on admin_audit for select
   using (has_role(auth.uid(), 'admin'));
@@ -171,6 +204,10 @@ do $$ begin
   if not exists (select 1 from pg_publication_tables
                  where pubname = 'supabase_realtime' and tablename = 'chat_messages') then
     alter publication supabase_realtime add table chat_messages;
+  end if;
+  if not exists (select 1 from pg_publication_tables
+                 where pubname = 'supabase_realtime' and tablename = 'chat_reactions') then
+    alter publication supabase_realtime add table chat_reactions;
   end if;
   if not exists (select 1 from pg_publication_tables
                  where pubname = 'supabase_realtime' and tablename = 'kicks') then
@@ -193,11 +230,14 @@ create policy room_presence_write on realtime.messages for insert to authenticat
 
 -- 10. Table-level grants (newer Supabase does not auto-grant on new tables)
 grant select on station, scheduled_shows, chat_messages to anon, authenticated;
+grant select on chat_reactions to anon, authenticated;
+grant insert, delete on chat_reactions to authenticated;
 grant select on bans, kicks to authenticated;
 grant select on admin_audit to authenticated;
-grant all on station, scheduled_shows, bans, kicks, chat_messages, admin_audit to service_role;
+grant all on station, scheduled_shows, bans, kicks, chat_messages, chat_reactions, admin_audit to service_role;
 grant execute on function get_server_time() to anon, authenticated;
 grant execute on function chat_allowed(text, boolean) to authenticated;
+grant execute on function reaction_allowed(text) to authenticated;
 grant execute on function is_admin_aal2() to authenticated;
 
 -- 11. TTL cleanup (pg_cron when available; admin console runs a fallback cleanup)
