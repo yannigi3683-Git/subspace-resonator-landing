@@ -1,5 +1,7 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef, useEffect } from 'react';
+import { Smile } from 'lucide-react';
 import { formatSlowModeRemaining } from '../chatRules';
+import { EMOJI } from '../emojiSet';
 
 interface ChatInputProps {
   onSend: (body: string) => Promise<void>;
@@ -9,8 +11,13 @@ interface ChatInputProps {
   disabled?: boolean;
 }
 
+const MAX_BODY = 500;
+
 export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false }: ChatInputProps) {
   const [value, setValue] = useState('');
+  const [emojiOpen, setEmojiOpen] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const emojiWrapRef = useRef<HTMLDivElement>(null);
 
   const isBlocked = slowModeRemainingMs > 0 || disabled || sending;
 
@@ -31,14 +38,82 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
     [handleSend],
   );
 
+  const insertEmoji = useCallback((emoji: string) => {
+    const el = textareaRef.current;
+    setValue((prev) => {
+      const start = el?.selectionStart ?? prev.length;
+      const end = el?.selectionEnd ?? prev.length;
+      const next = (prev.slice(0, start) + emoji + prev.slice(end)).slice(0, MAX_BODY);
+      // Restore caret after React commits the new value.
+      requestAnimationFrame(() => {
+        if (!el) return;
+        el.focus();
+        const caret = Math.min(start + emoji.length, next.length);
+        el.setSelectionRange(caret, caret);
+      });
+      return next;
+    });
+  }, []);
+
+  // Close the emoji popover on outside click or Escape.
+  useEffect(() => {
+    if (!emojiOpen) return;
+    const onDown = (e: MouseEvent) => {
+      if (emojiWrapRef.current && !emojiWrapRef.current.contains(e.target as Node)) {
+        setEmojiOpen(false);
+      }
+    };
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') setEmojiOpen(false);
+    };
+    document.addEventListener('mousedown', onDown);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDown);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [emojiOpen]);
+
   return (
     <div className="px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] border-t border-[#1a1a2e]">
-      <div className="flex gap-2">
+      <div className="flex gap-2 items-end">
+        <div ref={emojiWrapRef} className="relative">
+          <button
+            type="button"
+            disabled={disabled}
+            onClick={() => setEmojiOpen((o) => !o)}
+            aria-label="Insert emoji"
+            aria-expanded={emojiOpen}
+            className="flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg min-w-[44px] min-h-[44px] disabled:opacity-40 hover:text-white hover:border-[#7B2FBE] transition-colors"
+          >
+            <Smile size={20} />
+          </button>
+          {emojiOpen && (
+            <div
+              role="menu"
+              aria-label="Emoji picker"
+              className="absolute bottom-full left-0 mb-2 z-20 w-[280px] max-h-[220px] overflow-y-auto bg-[#12001f] border border-[#333] rounded-lg p-2 grid grid-cols-8 gap-0.5 shadow-xl"
+            >
+              {EMOJI.map((e) => (
+                <button
+                  key={e}
+                  type="button"
+                  onClick={() => insertEmoji(e)}
+                  aria-label={`Emoji ${e}`}
+                  className="text-xl leading-none w-8 h-8 flex items-center justify-center rounded hover:bg-[#7B2FBE]/40"
+                >
+                  {e}
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
         <textarea
+          ref={textareaRef}
           value={value}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={handleKeyDown}
-          maxLength={500}
+          maxLength={MAX_BODY}
           rows={1}
           disabled={disabled}
           placeholder={disabled ? 'Chat is locked' : 'Say something...'}
