@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows (2026-06-12 baseline: 18 files, 64 tests)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows (2026-07-18 baseline: 50 files, 366 tests)
 
 ---
 
@@ -227,6 +227,7 @@ Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` t
 
 ## Coding Conventions
 
+- **Keep docs in sync.** Any change to behavior, flow, config, or assets must update the relevant `.md` (CLAUDE.md, README, HOW-TO-RUN, guide docs) in the same task. A change is not done until its docs match.
 - **No comments** unless the WHY is non-obvious. Never comment WHAT the code does.
 - **No abstractions beyond task scope.** Fix the bug, don't refactor the file.
 - **Tailwind for layout/spacing/color.** Inline styles only for dynamic values (e.g., computed positions, CSS variables via `hsl(var(--primary))`).
@@ -266,11 +267,21 @@ Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (Adm
 **Now-playing:** track name folds into the stage banner (`DanceFloor.tsx` → `NowPlaying.tsx`), peeks 15s/min (`nowPlaying.ts peekVisibleAt`), and **marquees** long titles (`.radio-np-marquee` in `radio.css`, overflow-measured). PA speakers sit just under the full-width banner (`PaStack`, `top-[88px]`).
 - **Latent feature — DO NOT delete:** host cover-art extraction (`artwork.ts`, `extractArtwork`) + the now-playing display-mode selector (`npMode` in `GoLivePanel.tsx`) are kept for future re-enable; the listener just ignores the broadcast `art`/`mode` fields. Old floating `NowPlayingCard.tsx` recoverable from git (`87d8fcc~1`).
 
-**Chat:** mid-broadcast joiners load the whole broadcast's history — floored at `station.live_session.startedAt` (written server-side on Go-Live in `api/rtc-session.ts`), see `chatReloadFloor` in `chatRules.ts`. Chat body has `dir="auto"` for Hebrew RTL.
+**Chat:** mid-broadcast joiners load the whole broadcast's history — floored at `station.live_session.startedAt` (written server-side on Go-Live in `api/rtc-session.ts`), see `chatReloadFloor` in `chatRules.ts`. Chat body has `dir="auto"` for Hebrew RTL. Messages insert straight into Supabase `chat_messages` and stream back via Realtime `postgres_changes`; body renders as escaped React text (never HTML).
+
+**Chat platform features (`feat/chat-upgrades`, 2026-07-18):**
+- **Emoji picker** — desktop Smile-button popover, curated grid in `emojiSet.ts` (`EMOJI`), inserts at the textarea caret. Plain Unicode, no dependency, no schema.
+- **Reply** — tap the Reply affordance on a message; composer shows a "Replying to X" chip; the sent message renders a quoted stub. Denormalized columns `reply_to_id`/`reply_to_name`/`reply_to_body` (no join, survives the 100-msg window). Snippet built by `buildReplySnippet` in `chatRules.ts`.
+- **Reactions** — `chat_reactions` table (unique per message/uid/emoji, `on delete cascade` from `chat_messages`), gated by `reaction_allowed()` (ban + live, no slow-mode). `useReactions.ts` subscribes to its own `postgres_changes` (INSERT + DELETE); `aggregateReactions` in `chatRules.ts` tallies per message. Quick set `REACTIONS` in `emojiSet.ts`.
+- **GIFs** — Tenor via server proxy `api/tenor-search.ts` (keeps `TENOR_API_KEY` server-side, forces `contentfilter=high`, requests only `tinygif`/`nanogif`, `limit=12` — bandwidth-capped so GIF fetches never compete with the audio stream). `GifPicker.tsx` debounces search 300ms. `gif_url` column has a Tenor-host DB CHECK; client render guard `isAllowedGifUrl` (URL-parsed host allowlist) mirrors it — **both layers required, never trust one**. A GIF message stores the GIF alt text in `body`.
+- **Audio untouched:** none of the above touches the FROZEN audio path (`publisher.ts`/`subscriber.ts`/`useListenerAudio.ts`/`iceServers.ts`/jitter buffer). Chat/reactions ride Supabase; audio rides the Cloudflare SFU.
+- **Env:** `TENOR_API_KEY` must be set in Vercel (all envs, non-sensitive so it pulls non-empty). Register a key at tenor.com/gifapi.
 
 **Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
 
 **Stable tags:** `radio-stable-2026-06-25` (current prod), `guest-audio-stable-v1` / `radio-guest-stable-2026-06-23` (the audio-cut-fix reference). Roll back to a tag if prod regresses.
+
+**Host operation manual:** printable 4-page host guide (Voicemeeter wiring, Go-Live flow, preflight, Spotify routing, deep-buffer restreamer + DJ-from-any-device). Source of truth is `restreamer/guide/build_guide.py` (reportlab); `python build_guide.py` re-renders `Voicemeeter-Broadcast-Guide.pdf`. Working copy also lives on the desktop. Update the script whenever the broadcast flow changes. See `restreamer/guide/README.md`.
 
 ---
 
@@ -291,3 +302,4 @@ Key specs on record:
 - `2026-06-04-seo-optimization-design.md` — full SEO sweep spec (implemented)
 - `2026-06-04-uxaudit-fixes-design.md` — 13-finding UX audit (implemented)
 - `2026-06-13-quick-access-links-design.md` — clickable Music Archive release rows (implemented)
+- `2026-07-18-guest-chat-upgrades-design.md` — radio chat emoji picker, reply, reactions, GIFs (implemented on `feat/chat-upgrades`)
