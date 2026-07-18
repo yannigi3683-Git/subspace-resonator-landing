@@ -50,6 +50,18 @@ export function aggregateReactions(rows: ReactionRow[], myUid: string): Record<s
   return out;
 }
 
+// SECURITY: the only host whose GIFs we render as <img>. Parsed via URL so lookalike
+// hosts (media.tenor.com.evil.com, ...@evil.com) and non-https/js/data schemes are rejected.
+// Mirrors the DB CHECK on chat_messages.gif_url — defense in depth, never trust one alone.
+export function isAllowedGifUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    return u.protocol === 'https:' && /^media[0-9]*\.tenor\.com$/.test(u.hostname);
+  } catch {
+    return false;
+  }
+}
+
 export function formatSlowModeRemaining(ms: number): string {
   const s = Math.ceil(ms / 1000);
   return `${s}s`;

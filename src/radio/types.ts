@@ -26,6 +26,7 @@ export interface ChatMessage {
   reply_to_id?: string | null;
   reply_to_name?: string | null;
   reply_to_body?: string | null;
+  gif_url?: string | null;
 }
 
 export interface Reaction {

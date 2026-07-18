@@ -37,7 +37,8 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
   const nowPlaying = useNowPlaying(supabase);
 
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
-  const handleSend = (body: string) => sendMessage(body, { replyTo }).then(() => setReplyTo(null));
+  const handleSend = (body: string, opts?: { gifUrl?: string }) =>
+    sendMessage(body, { replyTo, gifUrl: opts?.gifUrl }).then(() => setReplyTo(null));
 
   const [mobileTab, setMobileTab] = useState<'stage' | 'chat'>('stage');
   const [unread, setUnread] = useState(0);

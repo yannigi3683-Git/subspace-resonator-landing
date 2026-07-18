@@ -63,6 +63,19 @@ describe('Chat', () => {
     expect(screen.getByText('3')).toBeInTheDocument();
   });
 
+  it('renders an allowlisted Tenor gif as an image', () => {
+    render(<Chat messages={[makeMsg({ gif_url: 'https://media.tenor.com/abc/cat.gif', body: 'a cat' })]} />);
+    const img = document.querySelector('img[src="https://media.tenor.com/abc/cat.gif"]');
+    expect(img).not.toBeNull();
+    expect(img?.getAttribute('alt')).toBe('a cat');
+  });
+
+  it('SECURITY: falls back to text for a non-Tenor gif_url (no image rendered)', () => {
+    render(<Chat messages={[makeMsg({ gif_url: 'https://evil.com/x.gif', body: 'sneaky' })]} />);
+    expect(document.querySelector('img[src="https://evil.com/x.gif"]')).toBeNull();
+    expect(screen.getByText('sneaky')).toBeInTheDocument();
+  });
+
   it('renders multiple messages', () => {
     render(
       <Chat

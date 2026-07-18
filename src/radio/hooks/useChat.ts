@@ -7,6 +7,7 @@ const MAX_MESSAGES = 100;
 
 export interface SendOptions {
   replyTo?: ChatMessage | null;
+  gifUrl?: string | null;
 }
 
 export interface UseChatResult {
@@ -30,7 +31,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
     const sinceIso = chatReloadFloor(startedAt, Date.now());
     supabase
       .from('chat_messages')
-      .select('id, uid, display_name, avatar_id, body, is_host, created_at, reply_to_id, reply_to_name, reply_to_body')
+      .select('id, uid, display_name, avatar_id, body, is_host, created_at, reply_to_id, reply_to_name, reply_to_body, gif_url')
       .gte('created_at', sinceIso)
       .order('created_at', { ascending: false })
       .limit(MAX_MESSAGES)
@@ -87,6 +88,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
           reply_to_id: replyTo?.id ?? null,
           reply_to_name: replyTo?.display_name ?? null,
           reply_to_body: replyTo ? buildReplySnippet(replyTo) : null,
+          gif_url: opts?.gifUrl ?? null,
         });
         if (dbError) {
           if (dbError.code === '23514') {

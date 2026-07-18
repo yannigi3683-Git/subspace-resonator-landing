@@ -69,6 +69,11 @@ alter table chat_messages add column if not exists reply_to_id   uuid references
 alter table chat_messages add column if not exists reply_to_name text check (reply_to_name is null or char_length(reply_to_name) <= 24);
 alter table chat_messages add column if not exists reply_to_body text check (reply_to_body is null or char_length(reply_to_body) <= 140);
 
+-- 4a-gif. GIF messages: only a Tenor media host may be stored (DB-level allowlist,
+-- mirrors isAllowedGifUrl in the client). body holds the GIF's alt text (accessible label).
+alter table chat_messages add column if not exists gif_url text
+  check (gif_url is null or gif_url ~ '^https://media[0-9]*\.tenor\.com/');
+
 -- 4b. Reactions (emoji tap on a message; cascades away when the parent message is TTL-deleted)
 create table if not exists chat_reactions (
   id uuid primary key default gen_random_uuid(),

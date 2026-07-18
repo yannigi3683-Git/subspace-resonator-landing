@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { Reply, SmilePlus } from 'lucide-react';
 import type { ChatMessage } from '../types';
-import type { ReactionSummary } from '../chatRules';
+import { isAllowedGifUrl, type ReactionSummary } from '../chatRules';
 import { REACTIONS } from '../emojiSet';
 import { Avatar } from './Avatar';
 
@@ -51,9 +51,20 @@ export function Chat({ messages, onReply, reactions, onToggleReaction }: ChatPro
               )}
               {/* SECURITY: msg.body is rendered as text content, never as HTML */}
               {/* dir="auto" flips Hebrew to RTL per-message; Latin stays LTR (native, no detection) */}
-              <span dir="auto" className="font-mono text-white text-[14px] break-words">
-                {msg.body}
-              </span>
+              {/* SECURITY: only a Tenor media URL is rendered as an image; anything else falls back to text */}
+              {msg.gif_url && isAllowedGifUrl(msg.gif_url) ? (
+                <img
+                  src={msg.gif_url}
+                  alt={msg.body}
+                  loading="lazy"
+                  decoding="async"
+                  className="mt-1 rounded-lg max-w-[200px] max-h-[200px] w-auto h-auto"
+                />
+              ) : (
+                <span dir="auto" className="font-mono text-white text-[14px] break-words">
+                  {msg.body}
+                </span>
+              )}
 
               {onToggleReaction && (pills.length > 0 || reactOpenFor === msg.id) && (
                 <div className="flex flex-wrap items-center gap-1 mt-1">
