@@ -434,6 +434,7 @@ Commit and push. This tells Google your sitemap was updated.
 | No audio in listener tab | Click anywhere on the page first (browser audio unlock). On mobile: tap the screen. Check if GAIN slider is at 0% |
 | No audio from Traktor | Check virtual cable routing in Traktor preferences. Check that your system input levels show signal on the virtual cable |
 | Listener count shows 0 even with listeners | Presence channel issue. Check Supabase Realtime settings |
+| Listeners rejected / "tap to connect doesn't work" once a crowd arrives | Supabase anonymous sign-in rate limit is full (default 30/hour per IP). Raise it: Supabase Dashboard -> Authentication -> Rate Limits -> "anonymous users" -> 300. Full guide: `docs/RADIO-CAPACITY.md`. Proven to hold 100+ listeners. |
 
 ---
 
