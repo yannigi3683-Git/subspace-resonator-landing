@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateMessage, formatSlowModeRemaining, chatReloadFloor, buildReplySnippet, aggregateReactions, isAllowedGifUrl } from './chatRules';
+import { validateMessage, formatSlowModeRemaining, chatReloadFloor, buildReplySnippet, aggregateReactions } from './chatRules';
 
 describe('validateMessage', () => {
   it('rejects empty string', () => {
@@ -87,26 +87,6 @@ describe('aggregateReactions', () => {
     const out = aggregateReactions(rows, 'me');
     expect(out.m1).toHaveLength(2);
     expect(out.m2).toEqual([{ emoji: '🔥', count: 1, mine: false }]);
-  });
-});
-
-describe('isAllowedGifUrl (security boundary)', () => {
-  it('accepts a Tenor media host over https', () => {
-    expect(isAllowedGifUrl('https://media.tenor.com/abc/cat.gif')).toBe(true);
-    expect(isAllowedGifUrl('https://media1.tenor.com/abc/cat.gif')).toBe(true);
-  });
-
-  it('rejects non-Tenor hosts', () => {
-    expect(isAllowedGifUrl('https://evil.com/x.gif')).toBe(false);
-    expect(isAllowedGifUrl('https://media.tenor.com.evil.com/x.gif')).toBe(false);
-    expect(isAllowedGifUrl('https://media.tenor.com@evil.com/x.gif')).toBe(false);
-  });
-
-  it('rejects non-https and dangerous schemes', () => {
-    expect(isAllowedGifUrl('http://media.tenor.com/x.gif')).toBe(false);
-    expect(isAllowedGifUrl('javascript:alert(1)')).toBe(false);
-    expect(isAllowedGifUrl('data:image/gif;base64,AAAA')).toBe(false);
-    expect(isAllowedGifUrl('not a url')).toBe(false);
   });
 });
 

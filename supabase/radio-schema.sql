@@ -69,8 +69,10 @@ alter table chat_messages add column if not exists reply_to_id   uuid references
 alter table chat_messages add column if not exists reply_to_name text check (reply_to_name is null or char_length(reply_to_name) <= 24);
 alter table chat_messages add column if not exists reply_to_body text check (reply_to_body is null or char_length(reply_to_body) <= 140);
 
--- 4a-gif. GIF messages: only a Tenor media host may be stored (DB-level allowlist,
--- mirrors isAllowedGifUrl in the client). body holds the GIF's alt text (accessible label).
+-- 4a-gif. LATENT / deferred. GIFs are not wired to any provider (Tenor API shut down
+-- 2026-06-30; Klipy pending). The column stays so the feature can be re-enabled without a
+-- migration; nothing writes it yet. When a provider is chosen, REPLACE the host regex in
+-- this CHECK with that provider's image CDN and add a matching client-side isAllowedGifUrl.
 alter table chat_messages add column if not exists gif_url text
   check (gif_url is null or gif_url ~ '^https://media[0-9]*\.tenor\.com/');
 

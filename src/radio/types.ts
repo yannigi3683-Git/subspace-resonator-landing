@@ -26,6 +26,8 @@ export interface ChatMessage {
   reply_to_id?: string | null;
   reply_to_name?: string | null;
   reply_to_body?: string | null;
+  // Latent: GIFs deferred (Tenor API shut down 2026-06-30; Klipy pending). Column exists in
+  // the DB but is not selected or rendered yet. Re-enable when a GIF provider is wired.
   gif_url?: string | null;
 }
 

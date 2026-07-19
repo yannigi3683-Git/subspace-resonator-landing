@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows (2026-07-18 baseline: 50 files, 366 tests)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-18 baseline on `feat/chat-upgrades`: 49 files, 360 tests — GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
@@ -273,9 +273,8 @@ Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (Adm
 - **Emoji picker** — desktop Smile-button popover, curated grid in `emojiSet.ts` (`EMOJI`), inserts at the textarea caret. Plain Unicode, no dependency, no schema.
 - **Reply** — tap the Reply affordance on a message; composer shows a "Replying to X" chip; the sent message renders a quoted stub. Denormalized columns `reply_to_id`/`reply_to_name`/`reply_to_body` (no join, survives the 100-msg window). Snippet built by `buildReplySnippet` in `chatRules.ts`.
 - **Reactions** — `chat_reactions` table (unique per message/uid/emoji, `on delete cascade` from `chat_messages`), gated by `reaction_allowed()` (ban + live, no slow-mode). `useReactions.ts` subscribes to its own `postgres_changes` (INSERT + DELETE); `aggregateReactions` in `chatRules.ts` tallies per message. Quick set `REACTIONS` in `emojiSet.ts`.
-- **GIFs** — Tenor via server proxy `api/tenor-search.ts` (keeps `TENOR_API_KEY` server-side, forces `contentfilter=high`, requests only `tinygif`/`nanogif`, `limit=12` — bandwidth-capped so GIF fetches never compete with the audio stream). `GifPicker.tsx` debounces search 300ms. `gif_url` column has a Tenor-host DB CHECK; client render guard `isAllowedGifUrl` (URL-parsed host allowlist) mirrors it — **both layers required, never trust one**. A GIF message stores the GIF alt text in `body`.
+- **GIFs — DEFERRED (not shipped).** Google shut down the **Tenor API on 2026-06-30** (new signups closed 2026-01-13), so the Tenor build was removed. The `gif_url` column stays in `chat_messages` as a **latent** field (see `types.ts`, still has a Tenor-host CHECK in `radio-schema.sql`) so a provider can be re-wired without a migration; nothing writes or renders it today. To re-enable, pick a provider (**Klipy** is the near-drop-in ex-Tenor replacement: `GET https://api.klipy.com/api/v1/{KEY}/gifs/search?q=&per_page=&rating=g`, key in the path, safe-content via `rating=g`; Giphy is the alt but needs production approval), then re-add a server proxy under `api/`, a `GifPicker`, a client `isAllowedGifUrl` locked to that provider's image CDN, and update the DB CHECK host to match. Keep the same bandwidth caps (tiny formats, small limit, lazy images, ~300ms debounce) so GIF fetches never compete with the audio stream.
 - **Audio untouched:** none of the above touches the FROZEN audio path (`publisher.ts`/`subscriber.ts`/`useListenerAudio.ts`/`iceServers.ts`/jitter buffer). Chat/reactions ride Supabase; audio rides the Cloudflare SFU.
-- **Env:** `TENOR_API_KEY` must be set in Vercel (all envs, non-sensitive so it pulls non-empty). Register a key at tenor.com/gifapi.
 
 **Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
 

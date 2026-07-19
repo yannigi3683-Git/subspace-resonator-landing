@@ -1,12 +1,11 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Smile, X, ImagePlay } from 'lucide-react';
+import { Smile, X } from 'lucide-react';
 import { formatSlowModeRemaining } from '../chatRules';
 import { EMOJI } from '../emojiSet';
-import { GifPicker, type GifResult } from './GifPicker';
 import type { ChatMessage } from '../types';
 
 interface ChatInputProps {
-  onSend: (body: string, opts?: { gifUrl?: string }) => Promise<void>;
+  onSend: (body: string) => Promise<void>;
   sending: boolean;
   sendError: string | null;
   slowModeRemainingMs?: number;
@@ -20,10 +19,8 @@ const MAX_BODY = 500;
 export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
-  const [gifOpen, setGifOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const emojiWrapRef = useRef<HTMLDivElement>(null);
-  const gifWrapRef = useRef<HTMLDivElement>(null);
 
   // Focus the composer when the user starts a reply.
   useEffect(() => {
@@ -49,16 +46,6 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
     [handleSend],
   );
 
-  const handlePickGif = useCallback(
-    (gif: GifResult) => {
-      setGifOpen(false);
-      if (disabled) return;
-      // alt text is the message body (accessible label + non-image fallback).
-      onSend(gif.alt.slice(0, MAX_BODY), { gifUrl: gif.url });
-    },
-    [onSend, disabled],
-  );
-
   const insertEmoji = useCallback((emoji: string) => {
     const el = textareaRef.current;
     setValue((prev) => {
@@ -76,16 +63,14 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
     });
   }, []);
 
-  // Close the emoji / GIF popovers on outside click or Escape.
+  // Close the emoji popover on outside click or Escape.
   useEffect(() => {
-    if (!emojiOpen && !gifOpen) return;
+    if (!emojiOpen) return;
     const onDown = (e: MouseEvent) => {
-      const t = e.target as Node;
-      if (emojiWrapRef.current && !emojiWrapRef.current.contains(t)) setEmojiOpen(false);
-      if (gifWrapRef.current && !gifWrapRef.current.contains(t)) setGifOpen(false);
+      if (emojiWrapRef.current && !emojiWrapRef.current.contains(e.target as Node)) setEmojiOpen(false);
     };
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') { setEmojiOpen(false); setGifOpen(false); }
+      if (e.key === 'Escape') setEmojiOpen(false);
     };
     document.addEventListener('mousedown', onDown);
     document.addEventListener('keydown', onKey);
@@ -93,7 +78,7 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
       document.removeEventListener('mousedown', onDown);
       document.removeEventListener('keydown', onKey);
     };
-  }, [emojiOpen, gifOpen]);
+  }, [emojiOpen]);
 
   return (
     <div className="px-3 pt-2 pb-[calc(0.5rem+env(safe-area-inset-bottom))] border-t border-[#1a1a2e]">
@@ -142,19 +127,6 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
               ))}
             </div>
           )}
-        </div>
-        <div ref={gifWrapRef} className="relative">
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => setGifOpen((o) => !o)}
-            aria-label="Insert GIF"
-            aria-expanded={gifOpen}
-            className="flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg min-w-[44px] min-h-[44px] disabled:opacity-40 hover:text-white hover:border-[#7B2FBE] transition-colors"
-          >
-            <ImagePlay size={20} />
-          </button>
-          {gifOpen && <GifPicker onPick={handlePickGif} />}
         </div>
         <textarea
           ref={textareaRef}
