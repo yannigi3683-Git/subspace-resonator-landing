@@ -172,14 +172,58 @@ function decodeJwtPayload(token: string): JwtPayload | null {
   }
 }
 
-async function verifyToken(token: string): Promise<{ userId: string; aal: string } | null> {
+// Distinguish "the auth service throttled us" from "the token is bad", so a rejection is
+// diagnosable in logs instead of a blanket 401. A 429 or a "rate limit" message from Supabase
+// means the free-tier auth quota is the ceiling — the exact symptom behind listeners being
+// turned away once a crowd arrives.
+export function classifyAuthError(
+  error: { status?: number; message?: string } | null,
+): 'rate_limited' | 'invalid_token' {
+  const status = error?.status;
+  const msg = (error?.message ?? '').toLowerCase();
+  if (status === 429 || msg.includes('rate limit')) return 'rate_limited';
+  return 'invalid_token';
+}
+
+interface CachedIdentity { userId: string; aal: string; expiresAt: number; }
+const TOKEN_TTL_MS = 60_000;
+// ponytail: in-memory per-token cache, 60s TTL. Each listener fires ~2 RTC phases seconds
+// apart, so a warm function instance collapses them into a single Supabase getUser — easing
+// load on the same auth endpoint that gates entry. Upgrade path: local JWKS verify (zero
+// round-trips) only if a load test shows one getUser/listener still saturates auth.
+const tokenCache = new Map<string, CachedIdentity>();
+
+export function readTokenCache(token: string, now = Date.now()): { userId: string; aal: string } | null {
+  const hit = tokenCache.get(token);
+  if (!hit) return null;
+  if (hit.expiresAt <= now) { tokenCache.delete(token); return null; }
+  return { userId: hit.userId, aal: hit.aal };
+}
+
+export function writeTokenCache(token: string, userId: string, aal: string, now = Date.now()): void {
+  if (tokenCache.size >= 1000) {
+    for (const [k, v] of tokenCache) if (v.expiresAt <= now) tokenCache.delete(k);
+  }
+  tokenCache.set(token, { userId, aal, expiresAt: now + TOKEN_TTL_MS });
+}
+
+export type VerifyResult =
+  | { ok: true; userId: string; aal: string }
+  | { ok: false; reason: 'rate_limited' | 'invalid_token' | 'auth_error' };
+
+async function verifyToken(token: string): Promise<VerifyResult> {
+  const cached = readTokenCache(token);
+  if (cached) return { ok: true, userId: cached.userId, aal: cached.aal };
   try {
     const { data, error } = await getSupabaseAdmin().auth.getUser(token);
-    if (error || !data.user) return null;
+    if (error || !data.user) return { ok: false, reason: classifyAuthError(error) };
     const payload = decodeJwtPayload(token);
-    return { userId: data.user.id, aal: payload?.aal ?? 'aal1' };
-  } catch {
-    return null;
+    const aal = payload?.aal ?? 'aal1';
+    writeTokenCache(token, data.user.id, aal);
+    return { ok: true, userId: data.user.id, aal };
+  } catch (err) {
+    console.error('[rtc-session verifyToken]', err);
+    return { ok: false, reason: 'auth_error' };
   }
 }
 
@@ -242,8 +286,16 @@ export async function POST(req: Request): Promise<Response> {
   const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : null;
   if (!token) return json({ error: 'unauthorized' }, 401);
 
-  const identity = await verifyToken(token);
-  if (!identity) return json({ error: 'unauthorized' }, 401);
+  const verified = await verifyToken(token);
+  if (!verified.ok) {
+    // Log the real reason so a future rejection is provable from server logs. rate_limited =
+    // Supabase auth quota is the ceiling (raise it in the dashboard); invalid_token = a genuine
+    // bad/expired token. Return 429 for the former so it is visibly distinct.
+    console.warn('[rtc] auth-reject reason=%s', verified.reason);
+    const status = verified.reason === 'rate_limited' ? 429 : 401;
+    return json({ error: 'unauthorized', reason: verified.reason }, status);
+  }
+  const identity = { userId: verified.userId, aal: verified.aal };
 
   let body: Record<string, unknown>;
   try {

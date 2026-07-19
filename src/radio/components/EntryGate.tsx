@@ -37,7 +37,15 @@ export function EntryGate({ supabase, onEntry }: EntryGateProps) {
           options: captchaToken ? { captchaToken } : {},
         });
         if (authError || !data.user) {
-          setError(authError?.message ?? 'Sign-in failed. Try again.');
+          // A "rate limit" here = the Supabase anonymous sign-in quota is full (raise it in the
+          // dashboard). Show a calm, actionable message instead of the raw error so a crowd
+          // arriving together isn't scared off.
+          const raw = (authError?.message ?? '').toLowerCase();
+          setError(
+            raw.includes('rate limit')
+              ? 'Room is busy right now. Wait a moment, then tap TUNE IN again.'
+              : (authError?.message ?? 'Sign-in failed. Try again.'),
+          );
           return;
         }
         userId = data.user.id;
