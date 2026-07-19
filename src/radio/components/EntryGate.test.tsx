@@ -51,7 +51,7 @@ describe('EntryGate', () => {
     });
   });
 
-  it('shows error when signInAnonymously fails', async () => {
+  it('shows a calm, actionable message when sign-in is rate limited', async () => {
     supabase.auth.signInAnonymously = vi.fn().mockResolvedValue({
       data: { user: null, session: null },
       error: { message: 'Rate limit exceeded' },
@@ -63,7 +63,24 @@ describe('EntryGate', () => {
     await waitFor(() => expect(btn).not.toBeDisabled());
     fireEvent.click(btn);
     await waitFor(() => {
-      expect(screen.getByRole('alert')).toHaveTextContent('Rate limit exceeded');
+      expect(screen.getByRole('alert')).toHaveTextContent(/Room is busy/i);
+    });
+    expect(onEntry).not.toHaveBeenCalled();
+  });
+
+  it('passes through a non-rate-limit sign-in error verbatim', async () => {
+    supabase.auth.signInAnonymously = vi.fn().mockResolvedValue({
+      data: { user: null, session: null },
+      error: { message: 'Anonymous sign-ins are disabled' },
+    });
+    render(<EntryGate supabase={supabase as never} onEntry={onEntry} />);
+    fireEvent.change(screen.getByLabelText(/your name/i), { target: { value: 'Yanni' } });
+    fireEvent.click(screen.getAllByRole('radio')[0]);
+    const btn = await screen.findByRole('button', { name: /TUNE IN/i });
+    await waitFor(() => expect(btn).not.toBeDisabled());
+    fireEvent.click(btn);
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toHaveTextContent('Anonymous sign-ins are disabled');
     });
     expect(onEntry).not.toHaveBeenCalled();
   });
