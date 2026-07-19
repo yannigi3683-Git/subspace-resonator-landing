@@ -37,6 +37,10 @@ if (!siteUrl || !supabaseUrl || !anonKey) {
 }
 
 const rtcEndpoint = siteUrl.replace(/\/+$/, '') + '/api/rtc-session';
+// POOL=<k>: sign in only k times up front, then fire `count` audio pulls reusing those tokens
+// round-robin. Use this to stress the Cloudflare pull path at high concurrency WITHOUT tripping
+// the per-IP anonymous sign-in cap (a real audience of N is N different IPs, not one).
+const pool = Number(process.env.POOL ?? 0);
 
 const tally = {
   signInOk: 0, signInRateLimited: 0, signInCaptcha: 0, signInOther: 0,
@@ -44,8 +48,7 @@ const tally = {
 };
 const samples = [];
 
-async function oneListener(i) {
-  // Fresh client per listener = fresh session, mirroring a real browser.
+async function signIn(i) {
   const supabase = createClient(supabaseUrl, anonKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -55,10 +58,13 @@ async function oneListener(i) {
     if (msg.includes('rate limit')) tally.signInRateLimited++;
     else if (msg.includes('captcha')) tally.signInCaptcha++;
     else { tally.signInOther++; if (samples.length < 5) samples.push(`signin[${i}]: ${error?.message}`); }
-    return;
+    return null;
   }
   tally.signInOk++;
-  const token = data.session.access_token;
+  return data.session.access_token;
+}
+
+async function pull(i, token) {
   try {
     const res = await fetch(rtcEndpoint, {
       method: 'POST',
@@ -77,9 +83,19 @@ async function oneListener(i) {
   }
 }
 
-console.log(`Firing ${count} simultaneous listeners at ${rtcEndpoint}\n(station must be LIVE for subscribe-pull to succeed)\n`);
 const started = Date.now();
-await Promise.allSettled(Array.from({ length: count }, (_, i) => oneListener(i)));
+if (pool > 0) {
+  console.log(`POOL mode: signing in ${pool} times, then firing ${count} concurrent audio pulls reusing those tokens.\n(bypasses the per-IP sign-in cap to stress the Cloudflare pull path)\n`);
+  const tokens = (await Promise.all(Array.from({ length: pool }, (_, i) => signIn(i)))).filter(Boolean);
+  if (tokens.length === 0) { console.error('No tokens minted; aborting.'); process.exit(1); }
+  await Promise.allSettled(Array.from({ length: count }, (_, i) => pull(i, tokens[i % tokens.length])));
+} else {
+  console.log(`Firing ${count} simultaneous listeners (sign-in + pull each) at ${rtcEndpoint}\n(station must be LIVE for subscribe-pull to succeed)\n`);
+  await Promise.allSettled(Array.from({ length: count }, async (_, i) => {
+    const token = await signIn(i);
+    if (token) await pull(i, token);
+  }));
+}
 const secs = ((Date.now() - started) / 1000).toFixed(1);
 
 console.log(`Done in ${secs}s.\n`);
@@ -96,6 +112,10 @@ console.log(`  cf-error(502) ${tally.pull502Cf}`);
 console.log(`  other         ${tally.pullOther}`);
 if (samples.length) console.log('\nsamples:\n  ' + samples.join('\n  '));
 
-const admitted = tally.signInOk;
-console.log(`\n==> ${admitted}/${count} listeners got past login. Target: all ${count}.`);
-process.exit(admitted === count ? 0 : 1);
+if (pool > 0) {
+  console.log(`\n==> ${tally.pullOk}/${count} audio pulls succeeded (${pool} pooled logins). Target: all ${count}.`);
+  process.exit(tally.pullOk === count ? 0 : 1);
+} else {
+  console.log(`\n==> ${tally.signInOk}/${count} listeners got past login. Target: all ${count}.`);
+  process.exit(tally.signInOk === count ? 0 : 1);
+}
