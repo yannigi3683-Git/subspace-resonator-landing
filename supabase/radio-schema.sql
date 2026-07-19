@@ -154,6 +154,18 @@ language sql stable security definer set search_path = public as $$
         and (not s.locked or has_role(auth.uid(), 'admin')))
 $$;
 
+-- Chat is retained after a broadcast (48h TTL below), so read access must be scoped:
+-- listeners may only ever read the CURRENT live session's messages; the admin reads all
+-- (for the host's download / moderation). Off air, non-admins see nothing.
+create or replace function chat_visible(_created_at timestamptz) returns boolean
+language sql stable security definer set search_path = public as $$
+  select has_role(auth.uid(), 'admin')
+      or exists (
+        select 1 from station s
+        where s.mode <> 'off'
+          and _created_at >= coalesce((s.live_session->>'startedAt')::timestamptz, 'epoch'))
+$$;
+
 -- 7. RLS policies (drop-then-create: valid Postgres, idempotent)
 drop policy if exists station_read on station;
 create policy station_read on station for select using (true);
@@ -182,7 +194,7 @@ create policy kicks_write on kicks for all
   using (is_admin_aal2()) with check (is_admin_aal2());
 
 drop policy if exists chat_read on chat_messages;
-create policy chat_read on chat_messages for select using (true);
+create policy chat_read on chat_messages for select using (chat_visible(created_at));
 drop policy if exists chat_insert on chat_messages;
 create policy chat_insert on chat_messages for insert to authenticated
   with check (uid = auth.uid() and chat_allowed(device_id, is_host));
@@ -245,6 +257,7 @@ grant all on station, scheduled_shows, bans, kicks, chat_messages, chat_reaction
 grant execute on function get_server_time() to anon, authenticated;
 grant execute on function chat_allowed(text, boolean) to authenticated;
 grant execute on function reaction_allowed(text) to authenticated;
+grant execute on function chat_visible(timestamptz) to anon, authenticated;
 grant execute on function is_admin_aal2() to authenticated;
 
 -- 11. TTL cleanup (pg_cron when available; admin console runs a fallback cleanup)

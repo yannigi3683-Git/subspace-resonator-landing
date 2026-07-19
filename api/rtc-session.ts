@@ -1,4 +1,5 @@
 import { createClient } from '@supabase/supabase-js';
+import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript';
 
 // ---- Cloudflare Realtime REST client (inlined to avoid ESM bundling issues) ----
 
@@ -348,9 +349,37 @@ export async function POST(req: Request): Promise<Response> {
   if (phase === 'end-broadcast') {
     const check = await checkAdminAal2(identity.userId, identity.aal);
     if (!check.ok) return json({ error: 'forbidden', reason: check.reason }, 403);
-    // Identity already verified above; use service-role client so the write succeeds
-    // even if the admin's AAL2 JWT has since downgraded to AAL1 during a long broadcast.
-    const { error: stErr } = await getSupabaseAdmin()
+    const admin = getSupabaseAdmin();
+
+    // Read the broadcast meta (start + title) BEFORE we null live_session, so we can build
+    // the host's downloadable transcript of this broadcast's chat.
+    const { data: st } = await admin
+      .from('station')
+      .select('live_session, live_title')
+      .eq('id', true)
+      .single();
+    const startedAt = (st?.live_session as { startedAt?: string } | null)?.startedAt ?? null;
+    const title = (st?.live_title as string | null) ?? 'Subspace Radio Live';
+
+    // This broadcast's messages only (created_at >= startedAt). Never selects uid/device_id.
+    let transcript = '';
+    let filename = '';
+    const { data: msgs } = await admin
+      .from('chat_messages')
+      .select('display_name, body, is_host, created_at')
+      .gte('created_at', startedAt ?? new Date(0).toISOString())
+      .order('created_at', { ascending: true });
+    if (msgs && msgs.length) {
+      transcript = buildChatTranscript(title, startedAt, msgs as TranscriptRow[]);
+      filename = transcriptFilename(startedAt);
+    }
+
+    // Take the station off the air. Service-role client so the write succeeds even if the
+    // admin's AAL2 JWT has since downgraded to AAL1 during a long broadcast.
+    // The chat is NOT wiped: it stays private (RLS: admin-only once off air) and the 48h
+    // TTL cron reclaims it. Listeners are floored to the current session so they never see
+    // a past broadcast's chat; a new go-live starts them clean.
+    const { error: stErr } = await admin
       .from('station')
       .update({ mode: 'off', live_session: null })
       .eq('id', true);
@@ -358,15 +387,7 @@ export async function POST(req: Request): Promise<Response> {
       console.error('[rtc-session end-broadcast]', stErr);
       return json({ error: 'station_update_failed', detail: stErr.message }, 500);
     }
-    // Wipe the chat so the next broadcast starts clean and the table never accumulates.
-    // Best-effort: a failed wipe must not block taking the station off air. A delete needs a
-    // filter, so floor on the epoch to match every row.
-    const { error: chatErr } = await getSupabaseAdmin()
-      .from('chat_messages')
-      .delete()
-      .gte('created_at', new Date(0).toISOString());
-    if (chatErr) console.error('[rtc-session end-broadcast chat-wipe]', chatErr);
-    return json({ ok: true });
+    return json({ ok: true, transcript, filename });
   }
 
   // ── SUBSCRIBE PULL ───────────────────────────────────────────────────────

@@ -212,6 +212,32 @@ describe('GoLivePanel', () => {
     });
   });
 
+  it('auto-downloads the chat transcript returned by end-broadcast', async () => {
+    vi.stubGlobal('fetch', vi.fn(() => Promise.resolve({
+      ok: true,
+      json: () => Promise.resolve({ transcript: 'Subspace Radio - Set\n[..] a: hi', filename: 'chat-log.txt' }),
+    })));
+    const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockReturnValue('blob:fake');
+    vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+    const clickSpy = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-dl');
+    });
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+    fireEvent.click(screen.getByTestId('end-btn'));
+
+    await waitFor(() => {
+      expect(createObjectURL).toHaveBeenCalled();
+      expect(clickSpy).toHaveBeenCalled();
+    });
+  });
+
   it('shows error and resets to GO LIVE when Publisher calls onFatal', async () => {
     render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-btn'));

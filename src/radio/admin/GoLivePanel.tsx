@@ -16,6 +16,18 @@ import { useStation } from '../hooks/useStation';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
 
+// Trigger a browser download of a text file (the broadcast's chat log) with no user prompt.
+function downloadTextFile(filename: string, text: string): void {
+  const url = URL.createObjectURL(new Blob([text], { type: 'text/plain;charset=utf-8' }));
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
 interface Props {
   supabase: SupabaseClient;
   authToken: () => Promise<string>;
@@ -428,6 +440,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         body: JSON.stringify({ phase: 'end-broadcast' }),
       });
       endOk = res.ok;
+      if (res.ok) {
+        // Server returns this broadcast's chat as text (nicknames + messages only). Auto-save
+        // it to the host's device so the owner keeps a private copy without any manual step.
+        const data = await res.json().catch(() => null);
+        if (data?.transcript) downloadTextFile(data.filename || 'subspace-radio-chat.txt', data.transcript);
+      }
     } catch {
       // Network error — fall through and tear down locally regardless.
     }
