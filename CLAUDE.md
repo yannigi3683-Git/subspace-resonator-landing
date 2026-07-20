@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-18 baseline on `feat/chat-upgrades`: 49 files, 360 tests — GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-20 baseline: 52 files, 379 tests — chat upgrades merged with radio-capacity + legal-compliance; GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
