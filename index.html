@@ -6,6 +6,20 @@
       window.dataLayer = window.dataLayer || [];
       function gtag(){dataLayer.push(arguments);}
       gtag('js', new Date());
+      // Consent Mode v2: default to denied (cookieless pings only) until the user
+      // accepts in the cookie banner. See src/lib/consent.ts and CookieConsent.tsx.
+      gtag('consent', 'default', {
+        ad_storage: 'denied',
+        ad_user_data: 'denied',
+        ad_personalization: 'denied',
+        analytics_storage: 'denied',
+        wait_for_update: 500,
+      });
+      try {
+        if (localStorage.getItem('cookie-consent-v1') === 'granted') {
+          gtag('consent', 'update', { analytics_storage: 'granted' });
+        }
+      } catch (e) {}
       gtag('config', 'G-NS6G58SSCJ');
     </script>
     <meta charset="UTF-8" />

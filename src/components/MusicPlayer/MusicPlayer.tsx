@@ -106,6 +106,22 @@ const MusicPlayer = () => {
     setProgress(pct * 100);
   };
 
+  const handleProgressKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const widget = getActiveWidget();
+    if (!widget || duration === 0) return;
+    const current = (progress / 100) * duration;
+    const step = 5000; // 5s per arrow press
+    let next: number | null = null;
+    if (e.key === "ArrowRight" || e.key === "ArrowUp") next = Math.min(duration, current + step);
+    else if (e.key === "ArrowLeft" || e.key === "ArrowDown") next = Math.max(0, current - step);
+    else if (e.key === "Home") next = 0;
+    else if (e.key === "End") next = duration;
+    if (next === null) return;
+    e.preventDefault();
+    widget.seekTo(next);
+    setProgress((next / duration) * 100);
+  };
+
   useEffect(() => {
     if (document.getElementById("sc-widget-api")) return;
     const script = document.createElement("script");
@@ -520,7 +536,9 @@ const MusicPlayer = () => {
                 <p className="text-[10px] lg:text-xs text-primary truncate font-medium tracking-wider">{current.title}</p>
                 <p className="text-[10px] text-muted-foreground tracking-[0.2em] mt-1">SUBSPACE RESONATOR</p>
                 <div className="mt-1.5">
-                  <div className="w-full h-[3px] bg-border cursor-pointer relative group" onClick={handleProgressClick}>
+                  <div className="w-full h-[3px] bg-border cursor-pointer relative group" onClick={handleProgressClick}
+                    onKeyDown={handleProgressKey} tabIndex={0} role="slider" aria-label="Seek"
+                    aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(progress)}>
                     <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
                     <div className="absolute top-1/2 -translate-y-1/2 w-2 h-2 bg-primary opacity-0 group-hover:opacity-100 transition-opacity" style={{ left: `${progress}%`, transform: "translateX(-50%) translateY(-50%)" }} />
                   </div>
@@ -571,9 +589,13 @@ const MusicPlayer = () => {
       <div className="md:hidden fixed bottom-0 left-0 right-0 z-40"
         style={{ background: "linear-gradient(180deg, hsl(0,0%,8%), hsl(0,0%,3%))", borderTop: "1px solid hsl(0,0%,18%)" }}>
         {/* Progress bar — full width, tappable to seek */}
-        <div className="w-full h-[3px] bg-border cursor-pointer relative" onClick={handleProgressClick}
-          role="progressbar" aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
-          <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
+        {/* py + -my keeps the 3px visual line but gives a >=24px touch target */}
+        <div className="w-full py-[11px] -my-[11px] cursor-pointer relative" onClick={handleProgressClick}
+          onKeyDown={handleProgressKey} tabIndex={0} role="slider" aria-label="Seek"
+          aria-valuenow={Math.round(progress)} aria-valuemin={0} aria-valuemax={100}>
+          <div className="w-full h-[3px] bg-border relative">
+            <div className="absolute left-0 top-0 h-full bg-primary transition-[width] duration-300" style={{ width: `${progress}%` }} />
+          </div>
         </div>
         {/* Controls */}
         <div className="flex items-center gap-0.5 px-3"

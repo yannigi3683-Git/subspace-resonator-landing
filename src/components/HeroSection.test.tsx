@@ -15,7 +15,7 @@ describe('HeroSection', () => {
 
   it('has LISTEN CTA linking to #music', () => {
     render(<HeroSection />);
-    const link = screen.getByRole('link', { name: /scroll to music/i });
+    const link = screen.getByRole('link', { name: /listen/i });
     expect(link).toHaveAttribute('href', '#music');
   });
 });

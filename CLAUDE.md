@@ -253,6 +253,20 @@ Conversion events tracked:
 
 To verify events live: GA4 → Realtime → DebugView, then interact on the site. Aggregated data lands in 24-48h.
 
+**Cookie consent (Google Consent Mode v2):** GA loads on every page but starts `denied` (cookieless) — `index.html` calls `gtag('consent','default',{... analytics_storage:'denied', wait_for_update:500})` before `config`, and upgrades to `granted` on load if `localStorage['cookie-consent-v1'] === 'granted'`. The non-blocking `CookieConsent.tsx` banner (rendered in `App.tsx`) writes that key via `src/lib/consent.ts` and calls `gtag('consent','update',{analytics_storage:'granted'})` on Accept. Decline stays cookieless. No `_ga*` cookie is set until Accept. `radio.html` still loads GA unconditionally (out of the landing-only compliance scope).
+
+---
+
+## Legal / Compliance (Israeli law — landing page)
+
+Landing page audited against IS 5568 AA (accessibility), spam law (amendment 40), and privacy law (amendment 13). Scope was **landing page only, English only**; `/radio` is deliberately out of scope (invite-only during a live broadcast).
+
+- **Two legal pages**, rendered from the main `index.html` entry via a pathname branch in `src/main.tsx` (no router lib): `/accessibility` → `src/pages/AccessibilityStatement.tsx`, `/privacy` → `src/pages/PrivacyPolicy.tsx`. Routing: `radioRewrite` plugin in `vite.config.ts` (dev/preview) + `vercel.json` rewrites (prod) send both paths to `/index.html`. Linked from the footer (`App.tsx`) and, for the statement, from the accessibility widget (`AccessibilityMenu.tsx`).
+- **Accessibility statement** names a coordinator (Yanni + `subspaceresonator@gmail.com` + phone), declares WCAG 2.1 AA / IS 5568, and describes the on-site widget. Update its `LAST_REVIEWED` date when the site's accessibility materially changes.
+- **Privacy policy** discloses GA4 + Consent Mode; states the landing page collects no data via forms (booking is outbound `mailto:`/`tel:`/WhatsApp links only). Update `LAST_UPDATED` if data collection ever changes.
+- **Spam law = N/A** — the site sends no marketing email/SMS and has no newsletter/signup. If a mailing list or contact form is ever added, revisit: separate unticked marketing-consent checkbox, consent logging, unsubscribe, sender ID, "advertisement" marking, and a privacy-consent checkbox before submit.
+- The two MusicPlayer seek bars are `role="slider"` + `tabIndex=0` + arrow/Home/End keys (`handleProgressKey`), not click-only.
+
 ---
 
 ## Subspace Radio (`/radio`, `radio.html`)
@@ -277,6 +291,8 @@ Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (Adm
 - **Audio untouched:** none of the above touches the FROZEN audio path (`publisher.ts`/`subscriber.ts`/`useListenerAudio.ts`/`iceServers.ts`/jitter buffer). Chat/reactions ride Supabase; audio rides the Cloudflare SFU.
 
 **Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
+
+**Listener capacity (the real ceiling):** NOT Cloudflare (bandwidth-only free tier, fine for hundreds) and NOT any code cap (none exists). The wall is **Supabase free-tier auth**: each listener does an anonymous sign-in, capped at **30/hour by default** — raise it in Supabase Dashboard → Authentication → Rate Limits (guest sign-ins → ~300/hr). This was the "test user vs real user" capacity question. `api/rtc-session.ts` caches token verification 60s (fewer getUser calls) and returns a `reason` (`rate_limited` vs `invalid_token`) so a rejection is provable in logs; EntryGate shows a calm "Room is busy" message on a rate-limit. Load-test with `scripts/radio-loadtest.mjs <url> <count>`. Full owner guide: `docs/RADIO-CAPACITY.md`. Beyond ~150, use the HLS restream. (Vercel keeps runtime logs only briefly — instrument before the broadcast, not after.)
 
 **Stable tags:** `radio-stable-2026-06-25` (current prod), `guest-audio-stable-v1` / `radio-guest-stable-2026-06-23` (the audio-cut-fix reference). Roll back to a tag if prod regresses.
 

@@ -59,7 +59,7 @@ const BookingSection = () => {
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => trackEvent("booking_click", { method: "whatsapp" })}
-                aria-label="Contact via WhatsApp (opens in new tab)"
+                aria-label="WHATSAPP · CHAT (opens in new tab)"
                 className="inline-flex items-center justify-center border border-border text-foreground text-xs sm:text-sm tracking-[0.2em] uppercase px-8 min-h-[44px] hover:border-primary hover:text-primary transition-colors w-full sm:w-fit"
                 whileHover={{ filter: "drop-shadow(0 0 12px hsl(210 100% 50% / 0.3))", transition: { duration: 0.2 } }}
               >
