@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVertical, Repeat, Shuffle, ChevronDown, ChevronUp } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVertical, Repeat, Shuffle, Trash2, ChevronDown, ChevronUp } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
@@ -565,6 +565,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     setQueue([...deckRef.current.state.queue]);
   }
 
+  function handleClearAll() {
+    if (deckRef.current.isEmpty) return;
+    if (!window.confirm('Remove all tracks from the file deck?')) return;
+    audioElRef.current?.pause();
+    deckRef.current.clear();
+    setQueue([]);
+    setFilePlaying(false);
+    setCurrentTrackId('');
+    setCurrentTrackName('');
+    currentIdRef.current = '';
+    currentNameRef.current = '';
+  }
+
   // ── Auto-mix crossfade ────────────────────────────────────────────────
   // Driven by the active element's timeupdate. When the track nears its end, fade into
   // the next one on a second deck, then swap which deck is active.
@@ -825,6 +838,15 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             >
               <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />
               SHUFFLE
+            </button>
+            <button
+              type="button"
+              onClick={handleClearAll}
+              disabled={queue.length === 0}
+              className="flex items-center gap-1 font-mono text-[11px] border border-border px-3 py-2 text-muted-foreground hover:text-destructive hover:border-destructive transition-colors min-h-[44px] disabled:opacity-40 disabled:hover:text-muted-foreground disabled:hover:border-border disabled:cursor-not-allowed"
+            >
+              <Trash2 className="w-3.5 h-3.5" aria-hidden="true" />
+              REMOVE ALL
             </button>
             <label className="flex items-center cursor-pointer">
               <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
