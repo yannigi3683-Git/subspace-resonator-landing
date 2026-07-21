@@ -20,6 +20,7 @@ export class LocalDeck {
   private queue: DeckTrack[] = [];
   private currentIndex = 0;
   private idCounter = 0;
+  private repeat = false;
 
   constructor(
     private readonly createUrl: (file: File) => string = (f) => URL.createObjectURL(f),
@@ -59,8 +60,29 @@ export class LocalDeck {
     }
   }
 
+  setRepeat(v: boolean): void {
+    this.repeat = v;
+  }
+
+  shuffle(): void {
+    if (this.queue.length < 2) return;
+    const currentId = this.queue[this.currentIndex]?.id;
+    for (let i = this.queue.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [this.queue[i], this.queue[j]] = [this.queue[j], this.queue[i]];
+    }
+    const idx = this.queue.findIndex((t) => t.id === currentId);
+    this.currentIndex = idx === -1 ? 0 : idx;
+  }
+
   advance(): boolean {
-    if (this.currentIndex >= this.queue.length - 1) return false;
+    if (this.currentIndex >= this.queue.length - 1) {
+      if (this.repeat && this.queue.length > 0) {
+        this.currentIndex = 0;
+        return true;
+      }
+      return false;
+    }
     this.currentIndex++;
     return true;
   }
@@ -89,7 +111,11 @@ export class LocalDeck {
   }
 
   get next(): DeckTrack | null {
-    return this.queue[this.currentIndex + 1] ?? null;
+    const nextTrack = this.queue[this.currentIndex + 1];
+    if (nextTrack) return nextTrack;
+    // At the last track: repeat wraps to the first, but never crossfade a lone track into itself.
+    if (this.repeat && this.queue.length > 1) return this.queue[0];
+    return null;
   }
 
   get state(): DeckState {

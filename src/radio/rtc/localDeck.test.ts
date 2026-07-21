@@ -134,6 +134,54 @@ describe('LocalDeck', () => {
     expect(deck.current).toBeNull();
   });
 
+  it('advance() wraps to the first track when repeat is on', () => {
+    const deck = new LocalDeck(() => 'blob:x');
+    deck.add(makeFiles('a.mp3', 'b.mp3'));
+    deck.setRepeat(true);
+    deck.advance();
+    expect(deck.current?.name).toBe('b');
+    expect(deck.advance()).toBe(true);
+    expect(deck.current?.name).toBe('a');
+  });
+
+  it('next getter wraps to the first track when repeat is on', () => {
+    const deck = new LocalDeck(() => 'blob:x');
+    deck.add(makeFiles('a.mp3', 'b.mp3'));
+    deck.setRepeat(true);
+    deck.advance();
+    expect(deck.current?.name).toBe('b');
+    expect(deck.next?.name).toBe('a');
+  });
+
+  it('next getter stays null for a single track even with repeat on (no self-crossfade)', () => {
+    const deck = new LocalDeck(() => 'blob:x');
+    deck.add(makeFiles('a.mp3'));
+    deck.setRepeat(true);
+    expect(deck.next).toBeNull();
+    expect(deck.advance()).toBe(true);
+    expect(deck.current?.name).toBe('a');
+  });
+
+  it('shuffle() preserves every track id and keeps the current track current', () => {
+    vi.spyOn(Math, 'random').mockReturnValue(0.99);
+    const deck = new LocalDeck(() => 'blob:x');
+    deck.add(makeFiles('a.mp3', 'b.mp3', 'c.mp3', 'd.mp3'));
+    deck.advance();
+    const currentId = deck.current!.id;
+    const idsBefore = deck.state.queue.map((t) => t.id).sort();
+    deck.shuffle();
+    const idsAfter = deck.state.queue.map((t) => t.id).sort();
+    expect(idsAfter).toEqual(idsBefore);
+    expect(deck.current?.id).toBe(currentId);
+  });
+
+  it('shuffle() is a no-op below two tracks', () => {
+    const deck = new LocalDeck(() => 'blob:x');
+    deck.add(makeFiles('a.mp3'));
+    expect(() => deck.shuffle()).not.toThrow();
+    expect(deck.length).toBe(1);
+  });
+
   it('state snapshot is immutable (modifying it does not change the deck)', () => {
     const deck = new LocalDeck(() => 'blob:x');
     deck.add(makeFiles('a.mp3'));
