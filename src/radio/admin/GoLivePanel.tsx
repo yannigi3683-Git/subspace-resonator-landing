@@ -1,6 +1,6 @@
 import { useState, useRef, useEffect, useCallback, type ReactNode } from 'react';
 import { motion } from 'framer-motion';
-import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVertical } from 'lucide-react';
+import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVertical, Repeat, Shuffle, ChevronDown, ChevronUp } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
@@ -45,6 +45,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [currentArtUrl, setCurrentArtUrl] = useState<string | null>(null);
   const [npMode, setNpMode] = useState<NowPlayingMode>('peek');
   const [filePlaying, setFilePlaying] = useState(false);
+  const [repeatAll, setRepeatAll] = useState(false);
+  const [playlistExpanded, setPlaylistExpanded] = useState(false);
   // Host-saved defaults (crossfade / jitter buffer), falling back to the built-ins.
   const [savedPrefs, setSavedPrefs] = useState(loadHostPrefs);
   const [autoMix, setAutoMix] = useState(true);
@@ -552,6 +554,17 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     }
   }
 
+  function handleToggleRepeat() {
+    const next = !repeatAll;
+    deckRef.current.setRepeat(next);
+    setRepeatAll(next);
+  }
+
+  function handleShuffle() {
+    deckRef.current.shuffle();
+    setQueue([...deckRef.current.state.queue]);
+  }
+
   // ── Auto-mix crossfade ────────────────────────────────────────────────
   // Driven by the active element's timeupdate. When the track nears its end, fade into
   // the next one on a second deck, then swap which deck is active.
@@ -784,10 +797,35 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       {/* File deck — at the top so the host can load tracks before going live */}
       <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
         <div className="flex items-center justify-between">
-          <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
-            FILE DECK {queue.length > 0 && `(${queue.length})`}
-          </span>
+          <div className="flex items-center gap-3">
+            <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
+              FILE DECK {queue.length > 0 && `(${queue.length})`}
+            </span>
+            {queue.length > 6 && (
+              <button
+                type="button"
+                onClick={() => setPlaylistExpanded((v) => !v)}
+                aria-expanded={playlistExpanded}
+                className="flex items-center gap-1 font-mono text-[10px] tracking-widest text-muted-foreground hover:text-primary transition-colors min-h-[44px]"
+              >
+                {playlistExpanded ? (
+                  <><ChevronUp className="w-3 h-3" aria-hidden="true" /> COLLAPSE</>
+                ) : (
+                  <><ChevronDown className="w-3 h-3" aria-hidden="true" /> EXPAND</>
+                )}
+              </button>
+            )}
+          </div>
           <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={handleShuffle}
+              disabled={queue.length < 2}
+              className="flex items-center gap-1 font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] disabled:opacity-40 disabled:hover:bg-transparent disabled:cursor-not-allowed"
+            >
+              <Shuffle className="w-3.5 h-3.5" aria-hidden="true" />
+              SHUFFLE
+            </button>
             <label className="flex items-center cursor-pointer">
               <span className="font-mono text-[11px] border border-border px-3 py-2 hover:bg-primary/10 transition-colors min-h-[44px] flex items-center">
                 ADD FILES
@@ -815,7 +853,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         </div>
 
         {queue.length > 0 ? (
-          <ul className="flex flex-col gap-1 max-h-44 overflow-y-auto" aria-label="Playlist">
+          <ul className={`flex flex-col gap-1 overflow-y-auto ${playlistExpanded ? 'max-h-[70vh]' : 'max-h-44'}`} aria-label="Playlist">
             {queue.map((t, i) => {
               const isCurrent = t.id === currentTrackId;
               return (
@@ -903,6 +941,13 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
               <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="text-[10px] ml-0.5">10</span>
+            </TransportBtn>
+            <TransportBtn
+              onClick={handleToggleRepeat}
+              label={repeatAll ? 'Repeat all: on' : 'Repeat all: off'}
+              active={repeatAll}
+            >
+              <Repeat className="w-4 h-4" aria-hidden="true" />
             </TransportBtn>
           </div>
         )}
@@ -1444,10 +1489,12 @@ function LevelMeter({ getAnalysis }: { getAnalysis: () => MixerAnalysis | null }
 function TransportBtn({
   onClick,
   label,
+  active = false,
   children,
 }: {
   onClick: () => void;
   label: string;
+  active?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -1455,7 +1502,13 @@ function TransportBtn({
       type="button"
       onClick={onClick}
       aria-label={label}
-      className="inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-2 border border-border rounded text-foreground hover:bg-primary/10 active:scale-95 transition-all"
+      aria-pressed={active}
+      className={[
+        'inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-2 border rounded active:scale-95 transition-all',
+        active
+          ? 'border-primary bg-primary/20 text-primary'
+          : 'border-border text-foreground hover:bg-primary/10',
+      ].join(' ')}
     >
       {children}
     </button>
