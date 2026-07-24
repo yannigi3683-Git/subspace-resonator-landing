@@ -1,6 +1,8 @@
 import { useState, useEffect } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
+import { dedupeByDevice } from '../hooks/usePresence';
+import type { PresenceEntry } from '../types';
 
 interface Props {
   supabase: SupabaseClient;
@@ -19,8 +21,18 @@ export default function AdminConsole({ supabase, authToken }: Props) {
     // The host only observes here (never track()s), so it isn't counted as a listener.
     const channel = supabase.channel('room:main', { config: { private: true } });
     const sync = () => {
-      const count = Object.values(channel.presenceState()).flat().length;
-      setListenerCount(count);
+      // Dedupe by deviceId the same way listeners do (usePresence -> dedupeByDevice), so the
+      // host count matches the room. Without this, same-device ghosts (anon re-auth mints a new
+      // uid, rename re-subscribe, extra tabs) inflate the host number over long broadcasts.
+      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
+      const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
+        uid: p.uid,
+        name: p.name,
+        avatarId: p.avatarId,
+        deviceId: p.deviceId,
+        position: p.position,
+      }));
+      setListenerCount(dedupeByDevice(list).length);
     };
     channel
       .on('presence', { event: 'sync' }, sync)
