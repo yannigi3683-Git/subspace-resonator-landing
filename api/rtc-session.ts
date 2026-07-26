@@ -1,5 +1,8 @@
 import { createClient } from '@supabase/supabase-js';
-import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript';
+// The .js extension is required, not optional: package.json is "type": "module" and Vercel's
+// Node runtime does not bundle sibling files, so an extensionless specifier makes every request
+// crash with ERR_MODULE_NOT_FOUND. Keep it on every relative import inside api/.
+import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript.js';
 
 // ---- Cloudflare Realtime REST client (inlined to avoid ESM bundling issues) ----
 

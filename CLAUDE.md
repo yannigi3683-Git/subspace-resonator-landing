@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-20 baseline: 52 files, 379 tests — chat upgrades merged with radio-capacity + legal-compliance; GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-26 baseline: 53 files, 389 tests — chat upgrades merged with radio-capacity + legal-compliance; GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
@@ -54,6 +54,8 @@ Hosted on **Vercel**. Production URL: https://subspaceresonator.com/
 - **Auto-deploy is connected** (as of 2026-06-12): GitHub repo `yannigi3683-Git/subspace-resonator-landing` is linked in Vercel. Pushing to **`master`** auto-builds and deploys to production. Production branch is `master` (Vercel Settings -> Environments -> Production -> Branch Tracking).
 - **Manual deploy** (if ever needed): `npx vercel --prod` from the project root (CLI is linked via `.vercel/project.json`, authed as `yannigi3683-git`). Do not use `--prebuilt` (ships stale local `.vercel/output`).
 - **Verify a deploy shipped:** `curl -s "https://subspaceresonator.com/?cb=$(date +%s)" | grep -c "og:"` — a healthy production HTML has ~12 `og:` tags. Zero means a stale/old build is being served.
+- **Verify the API shipped too** (the HTML check above passes while the radio is stone dead): `curl -s -o /dev/null -w "%{http_code}" -X POST https://subspaceresonator.com/api/rtc-session -H "content-type: application/json" -d '{"phase":"subscribe-pull"}'` — **401** means the function boots; **500** means it crashes on every request (host and listeners both down). Read the reason with `npx vercel logs <deployment-url>` while re-firing the curl; the log only tails live traffic.
+- **Roll back a broken production deploy:** `npx vercel rollback <last-good-deployment-url> --yes` (find it with `npx vercel ls`). Takes ~30s and beats debugging a live outage. Used 2026-07-26 when `08f36fe` shipped an API that 500ed on every request.
 - **History / caution:** before 2026-06-12, this project was deployed only via the Vercel CLI and pushes did NOT deploy. Production silently served a stale build for ~5 commits (OG tags, GA4, WebP all appeared "broken" but were simply never shipped). If a change is not showing live, suspect the deploy before re-editing code. See the `debugging-stale-deployments` skill.
 - The Vercel MCP/automation is signed into a different Vercel account (returns 404/403 for this project); use the CLI as the owner, not the MCP, to deploy.
 
@@ -272,6 +274,8 @@ Landing page audited against IS 5568 AA (accessibility), spam law (amendment 40)
 ## Subspace Radio (`/radio`, `radio.html`)
 
 Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (AdminConsole/GoLivePanel); listeners open `/radio` (LiveRoom). Transport = **Cloudflare Realtime SFU** (publisher → SFU → subscribers), signaling via `api/rtc-session.ts`; presence/chat/control via **Supabase** Realtime + RLS (project `lgcmbmlapksmdbkhkyyv`).
+
+**`api/` import rule (an outage came from breaking it):** every relative import inside `api/` must carry the `.js` extension (`from './chatTranscript.js'`), even though the source is TypeScript. `package.json` is `"type": "module"` and Vercel's Node runtime does not bundle sibling files, so an extensionless specifier passes `tsc` and Vitest but makes the deployed function die on boot with `ERR_MODULE_NOT_FOUND` — every phase 500s, host and listeners alike. `api/*.test.ts` is in `.vercelignore` so tests are never deployed as public functions.
 
 **Audio transport (FROZEN — do not change without a real device test):**
 - Both `publisher.ts` and `subscriber.ts` use `new RTCPeerConnection({ iceTransportPolicy: 'all' })` with **no app STUN/TURN** (`loadIceServers` is NOT called). Cloudflare is ICE-lite and carries candidates in the SDP; adding app ICE servers caused 1-5s renomination cuts. `iceServers.ts` stays as a documented future opt-in relay path — unused, don't delete.
