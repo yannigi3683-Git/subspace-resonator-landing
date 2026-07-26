@@ -129,6 +129,52 @@ describe('Publisher connection state transitions', () => {
   });
 });
 
+// Regression guard for the 2026-07-26 incident: the reconnect FSM calls connect() again on a
+// dropped broadcast. The old PC used to stay open with its handler attached, and every reconnect
+// leaked another 3s stats interval; the leaked loops then split the bytesSent/time counters and
+// pushed the `bps < 20_000` check into a false "degraded".
+describe('Publisher reconnect does not leak the previous connection', () => {
+  const makePc = () => ({
+    addTrack: vi.fn(),
+    createOffer: vi.fn().mockResolvedValue({ type: 'offer', sdp: 'v=0\r\n' }),
+    setLocalDescription: vi.fn().mockResolvedValue(undefined),
+    setRemoteDescription: vi.fn().mockResolvedValue(undefined),
+    getSenders: vi.fn().mockReturnValue([]),
+    getStats: vi.fn().mockResolvedValue({ forEach: () => {} }),
+    close: vi.fn(),
+    connectionState: 'new',
+    onconnectionstatechange: null as (() => void) | null,
+  });
+
+  it('closes the previous PC and stops its stats loop when connect() runs again', async () => {
+    const pcs = [makePc(), makePc()];
+    let n = 0;
+    vi.stubGlobal('RTCPeerConnection', vi.fn().mockImplementation(function () { return pcs[n++]; }));
+    vi.stubGlobal(
+      'fetch',
+      vi.fn().mockResolvedValue({ ok: true, json: async () => ({ cfSessionId: 'cf', sdpAnswer: 'v=0\r\n' }) }),
+    );
+    vi.useFakeTimers();
+    try {
+      const pub = new Publisher(makeCallbacks(), '/api/rtc-session', async () => 'tok');
+      await pub.connect(makeStream());
+      await pub.connect(makeStream());
+
+      expect(pcs[0].close).toHaveBeenCalled();
+      expect(n).toBe(2);
+
+      pcs[0].getStats.mockClear();
+      pcs[1].getStats.mockClear();
+      await vi.advanceTimersByTimeAsync(3_000);
+
+      expect(pcs[0].getStats).not.toHaveBeenCalled();
+      expect(pcs[1].getStats).toHaveBeenCalledTimes(1);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
 describe('Publisher audio bitrate (FR-4)', () => {
   it('caps the audio sender bitrate at 128 kbps for upload stability', async () => {
     const setParameters = vi.fn().mockResolvedValue(undefined);

@@ -22,8 +22,8 @@ interface LiveRoomProps {
 }
 
 export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }: LiveRoomProps) {
-  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
-  const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
+  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.startedAt);
+  const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.startedAt);
   const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
 
   // A pencil avatar/name edit must reach chat too: rename updates presence + localStorage, but the

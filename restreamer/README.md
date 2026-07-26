@@ -31,7 +31,8 @@ npm start                   # watch the station; restream while it's live
 | File | Role |
 |------|------|
 | `src/index.mjs` | Orchestrator: watch station → pull + transcode + publish → set/clear `streamUrl` |
-| `src/station.mjs` | Station poll + `decideAction` state machine (unit-tested) + `streamUrl` writeback |
+| `src/station.mjs` | Station poll + `decideAction` state machine (unit-tested) + `streamUrl` writeback. `setStreamUrl` takes the cfSessionId it is writing for and bails if the host has since re-published: it rewrites the whole `live_session` jsonb with the service-role key, so an unguarded write would revert the row to a dead session |
+| `src/cleanup.mjs` | Per-attempt teardown (kill ffmpeg, close pull, stop sink, remove temp dir). The temp-dir removal is best-effort: ffmpeg runs with `cwd=outDir` and Windows will not delete a live process's cwd, so an EPERM there is logged, never thrown. Letting it throw once masked the real startup error (2026-07-26) |
 | `src/cfPull.mjs` | werift SFU pull (two-phase negotiate/commit). The proven spike, hardened |
 | `src/hls.mjs` | ffmpeg → rolling fMP4/CMAF audio-only HLS |
 | `src/sink/local.mjs` | Dev sink: serve HLS over HTTP with prod cache/CORS headers |

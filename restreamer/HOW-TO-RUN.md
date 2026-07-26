@@ -26,6 +26,13 @@ as before (plain WebRTC) — the site is unchanged until this is running.
   audio, just without the deep buffer) — they are never left in silence.
 - **Instant off switch:** closing the window clears the stream; everyone is back on plain WebRTC with
   no site change.
+- **If your internet drops mid-show**, the window logs `ffmpeg exited 0 - will restart on next poll`
+  and then goes quiet for up to a minute. That is normal. Your browser needs about 25 seconds to
+  notice the drop and reconnect, and the restreamer picks the show back up on its own once it does.
+  Since 2026-07-26 that reconnect no longer restarts the broadcast, so listeners keep their name and
+  their chat. Nothing to do but wait.
+- **`temp dir left behind (harmless)`** in the log is exactly what it says. Windows would not let the
+  restreamer delete its scratch folder yet. The next start cleans it up. Ignore it.
 
 ## What's in `.env` (already set, never share it)
 

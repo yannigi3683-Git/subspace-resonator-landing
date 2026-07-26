@@ -250,17 +250,36 @@ export async function checkAdminAal2(
   }
 }
 
-async function readHostCfSessionId(): Promise<string | null> {
+interface LiveSessionRow {
+  mode?: string;
+  live_session: { cfSessionId?: string; startedAt?: string } | null;
+}
+
+// startedAt is the BROADCAST's identity, not the connection's: chat visibility (RLS
+// chat_visible) and listener re-entry are both floored on it. A host whose network drops
+// re-publishes through the reconnect FSM, which mints a new cfSessionId — but that is the same
+// show, so carry startedAt forward. Stamping a fresh one on every publish-offer hid the whole
+// broadcast's chat and kicked every listener back to the entry gate (2026-07-26 incident).
+// Only a go-live from off-air starts a genuinely new broadcast.
+export function broadcastStartedAt(prev: LiveSessionRow | null, nowIso: string): string {
+  if (prev?.mode === 'live' && prev.live_session?.startedAt) return prev.live_session.startedAt;
+  return nowIso;
+}
+
+async function readLiveSession(): Promise<LiveSessionRow | null> {
   try {
     const { data } = await getSupabaseAdmin()
       .from('station')
-      .select('live_session')
+      .select('mode, live_session')
       .single();
-    const session = data?.live_session as { cfSessionId?: string } | null;
-    return session?.cfSessionId ?? null;
+    return (data as LiveSessionRow | null) ?? null;
   } catch {
     return null;
   }
+}
+
+async function readHostCfSessionId(): Promise<string | null> {
+  return (await readLiveSession())?.live_session?.cfSessionId ?? null;
 }
 
 // ---- Response helpers ----
@@ -332,12 +351,14 @@ export async function POST(req: Request): Promise<Response> {
       return json({ error: 'cf_error' }, 502);
     }
 
+    const startedAt = broadcastStartedAt(await readLiveSession(), new Date().toISOString());
+
     // Flip the station live server-side using the admin's own token, so the station
     // RLS write policy (has_role on auth.uid()) is satisfied deterministically.
     const title = ((body.title as string | undefined) ?? '').slice(0, 80) || 'Subspace Radio Live';
     const { error: stErr } = await getUserClient(token)
       .from('station')
-      .update({ mode: 'live', live_title: title, live_session: { cfSessionId, startedAt: new Date().toISOString() } })
+      .update({ mode: 'live', live_title: title, live_session: { cfSessionId, startedAt } })
       .eq('id', true);
     if (stErr) {
       console.error('[rtc-session publish-offer station]', stErr);

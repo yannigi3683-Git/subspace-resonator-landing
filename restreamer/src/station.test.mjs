@@ -1,6 +1,18 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { decideAction, hasStaleStreamUrl } from './station.mjs';
+import { decideAction, hasStaleStreamUrl, setStreamUrl } from './station.mjs';
+
+// Minimal PostgREST shape: .from().select().eq().single() to read, .from().update().eq() to write.
+function fakeSupabase(station) {
+  const writes = [];
+  return {
+    writes,
+    from: () => ({
+      select: () => ({ eq: () => ({ single: async () => ({ data: station, error: null }) }) }),
+      update: (patch) => ({ eq: async () => { writes.push(patch); return { error: null }; } }),
+    }),
+  };
+}
 
 const live = (id) => ({ mode: 'live', live_session: { cfSessionId: id } });
 const off = { mode: 'off', live_session: null };
@@ -47,4 +59,39 @@ test('hasStaleStreamUrl: no streamUrl / garbage is never stale', () => {
   assert.equal(hasStaleStreamUrl({ mode: 'off', live_session: null }), false);
   assert.equal(hasStaleStreamUrl(null), false);
   assert.equal(hasStaleStreamUrl(undefined), false);
+});
+
+// setStreamUrl is a read-modify-write of the whole live_session jsonb with the service-role key.
+// If the host re-published between the read and the write it would revert live_session to a dead
+// cfSessionId, flapping every listener a second time.
+test('setStreamUrl writes when the session still matches', async () => {
+  const s = fakeSupabase({ mode: 'live', live_session: { cfSessionId: 'A', startedAt: 'T0' } });
+  await setStreamUrl(s, 'http://x/s.m3u8', 'A');
+  assert.equal(s.writes.length, 1);
+  assert.deepEqual(s.writes[0].live_session, { cfSessionId: 'A', startedAt: 'T0', streamUrl: 'http://x/s.m3u8' });
+});
+
+test('setStreamUrl does NOT clobber live_session when the host has re-published', async () => {
+  const s = fakeSupabase({ mode: 'live', live_session: { cfSessionId: 'B', startedAt: 'T0' } });
+  await setStreamUrl(s, 'http://x/s.m3u8', 'A');
+  assert.equal(s.writes.length, 0, 'must not write a streamUrl for a session that is gone');
+});
+
+test('setStreamUrl clearing is also session-guarded', async () => {
+  const s = fakeSupabase({ mode: 'live', live_session: { cfSessionId: 'B', streamUrl: 'http://x/s.m3u8' } });
+  await setStreamUrl(s, null, 'A');
+  assert.equal(s.writes.length, 0);
+});
+
+test('setStreamUrl without a session id stays unconditional (boot clear)', async () => {
+  const s = fakeSupabase({ mode: 'live', live_session: { cfSessionId: 'B', streamUrl: 'http://x/s.m3u8' } });
+  await setStreamUrl(s, null);
+  assert.equal(s.writes.length, 1);
+  assert.deepEqual(s.writes[0].live_session, { cfSessionId: 'B' });
+});
+
+test('setStreamUrl is a no-op when the station has no live_session', async () => {
+  const s = fakeSupabase({ mode: 'off', live_session: null });
+  await setStreamUrl(s, 'http://x/s.m3u8', 'A');
+  assert.equal(s.writes.length, 0);
 });

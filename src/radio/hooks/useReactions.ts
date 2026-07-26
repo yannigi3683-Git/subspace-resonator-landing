@@ -11,11 +11,11 @@ export interface UseReactionsResult {
 // Reactions ride their own postgres_changes channel (INSERT + DELETE). State is the raw
 // row set; per-message tallies are derived (aggregateReactions). No optimistic update —
 // we rely on the realtime echo, same as useChat. ponytail: add optimism only if it lags.
+// Keyed on startedAt (the broadcast), never on cfSessionId — same reason as useChat.
 export function useReactions(
   supabase: SupabaseClient,
   identity: Identity,
   uid: string,
-  sessionId?: string,
   startedAt?: string,
 ): UseReactionsResult {
   const [rows, setRows] = useState<Reaction[]>([]);
@@ -38,7 +38,7 @@ export function useReactions(
       });
 
     const channel = supabase
-      .channel(`reactions-${sessionId ?? 'default'}`)
+      .channel(`reactions-${startedAt ?? 'default'}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_reactions' },
@@ -64,7 +64,7 @@ export function useReactions(
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId, startedAt]);
+  }, [supabase, startedAt]);
 
   const reactions = useMemo(() => aggregateReactions(rows, uid), [rows, uid]);
 

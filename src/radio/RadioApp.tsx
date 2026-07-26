@@ -99,17 +99,18 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
-  // A new broadcast starting (cfSessionId changes) forces re-entry even if the viewer was already
-  // in the room or sitting on standby. Keyed on the live broadcast id so the same broadcast never
-  // re-prompts; only a host go-live after an end-broadcast does.
-  const liveSessionId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
+  // A new broadcast starting forces re-entry even if the viewer was already in the room or
+  // sitting on standby. Keyed on startedAt, NOT cfSessionId: a host network drop re-publishes
+  // and mints a new cfSessionId mid-show, which used to kick everyone back to the gate. Only a
+  // host go-live after an end-broadcast changes startedAt.
+  const broadcastId = station?.mode === 'live' ? station.live_session?.startedAt : undefined;
   useEffect(() => {
     if (view === 'banned' || view === 'loading') return;
-    if (shouldForceReentry(liveSessionId, getIdentitySession())) {
+    if (shouldForceReentry(broadcastId, getIdentitySession())) {
       setIdentity(null);
       setView('gate');
     }
-  }, [liveSessionId, view]);
+  }, [broadcastId, view]);
 
   if (view === 'loading') {
     return (
@@ -142,7 +143,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
         onEntry={(id, userId) => {
           // Bind this pick to the current live broadcast so a close/reopen within the same
           // broadcast skips the gate; the next broadcast (new id) forces a fresh pick.
-          if (liveSessionId) setIdentitySession(liveSessionId);
+          if (broadcastId) setIdentitySession(broadcastId);
           setIdentity(id);
           setUid(userId);
           setView('room');

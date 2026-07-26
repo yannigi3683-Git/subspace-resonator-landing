@@ -16,7 +16,10 @@ export interface UseChatResult {
   sendError: string | null;
 }
 
-export function useChat(supabase: SupabaseClient, identity: Identity, uid: string, sessionId?: string, startedAt?: string): UseChatResult {
+// Keyed on startedAt (the broadcast), never on cfSessionId (the connection): a host network
+// drop re-publishes with a new cfSessionId mid-show, and re-keying on that blanked every
+// listener's chat box and refetched it. startedAt only changes on a real go-live.
+export function useChat(supabase: SupabaseClient, identity: Identity, uid: string, startedAt?: string): UseChatResult {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [sending, setSending] = useState(false);
   const [sendError, setSendError] = useState<string | null>(null);
@@ -46,7 +49,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       });
 
     const channel = supabase
-      .channel(`chat-inserts-${sessionId ?? 'default'}`)
+      .channel(`chat-inserts-${startedAt ?? 'default'}`)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'chat_messages' },
@@ -64,7 +67,7 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
       cancelled = true;
       supabase.removeChannel(channel);
     };
-  }, [supabase, sessionId, startedAt]);
+  }, [supabase, startedAt]);
 
   const sendMessage = useCallback(
     async (body: string, opts?: SendOptions) => {
