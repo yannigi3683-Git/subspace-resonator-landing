@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript';
+import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript.js';
 
 const rows: TranscriptRow[] = [
   { display_name: 'Zed', body: 'hi', is_host: false, created_at: '2026-07-19T20:15:03.000Z' },
