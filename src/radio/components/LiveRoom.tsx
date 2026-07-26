@@ -23,9 +23,10 @@ interface LiveRoomProps {
   uid: string;
   station: Station;
   onIdentityChange: (identity: Identity) => void;
+  onRemoved: (reason: 'kicked' | 'banned') => void;
 }
 
-export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }: LiveRoomProps) {
+export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, onRemoved }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
   const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
   const { presenceList, count, isKicked, isBanned, rename } = usePresence(supabase, identity, uid);
@@ -73,25 +74,16 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
     return () => clearInterval(id);
   }, [ready, getStats, showDebug]);
 
-  // Both early returns unmount the audio element too, so removal silences the stream
-  // immediately instead of at the next reload.
-  if (isBanned) {
-    return (
-      <div className="min-h-screen bg-[#0a0010] flex flex-col items-center justify-center p-6">
-        <p className="font-mono text-white text-lg mb-2">SIGNAL BLOCKED</p>
-        <p className="font-mono text-[#888] text-sm">Your access to this transmission has been revoked.</p>
-      </div>
-    );
-  }
+  // Removal has to unmount this component, not swap its screen. Rendering a "you were removed"
+  // panel from inside LiveRoom left every hook above still running: presence kept tracking (the
+  // kicked listener never left the host's room list, so a kick looked like it did nothing) and
+  // the audio transport kept playing. Handing removal to the parent tears all of it down.
+  useEffect(() => {
+    if (isBanned) onRemoved('banned');
+    else if (isKicked) onRemoved('kicked');
+  }, [isBanned, isKicked, onRemoved]);
 
-  if (isKicked) {
-    return (
-      <div className="min-h-screen bg-[#0a0010] flex flex-col items-center justify-center p-6">
-        <p className="font-mono text-white text-lg mb-2">REMOVED FROM ROOM</p>
-        <p className="font-mono text-[#888] text-sm">You were removed by the host.</p>
-      </div>
-    );
-  }
+  if (isBanned || isKicked) return null;
 
   return (
     <div className="flex flex-col md:flex-row h-[100dvh] bg-[#0a0010]">

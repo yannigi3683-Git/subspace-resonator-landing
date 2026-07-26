@@ -51,6 +51,8 @@ const station: Station = {
   locked: false,
 };
 
+const onRemoved = vi.fn();
+
 function renderRoom(overrides: Partial<Station> = {}) {
   return render(
     <LiveRoom
@@ -59,6 +61,7 @@ function renderRoom(overrides: Partial<Station> = {}) {
       uid="uid-me"
       station={{ ...station, ...overrides }}
       onIdentityChange={vi.fn()}
+      onRemoved={onRemoved}
     />,
   );
 }
@@ -69,6 +72,7 @@ describe('LiveRoom', () => {
     presence.isBanned = false;
     moderationApi.canModerate = false;
     moderationApi.error = null;
+    onRemoved.mockClear();
   });
 
   it('renders the room for a normal listener', () => {
@@ -76,27 +80,29 @@ describe('LiveRoom', () => {
     expect(screen.getByTestId('dance-floor')).toBeInTheDocument();
   });
 
-  // A ban must take the audio with it, not just the chat: the early return unmounts the
-  // whole room, audio element included.
-  it('replaces the room with SIGNAL BLOCKED when banned', () => {
-    presence.isBanned = true;
+  // Removal must be handed to the parent so LiveRoom UNMOUNTS. Asserting a "you were removed"
+  // screen here is what hid the original bug: the screen rendered while presence kept tracking
+  // and audio kept playing, so from the host's side a kick did nothing at all.
+  it('asks the parent to remove it when kicked, and stops rendering the room', () => {
+    presence.isKicked = true;
     renderRoom();
-    expect(screen.getByText('SIGNAL BLOCKED')).toBeInTheDocument();
+    expect(onRemoved).toHaveBeenCalledWith('kicked');
     expect(screen.queryByTestId('dance-floor')).not.toBeInTheDocument();
   });
 
-  it('replaces the room with REMOVED FROM ROOM when kicked', () => {
-    presence.isKicked = true;
+  it('asks the parent to remove it when banned', () => {
+    presence.isBanned = true;
     renderRoom();
-    expect(screen.getByText('REMOVED FROM ROOM')).toBeInTheDocument();
+    expect(onRemoved).toHaveBeenCalledWith('banned');
     expect(screen.queryByTestId('dance-floor')).not.toBeInTheDocument();
   });
 
-  it('shows a banned listener the blocked screen even if also kicked', () => {
+  it('reports a ban rather than a kick when both are set', () => {
     presence.isBanned = true;
     presence.isKicked = true;
     renderRoom();
-    expect(screen.getByText('SIGNAL BLOCKED')).toBeInTheDocument();
+    expect(onRemoved).toHaveBeenCalledWith('banned');
+    expect(onRemoved).not.toHaveBeenCalledWith('kicked');
   });
 
   it('gives a normal listener no chat controls', () => {
