@@ -365,17 +365,22 @@ export async function POST(req: Request): Promise<Response> {
     const title = (st?.live_title as string | null) ?? 'Subspace Radio Live';
 
     // This broadcast's messages only (created_at >= startedAt). Never selects uid/device_id.
-    let transcript = '';
-    let filename = '';
-    const { data: msgs } = await admin
+    // The transcript is built unconditionally, including for a chat-less broadcast: a file
+    // saying "Messages: 0" proves the end ran, where no file at all is indistinguishable from
+    // a broken feature (which is exactly how it read on 2026-07-26).
+    const { data: msgs, error: msgErr } = await admin
       .from('chat_messages')
       .select('display_name, body, is_host, created_at')
       .gte('created_at', startedAt ?? new Date(0).toISOString())
       .order('created_at', { ascending: true });
-    if (msgs && msgs.length) {
-      transcript = buildChatTranscript(title, startedAt, msgs as TranscriptRow[]);
-      filename = transcriptFilename(startedAt);
-    }
+    if (msgErr) console.error('[rtc-session end-broadcast chat-read]', msgErr);
+    const transcript = buildChatTranscript(
+      title,
+      startedAt,
+      (msgs ?? []) as TranscriptRow[],
+      msgErr?.message ?? null,
+    );
+    const filename = transcriptFilename(startedAt);
 
     // Take the station off the air. Service-role client so the write succeeds even if the
     // admin's AAL2 JWT has since downgraded to AAL1 during a long broadcast.

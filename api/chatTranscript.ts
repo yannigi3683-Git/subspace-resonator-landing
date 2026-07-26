@@ -25,11 +25,15 @@ export function buildChatTranscript(
   title: string,
   startedAt: string | null | undefined,
   rows: TranscriptRow[],
+  readError?: string | null,
 ): string {
   const header = [
     `Subspace Radio - ${title}`,
     `Broadcast started: ${startedAt ?? 'unknown'}`,
     `Messages: ${rows.length}`,
+    // A silent broadcast and a failed read both produce zero rows. Saying which one it was
+    // turns the file into evidence instead of another ambiguous "nothing happened".
+    ...(readError ? [`WARNING: chat could not be read: ${readError}`] : []),
     '================================',
   ];
   const lines = rows.map((r) => {
