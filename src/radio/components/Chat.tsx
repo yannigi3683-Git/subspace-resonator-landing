@@ -1,20 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
-import { Reply, SmilePlus } from 'lucide-react';
+import { Reply, Shield, SmilePlus } from 'lucide-react';
 import type { ChatMessage } from '../types';
 import type { ReactionSummary } from '../chatRules';
 import { REACTIONS } from '../emojiSet';
 import { Avatar } from './Avatar';
+
+export interface ChatModeration {
+  onDelete: (msg: ChatMessage) => void;
+  onKick: (msg: ChatMessage) => void;
+  onBan: (msg: ChatMessage) => void;
+}
 
 interface ChatProps {
   messages: ChatMessage[];
   onReply?: (msg: ChatMessage) => void;
   reactions?: Record<string, ReactionSummary[]>;
   onToggleReaction?: (messageId: string, emoji: string) => void;
+  // Present only for the host, who moderates from inside the room. Absent for every listener,
+  // so the controls exist in nobody else's DOM.
+  moderation?: ChatModeration;
 }
 
-export function Chat({ messages, onReply, reactions, onToggleReaction }: ChatProps) {
+export function Chat({ messages, onReply, reactions, onToggleReaction, moderation }: ChatProps) {
   const bottomRef = useRef<HTMLDivElement>(null);
   const [reactOpenFor, setReactOpenFor] = useState<string | null>(null);
+  const [modOpenFor, setModOpenFor] = useState<string | null>(null);
+  // Ban is irreversible from the listener's side, so it takes a second deliberate tap.
+  const [banArmedFor, setBanArmedFor] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof bottomRef.current?.scrollIntoView === 'function') {
@@ -90,9 +102,58 @@ export function Chat({ messages, onReply, reactions, onToggleReaction }: ChatPro
                     ))}
                 </div>
               )}
+
+              {moderation && modOpenFor === msg.id && (
+                <div className="mt-1.5 flex flex-col gap-1 border border-[#ff6b6b]/30 rounded p-1.5">
+                  <button
+                    type="button"
+                    onClick={() => { moderation.onDelete(msg); setModOpenFor(null); }}
+                    className="w-full min-h-[44px] font-mono text-[11px] tracking-widest text-white border border-white/20 hover:bg-white/10 transition-colors"
+                  >
+                    DELETE MESSAGE
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => { moderation.onKick(msg); setModOpenFor(null); }}
+                    className="w-full min-h-[44px] font-mono text-[11px] tracking-widest text-[#ffcc66] border border-[#ffcc66]/40 hover:bg-[#ffcc66]/10 transition-colors"
+                  >
+                    KICK {msg.display_name}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (banArmedFor === msg.id) {
+                        moderation.onBan(msg);
+                        setBanArmedFor(null);
+                        setModOpenFor(null);
+                      } else {
+                        setBanArmedFor(msg.id);
+                      }
+                    }}
+                    className="w-full min-h-[44px] font-mono text-[11px] tracking-widest text-[#ff6b6b] border border-[#ff6b6b]/40 hover:bg-[#ff6b6b]/10 transition-colors"
+                  >
+                    {banArmedFor === msg.id ? 'TAP AGAIN TO BAN' : `BAN ${msg.display_name}`}
+                  </button>
+                </div>
+              )}
             </div>
 
             <div className="flex-shrink-0 mt-0.5 flex flex-col items-center gap-0.5">
+              {moderation && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setModOpenFor((cur) => (cur === msg.id ? null : msg.id));
+                    setBanArmedFor(null);
+                  }}
+                  aria-label={`Moderate ${msg.display_name}'s message`}
+                  aria-expanded={modOpenFor === msg.id}
+                  data-testid="moderate-message"
+                  className="w-11 h-11 flex items-center justify-center text-[#ff6b6b]/70 hover:text-[#ff6b6b] transition-colors"
+                >
+                  <Shield size={14} />
+                </button>
+              )}
               {onReply && (
                 <button
                   type="button"

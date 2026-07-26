@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { describe, it, expect, vi } from 'vitest';
+import { render, screen, fireEvent } from '@testing-library/react';
 import { Chat } from './Chat';
 import type { ChatMessage } from '../types';
 
@@ -74,5 +74,67 @@ describe('Chat', () => {
     );
     expect(screen.getByText('Alice')).toBeInTheDocument();
     expect(screen.getByText('Bob')).toBeInTheDocument();
+  });
+
+  describe('moderation', () => {
+    const mod = () => ({ onDelete: vi.fn(), onKick: vi.fn(), onBan: vi.fn() });
+
+    // The whole point of "blend in": a listener's DOM must not contain these controls.
+    it('renders no moderation control without the prop', () => {
+      render(<Chat messages={[makeMsg()]} />);
+      expect(screen.queryByTestId('moderate-message')).not.toBeInTheDocument();
+    });
+
+    it('offers a moderation control per message when moderating', () => {
+      render(<Chat messages={[makeMsg()]} moderation={mod()} />);
+      expect(screen.getByTestId('moderate-message')).toBeInTheDocument();
+    });
+
+    it('keeps the actions collapsed until the control is tapped', () => {
+      render(<Chat messages={[makeMsg()]} moderation={mod()} />);
+      expect(screen.queryByText('DELETE MESSAGE')).not.toBeInTheDocument();
+      fireEvent.click(screen.getByTestId('moderate-message'));
+      expect(screen.getByText('DELETE MESSAGE')).toBeInTheDocument();
+    });
+
+    it('deletes the message it was opened from', () => {
+      const m = mod();
+      const msg = makeMsg({ id: 'msg-9' });
+      render(<Chat messages={[msg]} moderation={m} />);
+      fireEvent.click(screen.getByTestId('moderate-message'));
+      fireEvent.click(screen.getByText('DELETE MESSAGE'));
+      expect(m.onDelete).toHaveBeenCalledWith(msg);
+    });
+
+    it('kicks in one tap', () => {
+      const m = mod();
+      render(<Chat messages={[makeMsg()]} moderation={m} />);
+      fireEvent.click(screen.getByTestId('moderate-message'));
+      fireEvent.click(screen.getByText(/KICK Alice/));
+      expect(m.onKick).toHaveBeenCalled();
+    });
+
+    // Ban is irreversible from the listener's side, so a single mis-tap must not fire it.
+    it('requires a second tap to ban', () => {
+      const m = mod();
+      render(<Chat messages={[makeMsg()]} moderation={m} />);
+      fireEvent.click(screen.getByTestId('moderate-message'));
+      fireEvent.click(screen.getByText(/BAN Alice/));
+      expect(m.onBan).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByText('TAP AGAIN TO BAN'));
+      expect(m.onBan).toHaveBeenCalled();
+    });
+
+    it('disarms the ban confirmation when the panel is reopened', () => {
+      const m = mod();
+      render(<Chat messages={[makeMsg()]} moderation={m} />);
+      fireEvent.click(screen.getByTestId('moderate-message'));
+      fireEvent.click(screen.getByText(/BAN Alice/));
+      fireEvent.click(screen.getByTestId('moderate-message')); // close
+      fireEvent.click(screen.getByTestId('moderate-message')); // reopen
+      expect(screen.getByText(/BAN Alice/)).toBeInTheDocument();
+      expect(m.onBan).not.toHaveBeenCalled();
+    });
   });
 });

@@ -4,18 +4,27 @@ import type { PresenceEntry } from '../types';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
 
+export interface PresenceModeration {
+  onKick: (entry: PresenceEntry) => void;
+  onBan: (entry: PresenceEntry) => void;
+}
+
 interface PresenceListProps {
   presenceList: PresenceEntry[];
   count: number;
   uid?: string;
   onRename?: (name: string, avatarId: string) => void;
+  // Host only. Covers an abuser who has gone quiet or never typed, so there is no message to
+  // moderate from.
+  moderation?: PresenceModeration;
 }
 
-export function PresenceList({ presenceList, count, uid, onRename }: PresenceListProps) {
+export function PresenceList({ presenceList, count, uid, onRename, moderation }: PresenceListProps) {
   const [editing, setEditing] = useState(false);
   const [draftName, setDraftName] = useState('');
   const [draftAvatar, setDraftAvatar] = useState('');
   const [nameError, setNameError] = useState('');
+  const [banArmedFor, setBanArmedFor] = useState<string | null>(null);
 
   const ownEntry = uid ? presenceList.find(e => e.uid === uid) : null;
   const otherEntries = uid ? presenceList.filter(e => e.uid !== uid) : presenceList;
@@ -109,16 +118,46 @@ export function PresenceList({ presenceList, count, uid, onRename }: PresenceLis
         </div>
       )}
 
-      <div className="flex flex-wrap gap-1">
+      <div className={moderation ? 'flex flex-col gap-1' : 'flex flex-wrap gap-1'}>
         {otherEntries.slice(0, 20).map((entry) => (
-          <span
-            key={entry.uid}
-            title={entry.name}
-            className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#aaa]"
-          >
-            <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
-            {entry.name}
-          </span>
+          moderation ? (
+            <div key={entry.uid} className="flex items-center gap-2">
+              <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
+              <span className="font-mono text-[10px] text-[#aaa] flex-1 truncate">{entry.name}</span>
+              <button
+                type="button"
+                onClick={() => { moderation.onKick(entry); setBanArmedFor(null); }}
+                aria-label={`Kick ${entry.name}`}
+                className="px-2 min-h-[44px] font-mono text-[10px] tracking-widest text-[#ffcc66] hover:bg-[#ffcc66]/10 transition-colors"
+              >
+                KICK
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  if (banArmedFor === entry.uid) {
+                    moderation.onBan(entry);
+                    setBanArmedFor(null);
+                  } else {
+                    setBanArmedFor(entry.uid);
+                  }
+                }}
+                aria-label={banArmedFor === entry.uid ? `Confirm ban for ${entry.name}` : `Ban ${entry.name}`}
+                className="px-2 min-h-[44px] font-mono text-[10px] tracking-widest text-[#ff6b6b] hover:bg-[#ff6b6b]/10 transition-colors"
+              >
+                {banArmedFor === entry.uid ? 'SURE?' : 'BAN'}
+              </button>
+            </div>
+          ) : (
+            <span
+              key={entry.uid}
+              title={entry.name}
+              className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#aaa]"
+            >
+              <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
+              {entry.name}
+            </span>
+          )
         ))}
         {otherEntries.length > 20 && (
           <span className="font-mono text-[10px] text-[#555]">

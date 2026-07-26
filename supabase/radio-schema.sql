@@ -127,7 +127,11 @@ $$;
 create or replace function chat_allowed(_device_id text, _is_host boolean) returns boolean
 language sql stable security definer set search_path = public as $$
   select
-    (_is_host = has_role(auth.uid(), 'admin'))
+    -- Implication, not equality: only an admin may claim the HOST badge, but an admin may
+    -- also post without it. The host moderates from inside the guest room and blends in as a
+    -- normal listener, so his messages carry is_host = false. An equality check here silently
+    -- rejected every message he sent while signed in as admin.
+    (not _is_host or has_role(auth.uid(), 'admin'))
     and not exists (
       select 1 from bans b where b.uid = auth.uid() or b.device_id = _device_id)
     and exists (

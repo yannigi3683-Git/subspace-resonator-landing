@@ -1,5 +1,6 @@
 import type { ConnectionEvent } from './connectionFsm';
 import { tuneOpus } from './audioQuality';
+import { getOrCreateIdentity } from '../identity';
 
 export interface SubscriberStats {
   effectiveBufferMs: number;
@@ -78,7 +79,9 @@ export class Subscriber {
           Authorization: `Bearer ${await this.getAuthToken()}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ phase: 'subscribe-pull' }),
+        // deviceId lets the broker refuse a banned browser even after it clears its session
+        // and signs in anonymously again. Nothing about the RTC setup changes.
+        body: JSON.stringify({ phase: 'subscribe-pull', deviceId: getOrCreateIdentity()?.deviceId }),
       });
     } catch {
       this.callbacks.onDispatch({ type: 'ERROR' });

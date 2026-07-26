@@ -58,6 +58,19 @@ export function useChat(supabase: SupabaseClient, identity: Identity, uid: strin
           });
         },
       )
+      // A message the host deletes has to leave every screen at once, not at the next reload.
+      // DELETE payloads carry only the primary key (default replica identity), which is all
+      // that is needed to drop it.
+      .on(
+        'postgres_changes',
+        { event: 'DELETE', schema: 'public', table: 'chat_messages' },
+        (payload) => {
+          if (cancelled) return;
+          const deletedId = (payload.old as { id?: string } | null)?.id;
+          if (!deletedId) return;
+          setMessages((prev) => prev.filter((m) => m.id !== deletedId));
+        },
+      )
       .subscribe();
 
     return () => {

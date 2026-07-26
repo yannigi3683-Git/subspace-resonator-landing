@@ -69,7 +69,7 @@ function makeSupabase() {
 const supabaseClient = makeSupabase();
 
 function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
-  const [view, setView] = useState<'loading' | 'gate' | 'room' | 'banned'>('loading');
+  const [view, setView] = useState<'loading' | 'gate' | 'room' | 'banned' | 'kicked'>('loading');
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const station = useStation(supabase);
@@ -135,6 +135,22 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
     );
   }
 
+  if (view === 'kicked') {
+    return (
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+        <section className="section-border max-w-md w-full p-8 text-center">
+          <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground">
+            // SUBSPACE RADIO LIVE
+          </p>
+          <h1 className="font-display text-3xl mt-4">REMOVED FROM ROOM</h1>
+          <p className="font-mono text-xs mt-4 leading-relaxed text-muted-foreground">
+            You were removed by the host.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (view === 'gate') {
     return (
       <EntryGate
@@ -159,7 +175,14 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
             <p className="font-mono text-xs tracking-widest">LOADING...</p>
           </main>
         ) : station.mode === 'live' ? (
-          <LiveRoom supabase={supabase} identity={identity} uid={uid} station={station} onIdentityChange={setIdentity} />
+          <LiveRoom
+            supabase={supabase}
+            identity={identity}
+            uid={uid}
+            station={station}
+            onIdentityChange={setIdentity}
+            onRemoved={setView}
+          />
         ) : (
           <StandbyScreen supabase={supabase} getServerTime={getServerTime} />
         )}
