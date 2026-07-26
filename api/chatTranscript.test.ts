@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript';
+import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript.js';
 
 const rows: TranscriptRow[] = [
   { display_name: 'Zed', body: 'hi', is_host: false, created_at: '2026-07-19T20:15:03.000Z' },
@@ -20,6 +20,14 @@ describe('buildChatTranscript', () => {
     const out = buildChatTranscript('Empty', null, []);
     expect(out).toContain('Messages: 0');
     expect(out).toContain('Broadcast started: unknown');
+    expect(out).not.toContain('WARNING');
+  });
+
+  // Zero rows because nobody typed, and zero rows because the read failed, must not look alike.
+  it('flags a failed chat read instead of passing it off as a silent broadcast', () => {
+    const out = buildChatTranscript('Broken', null, [], 'permission denied for table chat_messages');
+    expect(out).toContain('Messages: 0');
+    expect(out).toContain('WARNING: chat could not be read: permission denied for table chat_messages');
   });
 });
 
