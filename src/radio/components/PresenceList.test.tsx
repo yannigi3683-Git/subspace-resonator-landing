@@ -87,4 +87,42 @@ describe('PresenceList rename', () => {
     expect(onRename).not.toHaveBeenCalled();
     expect(screen.queryByRole('button', { name: /save/i })).not.toBeInTheDocument();
   });
+
+  describe('moderation', () => {
+    const mod = () => ({ onKick: vi.fn(), onBan: vi.fn() });
+
+    it('shows no kick or ban to a normal listener', () => {
+      render(<PresenceList presenceList={[makeEntry(1)]} count={1} uid="uid-2" />);
+      expect(screen.queryByRole('button', { name: /kick/i })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: /^ban/i })).not.toBeInTheDocument();
+    });
+
+    it('kicks a listener who never typed', () => {
+      const m = mod();
+      const entry = { ...makeEntry(1), deviceId: 'dev-1' };
+      render(<PresenceList presenceList={[entry]} count={1} uid="uid-2" moderation={m} />);
+      fireEvent.click(screen.getByRole('button', { name: /kick listener1/i }));
+      expect(m.onKick).toHaveBeenCalledWith(entry);
+    });
+
+    it('requires a second tap to ban', () => {
+      const m = mod();
+      const entry = { ...makeEntry(1), deviceId: 'dev-1' };
+      render(<PresenceList presenceList={[entry]} count={1} uid="uid-2" moderation={m} />);
+
+      fireEvent.click(screen.getByRole('button', { name: /^ban listener1/i }));
+      expect(m.onBan).not.toHaveBeenCalled();
+
+      fireEvent.click(screen.getByRole('button', { name: /confirm ban for listener1/i }));
+      expect(m.onBan).toHaveBeenCalledWith(entry);
+    });
+
+    // Your own entry is rendered separately (with the rename pencil), so it can never be a
+    // kick/ban target from this list.
+    it('never offers moderation on your own entry', () => {
+      const m = mod();
+      render(<PresenceList presenceList={[makeEntry(1)]} count={1} uid="uid-1" moderation={m} />);
+      expect(screen.queryByRole('button', { name: /kick/i })).not.toBeInTheDocument();
+    });
+  });
 });

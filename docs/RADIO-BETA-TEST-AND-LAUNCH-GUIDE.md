@@ -206,9 +206,47 @@ In the listener tab:
 You should see your message appear in the chat list with your avatar colour and name.
 
 In the host console tab:
-- The host console does not show the chat currently (that is the MODERATION tab, coming in M8). But the message is in the database and visible to all listeners.
+- The host console does not show the chat. You moderate from inside the room instead (see Step 10b), which is where you normally sit during a broadcast anyway.
 
 Open a third browser tab, join as a second listener, and you will see the message in chat there.
+
+### Step 10b - Moderating from inside the room
+
+You do not need the host console to remove someone. Everything below happens in the normal
+`/radio` room, on whatever device you are holding, and no listener can see that you have
+these controls.
+
+**Turn your moderation on (once per device):**
+
+1. In the room, look at the top of the chat panel. There is a small padlock on the right.
+2. Tap it. Enter your host email, your password, then the 6-digit code from your
+   authenticator app.
+3. The panel closes. You keep the same name and avatar you picked. Nobody in the room can
+   tell anything changed.
+
+If you are in the same browser where you already signed into the host console, skip this -
+the controls are there from the start.
+
+**Removing an abusive message or person:**
+
+- Every chat message now has a small shield button. Tap it and three choices appear:
+  - **DELETE MESSAGE** - the message disappears from everyone's screen straight away.
+  - **KICK** - they are thrown out of the room for this broadcast. They can come back.
+  - **BAN** - they are thrown out, cannot get back in, and the audio stream itself is
+    refused to their device. This takes two taps to confirm, so you cannot ban by accident.
+- Someone causing trouble who has not typed anything? The listener list under the chat shows
+  KICK and BAN next to each name.
+
+**Calming a whole room:**
+
+- **SLOW** - forces a gap between messages for everyone (off, 3s, 10s, 30s). Good against a
+  flood.
+- **LOCK CHAT** - nobody can post except you. Use it if things get out of hand, then unlock
+  when it settles.
+
+**Honest limit:** a banned person can clear their browser data to get a fresh identity and
+come back under a new name. Ban again if that happens. There is no way around this for a room
+anyone can walk into without signing up.
 
 ### Step 11 - End the broadcast
 

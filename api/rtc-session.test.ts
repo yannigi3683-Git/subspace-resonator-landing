@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAdminAal2, firstMid, classifyAuthError, readTokenCache, writeTokenCache } from './rtc-session';
+import { checkAdminAal2, findBan, firstMid, classifyAuthError, readTokenCache, writeTokenCache } from './rtc-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // checkAdminAal2 reads the role through the security-definer has_role() RPC, which
@@ -35,6 +35,52 @@ describe('checkAdminAal2', () => {
     const client = fakeClient({ data: true, error: null });
     await checkAdminAal2('user-xyz', 'aal2', client);
     expect(client.rpc).toHaveBeenCalledWith('has_role', { _user_id: 'user-xyz', _role: 'admin' });
+  });
+});
+
+// Minimal stand-in for the PostgREST builder: records which column each lookup filtered on
+// and replays a canned result per column.
+function fakeBansClient(rows: { uid?: unknown[]; device_id?: unknown[] }) {
+  const filtered: string[] = [];
+  const client = {
+    from: () => ({
+      select: () => ({
+        eq: (column: string) => {
+          filtered.push(column);
+          return { limit: () => Promise.resolve({ data: rows[column as 'uid' | 'device_id'] ?? [] }) };
+        },
+      }),
+    }),
+  } as unknown as SupabaseClient;
+  return { client, filtered };
+}
+
+describe('findBan', () => {
+  it('finds a ban by uid without needing a device id', async () => {
+    const { client } = fakeBansClient({ uid: [{ uid: 'u1' }] });
+    expect(await findBan('u1', null, client)).toBe(true);
+  });
+
+  it('finds a ban by device id when the uid is clean (anon re-auth mints a new uid)', async () => {
+    const { client } = fakeBansClient({ device_id: [{ uid: 'old-uid' }] });
+    expect(await findBan('fresh-uid', 'device-1', client)).toBe(true);
+  });
+
+  it('returns false when neither matches', async () => {
+    const { client } = fakeBansClient({});
+    expect(await findBan('u1', 'device-1', client)).toBe(false);
+  });
+
+  it('skips the device lookup entirely when no device id is supplied', async () => {
+    const { client, filtered } = fakeBansClient({});
+    expect(await findBan('u1', null, client)).toBe(false);
+    expect(filtered).toEqual(['uid']);
+  });
+
+  it('short-circuits on a uid hit without a second query', async () => {
+    const { client, filtered } = fakeBansClient({ uid: [{ uid: 'u1' }] });
+    await findBan('u1', 'device-1', client);
+    expect(filtered).toEqual(['uid']);
   });
 });
 

@@ -1,5 +1,6 @@
 import { createClient } from '@supabase/supabase-js';
 import { buildChatTranscript, transcriptFilename, type TranscriptRow } from './chatTranscript';
+import { parseModerationRequest, readDeviceId } from './moderationRules';
 
 // ---- Cloudflare Realtime REST client (inlined to avoid ESM bundling issues) ----
 
@@ -247,6 +248,34 @@ export async function checkAdminAal2(
   }
 }
 
+// A ban is keyed on uid AND device id, because an anonymous listener who signs in again gets
+// a fresh uid while the browser keeps its device id. Two indexed .eq() lookups rather than a
+// composed .or() filter, so a client-supplied device id can never be read as filter syntax.
+export async function findBan(
+  uid: string,
+  deviceId: string | null,
+  client = getSupabaseAdmin(),
+): Promise<boolean> {
+  const { data: byUid } = await client.from('bans').select('uid').eq('uid', uid).limit(1);
+  if (byUid && byUid.length > 0) return true;
+  if (!deviceId) return false;
+  const { data: byDevice } = await client.from('bans').select('uid').eq('device_id', deviceId).limit(1);
+  return !!(byDevice && byDevice.length > 0);
+}
+
+// Ban/kick straight from a chat message carries only the author's uid; the device id is
+// resolved here so other listeners' device ids never have to reach the host's browser.
+async function resolveDeviceId(uid: string, client = getSupabaseAdmin()): Promise<string | null> {
+  const { data } = await client
+    .from('chat_messages')
+    .select('device_id')
+    .eq('uid', uid)
+    .order('created_at', { ascending: false })
+    .limit(1);
+  const row = data?.[0] as { device_id?: string } | undefined;
+  return row?.device_id ?? null;
+}
+
 async function readHostCfSessionId(): Promise<string | null> {
   try {
     const { data } = await getSupabaseAdmin()
@@ -390,11 +419,90 @@ export async function POST(req: Request): Promise<Response> {
     return json({ ok: true, transcript, filename });
   }
 
+  // ── MODERATE ─────────────────────────────────────────────────────────────
+  // Admin-only: delete a message, kick, ban, unban, or set slow-mode/lock. Writes run on the
+  // service-role client for the same reason END BROADCAST does — the host moderates from
+  // inside the guest room, mid-broadcast, and must not be refused by his own RLS gate.
+  if (phase === 'moderate') {
+    const check = await checkAdminAal2(identity.userId, identity.aal);
+    if (!check.ok) return json({ error: 'forbidden', reason: check.reason }, 403);
+
+    const parsed = parseModerationRequest(body, identity.userId);
+    if (!parsed.ok) return json({ error: parsed.error }, 400);
+    const request = parsed.request;
+    const admin = getSupabaseAdmin();
+
+    if (request.action === 'delete_message') {
+      const { error } = await admin.from('chat_messages').delete().eq('id', request.messageId);
+      if (error) {
+        console.error('[rtc-session moderate delete_message]', error);
+        return json({ error: 'delete_failed', detail: error.message }, 500);
+      }
+      return json({ ok: true });
+    }
+
+    if (request.action === 'unban') {
+      const { error } = await admin.from('bans').delete().eq('uid', request.uid);
+      if (error) {
+        console.error('[rtc-session moderate unban]', error);
+        return json({ error: 'unban_failed', detail: error.message }, 500);
+      }
+      return json({ ok: true });
+    }
+
+    if (request.action === 'kick' || request.action === 'ban') {
+      // bans.device_id is NOT NULL. When the target has never chatted and no device id came
+      // from presence, store an empty string: it satisfies the column and matches no real
+      // device (identities are uuids), so the ban still holds by uid.
+      const deviceId = request.deviceId ?? (await resolveDeviceId(request.uid)) ?? '';
+
+      if (request.action === 'ban') {
+        const { error } = await admin
+          .from('bans')
+          .upsert({ uid: request.uid, device_id: deviceId, reason: request.reason }, { onConflict: 'uid' });
+        if (error) {
+          console.error('[rtc-session moderate ban]', error);
+          return json({ error: 'ban_failed', detail: error.message }, 500);
+        }
+      }
+
+      // Kick row either way: it is what ejects them from the room right now (the listener
+      // subscribes to kicks INSERT). For a ban it is the immediate half; the bans row is what
+      // keeps them out afterwards.
+      const { error: kickErr } = await admin
+        .from('kicks')
+        .insert({ uid: request.uid, device_id: deviceId });
+      if (kickErr) {
+        console.error('[rtc-session moderate kick]', kickErr);
+        return json({ error: 'kick_failed', detail: kickErr.message }, 500);
+      }
+      return json({ ok: true });
+    }
+
+    // set_chat
+    const patch: { slow_mode_s?: number; locked?: boolean } = {};
+    if (request.slowModeS !== undefined) patch.slow_mode_s = request.slowModeS;
+    if (request.locked !== undefined) patch.locked = request.locked;
+    const { error } = await admin.from('station').update(patch).eq('id', true);
+    if (error) {
+      console.error('[rtc-session moderate set_chat]', error);
+      return json({ error: 'station_update_failed', detail: error.message }, 500);
+    }
+    return json({ ok: true });
+  }
+
   // ── SUBSCRIBE PULL ───────────────────────────────────────────────────────
   // Any authenticated session (anon is fine) may subscribe. The host's
   // CF session ID is read server-side from station.live_session — the client
   // never sees or supplies it (prevents session-hijack injection).
   if (phase === 'subscribe-pull') {
+    // A ban has to cut the audio too, not just the chat. Checked here so clearing browser
+    // storage and re-authenticating anonymously still cannot pull the stream.
+    const claimedDevice = readDeviceId(body.deviceId);
+    if (await findBan(identity.userId, claimedDevice === false ? null : claimedDevice)) {
+      return json({ error: 'banned' }, 403);
+    }
+
     const hostCfSessionId = await readHostCfSessionId();
     if (!hostCfSessionId) return json({ error: 'station_offline' }, 503);
 
