@@ -197,6 +197,18 @@ drop policy if exists kicks_write on kicks;
 create policy kicks_write on kicks for all
   using (is_admin_aal2()) with check (is_admin_aal2());
 
+-- Loosened policies from past debugging sessions. PERMISSIVE policies are OR'd, so a single
+-- policy with a `true` qual/with_check silently cancels every strict policy on this table.
+-- On 2026-07-26 `chat_insert_own` (with_check true) let a BANNED listener keep posting through
+-- a live broadcast: bans, slow mode and lock all live inside chat_allowed(), which that policy
+-- never consulted. `chat_read_all` (qual true) likewise exposed every past broadcast's chat,
+-- defeating chat_visible(). Neither was in this file, so re-running it never removed them.
+-- Dropped explicitly so applying this schema RESTORES enforcement instead of leaving a
+-- hand-added hole in place. Audit with:
+--   select policyname, cmd, permissive, qual, with_check from pg_policies where tablename = 'chat_messages';
+drop policy if exists chat_insert_own on chat_messages;
+drop policy if exists chat_read_all on chat_messages;
+
 drop policy if exists chat_read on chat_messages;
 create policy chat_read on chat_messages for select using (chat_visible(created_at));
 drop policy if exists chat_insert on chat_messages;
