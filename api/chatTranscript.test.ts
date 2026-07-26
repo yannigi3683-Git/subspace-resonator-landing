@@ -20,6 +20,14 @@ describe('buildChatTranscript', () => {
     const out = buildChatTranscript('Empty', null, []);
     expect(out).toContain('Messages: 0');
     expect(out).toContain('Broadcast started: unknown');
+    expect(out).not.toContain('WARNING');
+  });
+
+  // Zero rows because nobody typed, and zero rows because the read failed, must not look alike.
+  it('flags a failed chat read instead of passing it off as a silent broadcast', () => {
+    const out = buildChatTranscript('Broken', null, [], 'permission denied for table chat_messages');
+    expect(out).toContain('Messages: 0');
+    expect(out).toContain('WARNING: chat could not be read: permission denied for table chat_messages');
   });
 });
 
