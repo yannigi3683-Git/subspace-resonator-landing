@@ -595,4 +595,49 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
       vi.useRealTimers();
     }
   });
+
+  // The automatic save on END BROADCAST depends on that request succeeding and on the server
+  // being able to read the chat. This path depends on neither: the host's own admin session
+  // reads the rows, so the log stays recoverable after the fact.
+  describe('chat log download', () => {
+    function withChatRows(result: { data: unknown; error: null | { message: string } }) {
+      const supabase = makeSupabase();
+      const order = vi.fn().mockResolvedValue(result);
+      (supabase.from as unknown as ReturnType<typeof vi.fn>).mockReturnValue({
+        select: vi.fn().mockReturnValue({ order }),
+      });
+      return supabase;
+    }
+
+    beforeEach(() => {
+      Object.defineProperty(URL, 'createObjectURL', { value: vi.fn(() => 'blob:x'), writable: true });
+      Object.defineProperty(URL, 'revokeObjectURL', { value: vi.fn(), writable: true });
+    });
+
+    it('saves a file read directly through the admin session', async () => {
+      const supabase = withChatRows({
+        data: [{ display_name: 'Zed', body: 'hi', is_host: false, created_at: '2026-07-26T11:34:00.000Z' }],
+        error: null,
+      });
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
+      render(<GoLivePanel supabase={supabase} authToken={async () => 'token'} />);
+
+      fireEvent.click(await screen.findByTestId('download-chat-btn'));
+
+      await waitFor(() => expect(screen.getByText('SAVED 1 MESSAGE')).toBeInTheDocument());
+      expect(click).toHaveBeenCalled();
+      click.mockRestore();
+    });
+
+    it('reports the reason instead of silently saving nothing when the read fails', async () => {
+      const supabase = withChatRows({ data: null, error: { message: 'permission denied' } });
+      render(<GoLivePanel supabase={supabase} authToken={async () => 'token'} />);
+
+      fireEvent.click(await screen.findByTestId('download-chat-btn'));
+
+      await waitFor(() =>
+        expect(screen.getByText('Could not read chat: permission denied')).toBeInTheDocument(),
+      );
+    });
+  });
 });

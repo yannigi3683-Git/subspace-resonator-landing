@@ -13,6 +13,9 @@ import { loadHostPrefs, saveHostPrefs } from '../hostPrefs';
 import { extractArtwork } from '../artwork';
 import type { NowPlayingMode } from '../nowPlaying';
 import { useStation } from '../hooks/useStation';
+// Shared with the server so the manual download and the automatic one on END BROADCAST
+// produce byte-identical files.
+import { buildChatTranscript, transcriptFilename, type TranscriptRow } from '../../../api/chatTranscript';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
 
@@ -72,6 +75,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
   const [deviceConnected, setDeviceConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
+  const [chatLogMsg, setChatLogMsg] = useState('');
   // Browsers hide audio-input device names until microphone permission is granted,
   // so the dropdown is empty until the host unlocks access once.
   const [audioReady, setAudioReady] = useState(false);
@@ -420,6 +424,29 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       dispatchFsm({ type: 'ERROR' });
       teardownMixer();
     }
+  }
+
+  // Pull the chat log straight from the browser, as the admin. RLS lets an admin read every
+  // message regardless of whether a broadcast is running, so this works after the fact and does
+  // not depend on the END BROADCAST request succeeding or on the server's own read. Scope is
+  // whatever the 48h retention still holds.
+  async function handleDownloadChatLog() {
+    setChatLogMsg('READING...');
+    const { data, error } = await supabase
+      .from('chat_messages')
+      .select('display_name, body, is_host, created_at')
+      .order('created_at', { ascending: true });
+    if (error) {
+      setChatLogMsg(`Could not read chat: ${error.message}`);
+      return;
+    }
+    const rows = (data ?? []) as TranscriptRow[];
+    const startedAt = rows[0]?.created_at ?? null;
+    downloadTextFile(
+      transcriptFilename(startedAt),
+      buildChatTranscript(titleRef.current || title || 'Subspace Radio Live', startedAt, rows),
+    );
+    setChatLogMsg(`SAVED ${rows.length} MESSAGE${rows.length === 1 ? '' : 'S'}`);
   }
 
   async function handleEnd() {
@@ -824,6 +851,22 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           </button>
         </div>
       )}
+
+      <div className="flex items-center gap-3 flex-wrap">
+        <button
+          type="button"
+          onClick={handleDownloadChatLog}
+          data-testid="download-chat-btn"
+          className="font-mono text-[11px] tracking-widest border border-border px-4 min-h-[44px] hover:border-primary hover:text-primary transition-colors"
+        >
+          DOWNLOAD CHAT LOG
+        </button>
+        {chatLogMsg && (
+          <span role="status" className="font-mono text-[11px] text-muted-foreground">
+            {chatLogMsg}
+          </span>
+        )}
+      </div>
 
       {/* File deck — at the top so the host can load tracks before going live */}
       <div className="flex flex-col gap-2 pt-2 border-t border-border/50">
