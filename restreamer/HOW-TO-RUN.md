@@ -15,6 +15,14 @@ as before (plain WebRTC) — the site is unchanged until this is running.
    - A guest who was already waiting in the link before step 3 upgrades automatically too now.
 5. When the show is over: **End Broadcast**, then **close the black window**.
 
+## DJ from your phone or another computer
+
+The restreamer PC and the DJ device are separate. Go Live from any device with internet (phone
+browser, second laptop) exactly as normal. The restreamer finds your show through Cloudflare and
+Supabase by its session id, not by which device you are on. The only rule: this PC must be powered
+on and running the black window during the whole show. If it sleeps or shuts off, listeners drop
+back to plain WebRTC.
+
 ## Good to know
 
 - **You can use the PC normally** while the window is open. It sips a little CPU, nothing more.
