@@ -127,7 +127,11 @@ $$;
 create or replace function chat_allowed(_device_id text, _is_host boolean) returns boolean
 language sql stable security definer set search_path = public as $$
   select
-    (_is_host = has_role(auth.uid(), 'admin'))
+    -- Implication, not equality: only an admin may claim the HOST badge, but an admin may
+    -- also post without it. The host moderates from inside the guest room and blends in as a
+    -- normal listener, so his messages carry is_host = false. An equality check here silently
+    -- rejected every message he sent while signed in as admin.
+    (not _is_host or has_role(auth.uid(), 'admin'))
     and not exists (
       select 1 from bans b where b.uid = auth.uid() or b.device_id = _device_id)
     and exists (
@@ -192,6 +196,18 @@ create policy kicks_read_own on kicks for select
 drop policy if exists kicks_write on kicks;
 create policy kicks_write on kicks for all
   using (is_admin_aal2()) with check (is_admin_aal2());
+
+-- Loosened policies from past debugging sessions. PERMISSIVE policies are OR'd, so a single
+-- policy with a `true` qual/with_check silently cancels every strict policy on this table.
+-- On 2026-07-26 `chat_insert_own` (with_check true) let a BANNED listener keep posting through
+-- a live broadcast: bans, slow mode and lock all live inside chat_allowed(), which that policy
+-- never consulted. `chat_read_all` (qual true) likewise exposed every past broadcast's chat,
+-- defeating chat_visible(). Neither was in this file, so re-running it never removed them.
+-- Dropped explicitly so applying this schema RESTORES enforcement instead of leaving a
+-- hand-added hole in place. Audit with:
+--   select policyname, cmd, permissive, qual, with_check from pg_policies where tablename = 'chat_messages';
+drop policy if exists chat_insert_own on chat_messages;
+drop policy if exists chat_read_all on chat_messages;
 
 drop policy if exists chat_read on chat_messages;
 create policy chat_read on chat_messages for select using (chat_visible(created_at));

@@ -98,6 +98,21 @@ describe('shouldForceReentry', () => {
     expect(shouldForceReentry(undefined, 'cf-OLD')).toBe(false);
     expect(shouldForceReentry(null, null)).toBe(false);
   });
+
+  // Regression guard: RadioApp stores the broadcast id on entry and compares it in TWO places
+  // (mount + live-transition). A version of this fix stored startedAt but still compared
+  // cfSessionId at mount, so the two never matched and every returning listener was re-gated on
+  // page load. Whatever setIdentitySession writes must be what shouldForceReentry reads.
+  it('does not force after a round-trip through the identity session store', () => {
+    const broadcastId = '2026-07-26T12:43:00.000Z';
+    setIdentitySession(broadcastId);
+    expect(shouldForceReentry(broadcastId, getIdentitySession())).toBe(false);
+  });
+
+  it('still forces after a round-trip when a genuinely new broadcast starts', () => {
+    setIdentitySession('2026-07-26T12:43:00.000Z');
+    expect(shouldForceReentry('2026-07-26T20:10:00.000Z', getIdentitySession())).toBe(true);
+  });
 });
 
 describe('identity session marker', () => {

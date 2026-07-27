@@ -1,17 +1,21 @@
 import { useState, useEffect, useRef } from 'react';
 import type { SubscriberStats } from '../rtc/subscriber';
-import { Volume2, Music2, MessageSquare } from 'lucide-react';
+import { Volume2, Music2, MessageSquare, Lock } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatMessage, Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
 import { useReactions } from '../hooks/useReactions';
 import { usePresence } from '../hooks/usePresence';
+import { useModeration } from '../hooks/useModeration';
 import { useListenerTransport } from '../hooks/useListenerTransport';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
 import { Chat } from './Chat';
 import { ChatInput } from './ChatInput';
 import { PresenceList } from './PresenceList';
+import { HostLoginSheet } from './HostLoginSheet';
+
+const SLOW_MODE_CHOICES = [0, 3, 10, 30];
 
 interface LiveRoomProps {
   supabase: SupabaseClient;
@@ -19,12 +23,19 @@ interface LiveRoomProps {
   uid: string;
   station: Station;
   onIdentityChange: (identity: Identity) => void;
+  onRemoved: (reason: 'kicked' | 'banned') => void;
 }
 
-export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }: LiveRoomProps) {
+export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, onRemoved }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.startedAt);
   const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.startedAt);
-  const { presenceList, count, isKicked, rename } = usePresence(supabase, identity, uid);
+  const { presenceList, count, isKicked, isBanned, rename } = usePresence(supabase, identity, uid);
+  const moderation = useModeration(supabase);
+  const [hostLoginOpen, setHostLoginOpen] = useState(false);
+
+  // Presence carries the stable deviceId; a chat message does not (the server resolves it
+  // instead), so a ban issued from the crowd list is the more precise one.
+  const deviceOf = (targetUid: string) => presenceList.find((e) => e.uid === targetUid)?.deviceId;
 
   // A pencil avatar/name edit must reach chat too: rename updates presence + localStorage, but the
   // chat send uses the `identity` prop, so lift the new values up to re-render the whole room.
@@ -63,14 +74,16 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
     return () => clearInterval(id);
   }, [ready, getStats, showDebug]);
 
-  if (isKicked) {
-    return (
-      <div className="min-h-screen bg-[#0a0010] flex flex-col items-center justify-center p-6">
-        <p className="font-mono text-white text-lg mb-2">REMOVED FROM ROOM</p>
-        <p className="font-mono text-[#888] text-sm">You were removed by the host.</p>
-      </div>
-    );
-  }
+  // Removal has to unmount this component, not swap its screen. Rendering a "you were removed"
+  // panel from inside LiveRoom left every hook above still running: presence kept tracking (the
+  // kicked listener never left the host's room list, so a kick looked like it did nothing) and
+  // the audio transport kept playing. Handing removal to the parent tears all of it down.
+  useEffect(() => {
+    if (isBanned) onRemoved('banned');
+    else if (isKicked) onRemoved('kicked');
+  }, [isBanned, isKicked, onRemoved]);
+
+  if (isBanned || isKicked) return null;
 
   return (
     <div className="flex flex-col md:flex-row h-[100dvh] bg-[#0a0010]">
@@ -178,16 +191,82 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
 
       {/* Chat sidebar — full screen on mobile when chat tab active */}
       <div className={`${mobileTab === 'chat' ? 'flex' : 'hidden'} md:flex w-full md:w-80 flex-1 md:flex-none min-h-0 flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]`}>
-        <div className="px-3 py-2 border-b border-[#1a1a2e]">
-          <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest">Chat</p>
+        <div className="px-3 py-2 border-b border-[#1a1a2e] flex items-center gap-2">
+          <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest flex-1">Chat</p>
+          {!moderation.canModerate && (
+            <button
+              type="button"
+              onClick={() => setHostLoginOpen(true)}
+              aria-label="Host sign in"
+              data-testid="host-login-trigger"
+              className="w-11 h-11 -my-2 flex items-center justify-center text-[#2a2a3e] hover:text-[#555] transition-colors"
+            >
+              <Lock size={12} />
+            </button>
+          )}
         </div>
-        <Chat messages={messages} onReply={setReplyTo} reactions={reactions} onToggleReaction={toggleReaction} />
-        <PresenceList presenceList={presenceList} count={count} uid={uid} onRename={handleRename} />
+        <Chat
+          messages={messages}
+          onReply={setReplyTo}
+          reactions={reactions}
+          onToggleReaction={toggleReaction}
+          moderation={moderation.canModerate ? {
+            onDelete: (msg) => moderation.deleteMessage(msg.id),
+            onKick: (msg) => moderation.kick(msg.uid, deviceOf(msg.uid)),
+            onBan: (msg) => moderation.ban(msg.uid, deviceOf(msg.uid)),
+          } : undefined}
+        />
+        {moderation.canModerate && (
+          <div className="px-3 py-2 border-t border-[#ff6b6b]/20 flex flex-wrap items-center gap-2">
+            <span className="font-mono text-[10px] tracking-widest text-[#ff6b6b]/70">SLOW</span>
+            {SLOW_MODE_CHOICES.map((s) => (
+              <button
+                key={s}
+                type="button"
+                onClick={() => moderation.setChat({ slowModeS: s })}
+                aria-pressed={station.slow_mode_s === s}
+                className={`px-2 min-h-[44px] font-mono text-[10px] tracking-widest transition-colors ${
+                  station.slow_mode_s === s ? 'text-white border border-white/40' : 'text-[#888] hover:text-white'
+                }`}
+              >
+                {s === 0 ? 'OFF' : `${s}s`}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => moderation.setChat({ locked: !station.locked })}
+              aria-pressed={station.locked}
+              className={`px-2 min-h-[44px] font-mono text-[10px] tracking-widest border transition-colors ${
+                station.locked
+                  ? 'text-[#ff6b6b] border-[#ff6b6b]/60'
+                  : 'text-[#888] border-white/15 hover:text-white'
+              }`}
+            >
+              {station.locked ? 'CHAT LOCKED' : 'LOCK CHAT'}
+            </button>
+          </div>
+        )}
+        {moderation.error && (
+          <p role="alert" className="px-3 py-1 font-mono text-[10px] text-[#ff6b6b]">
+            {moderation.error}
+          </p>
+        )}
+        <PresenceList
+          presenceList={presenceList}
+          count={count}
+          uid={uid}
+          onRename={handleRename}
+          moderation={moderation.canModerate ? {
+            onKick: (entry) => moderation.kick(entry.uid, entry.deviceId),
+            onBan: (entry) => moderation.ban(entry.uid, entry.deviceId),
+          } : undefined}
+        />
         <ChatInput
           onSend={handleSend}
           sending={sending}
           sendError={sendError}
-          disabled={station.locked}
+          // A locked room still lets the host speak (chat_allowed exempts admins).
+          disabled={station.locked && !moderation.canModerate}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
         />
@@ -226,6 +305,8 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange }:
           CHAT
         </button>
       </div>
+
+      {hostLoginOpen && <HostLoginSheet supabase={supabase} onClose={() => setHostLoginOpen(false)} />}
     </div>
   );
 }

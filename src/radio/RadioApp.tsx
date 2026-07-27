@@ -69,11 +69,18 @@ function makeSupabase() {
 const supabaseClient = makeSupabase();
 
 function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
-  const [view, setView] = useState<'loading' | 'gate' | 'room' | 'banned'>('loading');
+  const [view, setView] = useState<'loading' | 'gate' | 'room' | 'banned' | 'kicked'>('loading');
   const [identity, setIdentity] = useState<Identity | null>(null);
   const [uid, setUid] = useState<string | null>(null);
   const station = useStation(supabase);
   const getServerTime = useServerClock(supabase);
+
+  // The broadcast's identity, and the ONLY value allowed to drive re-entry. Keyed on startedAt,
+  // NOT cfSessionId: a host network drop re-publishes and mints a new cfSessionId mid-show, which
+  // used to kick everyone back to the gate. Only a host go-live after an end-broadcast changes
+  // startedAt. Declared once and shared by both checks below plus the store on entry — when the
+  // mount check and the store read different fields, every returning listener got re-gated.
+  const broadcastId = station?.mode === 'live' ? station.live_session?.startedAt : undefined;
 
   useEffect(() => {
     if (localStorage.getItem('radio_banned') === '1') {
@@ -84,8 +91,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
       const storedIdentity = getOrCreateIdentity();
       // Per-broadcast identity: a saved identity only carries over within the broadcast it was
       // picked for. A different (or first) live broadcast forces a fresh name/avatar pick.
-      const liveId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
-      const force = shouldForceReentry(liveId, getIdentitySession());
+      const force = shouldForceReentry(broadcastId, getIdentitySession());
       if (session && storedIdentity && !force) {
         setIdentity(storedIdentity);
         setUid(session.user.id);
@@ -100,10 +106,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
   }, [supabase]);
 
   // A new broadcast starting forces re-entry even if the viewer was already in the room or
-  // sitting on standby. Keyed on startedAt, NOT cfSessionId: a host network drop re-publishes
-  // and mints a new cfSessionId mid-show, which used to kick everyone back to the gate. Only a
-  // host go-live after an end-broadcast changes startedAt.
-  const broadcastId = station?.mode === 'live' ? station.live_session?.startedAt : undefined;
+  // sitting on standby (broadcastId is declared above, shared with the mount check).
   useEffect(() => {
     if (view === 'banned' || view === 'loading') return;
     if (shouldForceReentry(broadcastId, getIdentitySession())) {
@@ -136,6 +139,22 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
     );
   }
 
+  if (view === 'kicked') {
+    return (
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center px-4">
+        <section className="section-border max-w-md w-full p-8 text-center">
+          <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground">
+            // SUBSPACE RADIO LIVE
+          </p>
+          <h1 className="font-display text-3xl mt-4">REMOVED FROM ROOM</h1>
+          <p className="font-mono text-xs mt-4 leading-relaxed text-muted-foreground">
+            You were removed by the host.
+          </p>
+        </section>
+      </main>
+    );
+  }
+
   if (view === 'gate') {
     return (
       <EntryGate
@@ -160,7 +179,14 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
             <p className="font-mono text-xs tracking-widest">LOADING...</p>
           </main>
         ) : station.mode === 'live' ? (
-          <LiveRoom supabase={supabase} identity={identity} uid={uid} station={station} onIdentityChange={setIdentity} />
+          <LiveRoom
+            supabase={supabase}
+            identity={identity}
+            uid={uid}
+            station={station}
+            onIdentityChange={setIdentity}
+            onRemoved={setView}
+          />
         ) : (
           <StandbyScreen supabase={supabase} getServerTime={getServerTime} />
         )}
