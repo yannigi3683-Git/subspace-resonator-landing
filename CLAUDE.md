@@ -316,7 +316,9 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 
 **Stable tags:** `radio-stable-2026-06-25` (current prod), `guest-audio-stable-v1` / `radio-guest-stable-2026-06-23` (the audio-cut-fix reference). Roll back to a tag if prod regresses.
 
-**Host operation manual:** printable 4-page host guide (Voicemeeter wiring, Go-Live flow, preflight, Spotify routing, deep-buffer restreamer + DJ-from-any-device). Source of truth is `restreamer/guide/build_guide.py` (reportlab); `python build_guide.py` re-renders `Voicemeeter-Broadcast-Guide.pdf`. Working copy also lives on the desktop. Update the script whenever the broadcast flow changes. See `restreamer/guide/README.md`.
+**Host operation manual:** printable 5-page host guide (Voicemeeter wiring, Go-Live flow, preflight, Spotify routing, deep-buffer restreamer + DJ-from-any-device, leaving the PC while on air). Source of truth is `restreamer/guide/build_guide.py` (reportlab); `python build_guide.py` re-renders `Voicemeeter-Broadcast-Guide.pdf`. Working copy also lives on the desktop. Update the script whenever the broadcast flow changes. See `restreamer/guide/README.md`.
+
+**Windows session rules while on air (page 5 of the guide, tested 2026-07-26 on production):** `Win+L` lock is **safe** (proven: a listener on mobile data kept audio for 7+ minutes with the host PC locked). **Logging out kills the show** - Windows terminates the whole session, so Chrome, Voicemeeter and the restreamer all die and listeners get a connection error; the station row stays LIVE because no END BROADCAST fired, so recovery is DOWNLOAD CHAT LOG, END BROADCAST, then GO LIVE fresh. **Switching Windows users** hands the audio endpoints to the new console session: the connection and restreamer stay up but Voicemeeter capture goes silent, and nothing warns you because Opus still encodes silence above the `bps < 20_000` degraded threshold in `publisher.ts`. Untested with the built-in host player, whose file path (`hostMixer.ts`: `<audio>` → `createMediaElementSource` → `createMediaStreamDestination`) never touches a Windows capture device.
 
 ---
 
