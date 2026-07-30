@@ -27,8 +27,8 @@ interface LiveRoomProps {
 }
 
 export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, onRemoved }: LiveRoomProps) {
-  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
-  const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.cfSessionId, station.live_session?.startedAt);
+  const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.startedAt);
+  const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.startedAt);
   const { presenceList, count, isKicked, isBanned, rename } = usePresence(supabase, identity, uid);
   const moderation = useModeration(supabase);
   const [hostLoginOpen, setHostLoginOpen] = useState(false);

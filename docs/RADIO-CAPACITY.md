@@ -15,22 +15,23 @@ Plain-language guide. No jargon. Read top to bottom.
 This is the thing half-remembered as *"if I make a real user I get more capacity, mine is a test
 one."* The "test user" is the **guest login**, and it is what's capped.
 
-## The fix you do yourself (5 minutes, free, no code)
+## The fix — DONE, confirmed 2026-07-30
 
-Raise the guest-login cap in the Supabase dashboard:
+The cap is already raised. Checked in the dashboard: **"Rate limit for anonymous users" = 300
+requests/h**, up from the default 30. Nothing to do here unless someone changes it back.
 
-1. Go to **[supabase.com/dashboard](https://supabase.com/dashboard)** and sign in.
-2. Open the project named for the radio (id `lgcmbmlapksmdbkhkyyv`).
-3. Left menu: **Authentication**.
-4. Open **Rate Limits** (sometimes under "Auth" settings / "Attack Protection").
-5. Find **"Rate limit for anonymous sign-ins"**. It will say **30** (per hour).
-6. Change it to **300**. That is plenty of headroom for a 100-person room plus people who
-   retry or re-tune during the night.
-7. If you also see limits called **"Token verification"** or **"Token refresh"**, raise those
-   the same way (e.g. to a few hundred).
-8. Click **Save**. It takes effect immediately. No deploy, no waiting.
+To re-check it, or after any Supabase plan change:
+[Rate Limits for this project](https://supabase.com/dashboard/project/lgcmbmlapksmdbkhkyyv/auth/rate-limits).
+Sitting alongside it, also confirmed healthy: token refreshes at 150 per 5 min per IP (1800/hour),
+so that is not a second bottleneck.
 
-That single change should clear the wall you hit.
+**The number is per hour PER IP ADDRESS, not per project.** This matters more than the number:
+
+- Listeners on their own phones and home networks each get their own 300/hour. Effectively
+  unlimited for any crowd you will draw.
+- A room of people on ONE shared wifi (a venue, a party, a campus) all spend from a single
+  300/hour bucket. That is still 10x the old 30, which is what produced the wall below.
+- Your own broadcast PC shares its budget with everyone else in the house.
 
 ## What the code change does (already shipped on this branch)
 

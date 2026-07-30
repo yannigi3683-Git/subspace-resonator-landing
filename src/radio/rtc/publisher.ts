@@ -44,6 +44,13 @@ export class Publisher {
   }
 
   async connect(stream: MediaStream, title?: string): Promise<void> {
+    // The reconnect FSM calls connect() again on a dropped broadcast. Without this the old PC
+    // stayed open with its onconnectionstatechange handler still attached (reading the NEW pc),
+    // and each reconnect leaked another 3s stats interval — the leaked loops then split the
+    // bytesSent/time counters between them and pushed the `bps < 20_000` check into a false
+    // "degraded". Reuse disconnect(): it already closes the PC and clears the interval.
+    this.disconnect();
+
     // Sunday-anchor transport: policy 'all' with no explicit ICE servers (Cloudflare is
     // ICE-lite and carries the reachable candidates in the offer/answer SDP). App STUN/TURN
     // only adds competing candidate pairs that ICE renominates between, causing 1-5s media

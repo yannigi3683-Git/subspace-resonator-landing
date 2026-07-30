@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-26 baseline: 57 files, 462 tests — in-room moderation merged on top of chat retention and the host chat-log button; GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-30 baseline: 58 files, 474 tests — the deep-buffer status badge on top of the 2026-07-26 in-room moderation baseline of 57 files / 462 tests; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
@@ -205,9 +205,10 @@ Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` t
 `index.html` has a static title, description, and apple-touch-icon for non-JS crawlers (Twitterbot, LinkedIn, Slack). The `apple-touch-icon` points to `/apple-touch-icon.png` (180x180 opaque square PNG, generated from favicon.svg).
 
 ### After each deploy
-1. Update `public/sitemap.xml` `lastmod` to the deploy date.
-2. Submit sitemap to Google Search Console: https://search.google.com/search-console
-3. Run Google Rich Results Test on the live URL.
+1. **Only if the deploy changed what a visitor sees** on a page listed in `public/sitemap.xml`, set that page's `lastmod` to today. `lastmod` means "when this page's content last changed", NOT "when the site was last deployed" — a deploy that only touches the restreamer, host-console internals, docs, tests or tooling changes nothing a crawler cares about, so leave `lastmod` alone. An untrue `lastmod` is worse than an old one: crawlers discount the signal from sites that bump it every deploy, which costs you the signal on the day the page really does change. (`/` sitting at an old date is correct, not stale, until the landing page itself changes.)
+2. Steps 3-4 only apply when step 1 actually fired. A radio-only or docs-only deploy is finished here.
+3. Submit sitemap to Google Search Console: https://search.google.com/search-console
+4. Run Google Rich Results Test on the live URL.
 
 ---
 
@@ -283,10 +284,13 @@ Live browser radio in `src/radio/`. Host broadcasts from `radio.html#admin` (Adm
 - Listener **jitter buffer** starts at **3000ms** (`subscriber.ts` `bufferMs = 3000`, `useListenerAudio.ts` `useRef(3000)`), capped `Math.min(bufferMs, 4000)`. Host can broadcast a different buffer live (`room:control`/`buffer`); host slider default `hostPrefs.ts bufferSec = 5`. 2000ms underran → cuts; 3000ms is the proven floor.
 - Listener does NOT reactively reconnect on a transient blip ("Sunday leave-alone"). A real connect-phase ERROR shows TAP/RETRY; after a phone lock the resume tap rebuilds the connection (`wasBackgrounded` → `retryKey`).
 
+**Broadcast identity = `startedAt`, NOT `cfSessionId` (fixed 2026-07-26):** a host network drop drives the reconnect FSM to call `publisher.connect()` again, which re-POSTs `publish-offer` and mints a **new `cfSessionId` mid-show**. That is the same broadcast, so `broadcastStartedAt()` in `api/rtc-session.ts` carries the existing `startedAt` forward and only stamps a new one on a go-live from off-air. Anything that must survive a host reconnect keys on `startedAt`: listener re-entry (`RadioApp.tsx`), `useChat.ts`, `useReactions.ts`. Anything genuinely tied to the SFU connection still keys on `cfSessionId`: `useListenerAudio.ts` (a new CF session really is a new track to pull) and the restreamer's `decideAction`. Before this fix, one blip re-stamped `startedAt`, which hid the whole broadcast's chat behind RLS `chat_visible()` and kicked every listener back to the entry gate — it read as "the broadcast stopped and chat was erased". Nothing was ever deleted.
+- `publisher.connect()` calls `this.disconnect()` first. Without it every reconnect leaked the old PC (handler still attached) plus another 3s stats interval, and the leaked loops split the byte counters into a false "degraded".
+
 **Now-playing:** track name folds into the stage banner (`DanceFloor.tsx` → `NowPlaying.tsx`), peeks 15s/min (`nowPlaying.ts peekVisibleAt`), and **marquees** long titles (`.radio-np-marquee` in `radio.css`, overflow-measured). PA speakers sit just under the full-width banner (`PaStack`, `top-[88px]`).
 - **Latent feature — DO NOT delete:** host cover-art extraction (`artwork.ts`, `extractArtwork`) + the now-playing display-mode selector (`npMode` in `GoLivePanel.tsx`) are kept for future re-enable; the listener just ignores the broadcast `art`/`mode` fields. Old floating `NowPlayingCard.tsx` recoverable from git (`87d8fcc~1`).
 
-**Chat:** mid-broadcast joiners load the whole broadcast's history — floored at `station.live_session.startedAt` (written server-side on Go-Live in `api/rtc-session.ts`), see `chatReloadFloor` in `chatRules.ts`. Chat body has `dir="auto"` for Hebrew RTL. Messages insert straight into Supabase `chat_messages` and stream back via Realtime `postgres_changes`; body renders as escaped React text (never HTML).
+**Chat:** mid-broadcast joiners load the whole broadcast's history — floored at `station.live_session.startedAt` (written server-side on Go-Live in `api/rtc-session.ts`, and preserved across a host reconnect — see broadcast identity above), see `chatReloadFloor` in `chatRules.ts`. Chat body has `dir="auto"` for Hebrew RTL. Messages insert straight into Supabase `chat_messages` and stream back via Realtime `postgres_changes`; body renders as escaped React text (never HTML).
 
 **Chat platform features (`feat/chat-upgrades`, 2026-07-18):**
 - **Emoji picker** — desktop Smile-button popover, curated grid in `emojiSet.ts` (`EMOJI`), inserts at the textarea caret. Plain Unicode, no dependency, no schema.
@@ -310,9 +314,22 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 - **Console MODERATION tab is still a placeholder** — deliberate. The same hook and props drop into it as a follow-up.
 - **A kick must UNMOUNT the room, not swap its screen.** `LiveRoom` used to render REMOVED FROM ROOM / SIGNAL BLOCKED from an early return, which left every hook above it running: `usePresence` kept tracking (so the kicked listener never left the host's room list) and `useListenerTransport` kept playing. A kick looked like it did nothing. Removal is now escalated to `ListenerApp` via `onRemoved`, which unmounts `LiveRoom` and renders the screen itself. Tests assert the escalation, not the screen — asserting the screen is what hid this for a month.
 
-**Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
+**RLS: audit the LIVE database, never the schema file (2026-07-26/27).** PERMISSIVE policies are OR'd, so one policy with a `true` qual/with_check silently cancels every strict policy on that table, and a policy added by hand in the dashboard is invisible to this repo — re-running `radio-schema.sql` adds and replaces, it never removes. Four such policies were found by audit: `chat_insert_own` (with_check `true`, cancelled every ban/slow/lock), `chat_read_all` (qual `true`, exposed every past broadcast's chat), `station_admin_write` (for all, `has_role(admin)` only, cancelled the `is_admin_aal2()` requirement on station_write) and a duplicate `station_public_read`. All four are now dropped explicitly in `radio-schema.sql` so applying the schema RESTORES enforcement. `reactions_read` was separately tightened from `using (true)` to the visibility of its parent message — bodies were protected by `chat_visible()`, but reaction rows (`message_id`/`uid`/`device_id`/`emoji`) from past broadcasts were not. Audit before trusting any restriction:
+```sql
+select tablename, policyname, cmd, permissive, qual, with_check
+from pg_policies
+where tablename in ('chat_messages','chat_reactions','bans','kicks','station')
+order by tablename, policyname;
+```
+Anything PERMISSIVE with a bare `true` is a hole. Reading the policy proves it is written; only a denied attempt (ban a test device mid-broadcast, confirm the send fails) proves it is enforced.
 
-**Listener capacity (the real ceiling):** NOT Cloudflare (bandwidth-only free tier, fine for hundreds) and NOT any code cap (none exists). The wall is **Supabase free-tier auth**: each listener does an anonymous sign-in, capped at **30/hour by default** — raise it in Supabase Dashboard → Authentication → Rate Limits (guest sign-ins → ~300/hr). This was the "test user vs real user" capacity question. `api/rtc-session.ts` caches token verification 60s (fewer getUser calls) and returns a `reason` (`rate_limited` vs `invalid_token`) so a rejection is provable in logs; EntryGate shows a calm "Room is busy" message on a rate-limit. Load-test with `scripts/radio-loadtest.mjs <url> <count>`. Full owner guide: `docs/RADIO-CAPACITY.md`. Beyond ~150, use the HLS restream. (Vercel keeps runtime logs only briefly — instrument before the broadcast, not after.)
+**Known constraint (unfixable in-browser), and what solves it:** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. The resume tap reconnects on reopen as the in-browser mitigation. The actual fix is **built and in routine use**: the deep-buffer HLS restreamer (`restreamer/`, see below). It only applies while that program is running on a PC; with it off, the constraint above is exactly as stated.
+
+**Deep-buffer restreamer (`restreamer/`) — the host's view of it.** A standalone Node service that pulls the show off the SFU as an anonymous listener, transcodes to HLS, uploads to R2, and writes `station.live_session.streamUrl`. It touches no audio device and no local capture, so **it does not care which device the host DJs from** — `decideAction` (`restreamer/src/station.mjs`) polls the `station` row every 3s and starts/stops itself when the server flips `mode`. GO LIVE *is* its trigger; there is nothing to press. Its one manual step is a double-click of `start-restreamer.bat` on one Windows PC. Operating instructions: `restreamer/HOW-TO-RUN.md`.
+
+**DEEP BUFFER badge (host console).** `live_session.streamUrl` is now read by the host too, not just listeners: `useDeepBufferStatus.ts` + the pure reducer `src/radio/hls/deepBufferProbe.ts` drive an OFF / STARTING / ON / STALLED badge beside ON AIR in `GoLivePanel.tsx`. It exists because the restreamer's console window is invisible when the host broadcasts from another device — GO LIVE remotely used to mean hoping. **It probes liveness, it does not trust the URL:** a restreamer PC that loses power never clears `streamUrl`, so a URL-only badge would show green over silence. It re-fetches the `.m3u8` every 10s and checks the body changed; frozen 15s reads `STALLED` (same signal `shouldFallback` in `useListenerTransport.ts` uses to drop listeners back to WebRTC). Read-only: no server code, no schema, no new permissions, inert off air and when no `streamUrl` is advertised. Verified live 2026-07-30 (green, then STALLED on killing the restreamer mid-broadcast).
+
+**Listener capacity (the real ceiling):** NOT Cloudflare (bandwidth-only free tier, fine for hundreds) and NOT any code cap (none exists). The wall is **Supabase free-tier auth**: each listener does an anonymous sign-in, capped at **30/hour by default**. **Raised and confirmed 2026-07-30: 300 requests/h, and it is per hour PER IP ADDRESS, not per project** (Supabase Dashboard → Authentication → Rate Limits). Per-IP is the part that matters: separate devices on separate networks each get their own 300, while a whole room on one venue wifi shares a single bucket. Token refreshes sit at 150/5min per IP (1800/h), so they are not a second bottleneck. **Captcha is OFF** (Authentication → Attack Protection, confirmed 2026-07-30): the app still renders `TurnstileWidget` in `EntryGate.tsx` and `AdminGate.tsx` and still passes a token, but Supabase verifies nothing, so it is decorative. Harmless — `EntryGate` treats captcha as best-effort and never blocks entry on it — but anonymous sign-ups are bot-mintable up to the same 300/h per IP. This was the "test user vs real user" capacity question. `api/rtc-session.ts` caches token verification 60s (fewer getUser calls) and returns a `reason` (`rate_limited` vs `invalid_token`) so a rejection is provable in logs; EntryGate shows a calm "Room is busy" message on a rate-limit. Load-test with `scripts/radio-loadtest.mjs <url> <count>`. Full owner guide: `docs/RADIO-CAPACITY.md`. Beyond ~150, use the HLS restream. (Vercel keeps runtime logs only briefly — instrument before the broadcast, not after.)
 
 **Stable tags:** `radio-stable-2026-06-25` (current prod), `guest-audio-stable-v1` / `radio-guest-stable-2026-06-23` (the audio-cut-fix reference). Roll back to a tag if prod regresses.
 
@@ -326,7 +343,9 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 
 - **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
 - **Debut album JSON-LD** — add structured data once the album is released.
-- **Radio lock-screen audio** — server-side restream (HLS/Icecast/Cloudflare Stream Live) so listener audio survives a phone lock. Big, separate project; see the scoping spec under `docs/superpowers/specs/`.
+- **Restreamer remote start** — starting it is a physical double-click on one Windows PC. There is no way to start it while away, and no single-instance guard if two copies are ever launched. The documented (not set up) workaround is a Task Scheduler background task, see the appendix in `restreamer/HOW-TO-RUN.md`.
+- **R2 lifecycle rule** — nothing ever deletes HLS objects; each broadcast writes a fresh `<cfSessionId>/` prefix and they accumulate forever. A bucket lifecycle rule, not code.
+- **`npm run lint` is broken** — the repo has no `eslint.config.js` and no eslint dependency, so the documented command fails on every branch. `npm run build` (`tsc -b`) is the only type/quality gate today.
 
 ---
 
@@ -340,3 +359,7 @@ Key specs on record:
 - `2026-06-04-uxaudit-fixes-design.md` — 13-finding UX audit (implemented)
 - `2026-06-13-quick-access-links-design.md` — clickable Music Archive release rows (implemented)
 - `2026-07-18-guest-chat-upgrades-design.md` — radio chat emoji picker, reply, reactions, GIFs (implemented on `feat/chat-upgrades`)
+
+Owner manuals / recaps:
+- `docs/RADIO-CAPACITY.md` — how many listeners the radio holds + how to raise it (Supabase anon sign-in cap). The answer to the "how many can I host" question.
+- `docs/superpowers/recaps/2026-07-19-radio-capacity-recap.md` — capacity diagnosis + fix (shipped to prod, PR #7). Root cause = Supabase free-tier anon sign-in rate limit, NOT Cloudflare, NOT a code cap.

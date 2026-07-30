@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAdminAal2, findBan, firstMid, classifyAuthError, readTokenCache, writeTokenCache } from './rtc-session';
+import { checkAdminAal2, findBan, firstMid, classifyAuthError, readTokenCache, writeTokenCache, broadcastStartedAt } from './rtc-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // checkAdminAal2 reads the role through the security-definer has_role() RPC, which
@@ -110,6 +110,37 @@ describe('token cache', () => {
 
   it('returns null for a token never cached', () => {
     expect(readTokenCache(`missing-${Math.random()}`)).toBeNull();
+  });
+});
+
+// Regression guard for the 2026-07-26 incident: a host network drop re-published mid-show and
+// stamped a fresh startedAt, which hid the whole broadcast's chat (RLS chat_visible floors on it)
+// and kicked every listener back to the entry gate.
+describe('broadcastStartedAt', () => {
+  const NOW = '2026-07-26T15:00:00.000Z';
+  const SHOW_START = '2026-07-26T12:43:00.000Z';
+
+  it('carries startedAt forward when a live broadcast re-publishes (reconnect)', () => {
+    const prev = { mode: 'live', live_session: { cfSessionId: 'old-cf', startedAt: SHOW_START } };
+    expect(broadcastStartedAt(prev, NOW)).toBe(SHOW_START);
+  });
+
+  it('stamps a new startedAt on a go-live from off-air', () => {
+    expect(broadcastStartedAt({ mode: 'off', live_session: null }, NOW)).toBe(NOW);
+  });
+
+  it('stamps a new startedAt when there is no station row at all', () => {
+    expect(broadcastStartedAt(null, NOW)).toBe(NOW);
+  });
+
+  it('stamps a new startedAt when a live row somehow has no startedAt', () => {
+    const prev = { mode: 'live', live_session: { cfSessionId: 'cf' } };
+    expect(broadcastStartedAt(prev, NOW)).toBe(NOW);
+  });
+
+  it('does not resurrect startedAt from a stale live_session left on an off-air station', () => {
+    const prev = { mode: 'off', live_session: { cfSessionId: 'cf', startedAt: SHOW_START } };
+    expect(broadcastStartedAt(prev, NOW)).toBe(NOW);
   });
 });
 

@@ -171,6 +171,17 @@ language sql stable security definer set search_path = public as $$
 $$;
 
 -- 7. RLS policies (drop-then-create: valid Postgres, idempotent)
+
+-- Same trap as the chat policies below, found by pg_policies audit on 2026-07-26: the live DB
+-- carried two hand-added station policies that were never in this file. `station_admin_write`
+-- (for all, has_role(admin) only) OR'd with station_write and cancelled its is_admin_aal2()
+-- requirement, so an admin session without MFA step-up could flip the station live/off or
+-- rewrite live_session. `station_public_read` merely duplicated station_read. Nothing needs
+-- either: the browser only SELECTs this row (useStation.ts), and every write comes from
+-- api/rtc-session.ts or the restreamer on the service key, which bypasses RLS entirely.
+drop policy if exists station_admin_write on station;
+drop policy if exists station_public_read on station;
+
 drop policy if exists station_read on station;
 create policy station_read on station for select using (true);
 drop policy if exists station_write on station;
@@ -217,8 +228,17 @@ create policy chat_insert on chat_messages for insert to authenticated
 drop policy if exists chat_delete on chat_messages;
 create policy chat_delete on chat_messages for delete using (is_admin_aal2());
 
+-- Reactions follow the visibility of the message they hang on. `using (true)` shipped here by
+-- mistake: message BODIES were protected by chat_visible(), but every reaction row (message_id,
+-- uid, device_id, emoji) from every past broadcast stayed readable by any signed-in listener.
+-- chat_reactions_msg_idx keeps this exists() cheap.
 drop policy if exists reactions_read on chat_reactions;
-create policy reactions_read on chat_reactions for select using (true);
+create policy reactions_read on chat_reactions for select using (
+  exists (
+    select 1 from chat_messages m
+    where m.id = chat_reactions.message_id and chat_visible(m.created_at)
+  )
+);
 drop policy if exists reactions_insert on chat_reactions;
 create policy reactions_insert on chat_reactions for insert to authenticated
   with check (uid = auth.uid() and reaction_allowed(device_id));

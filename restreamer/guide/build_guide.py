@@ -290,8 +290,8 @@ e_steps = [
     ("Go Live as normal",
      "Run the Voicemeeter + Go-Live flow on pages 1-2 exactly as always."),
     ("Wait for the deep buffer to turn on",
-     "Watch the black window until it prints “streamUrl published: ...”, about 30 seconds after Go Live. "
-     "That is the deep buffer turning on."),
+     "Watch the DEEP BUFFER badge beside ON AIR in the console: amber STARTING, then green ON, about 30 "
+     "seconds after Go Live. Green reads the same from any device, so you do not need to be at that PC."),
     ("Now send the guest link",
      "Guests get instant sound and then upgrade to the deep buffer on their own. Anyone already waiting upgrades too."),
     ("End of show",
@@ -310,12 +310,15 @@ for i, (t, b) in enumerate(e_steps):
 h1 = callout(c, bx, ey - 4*mm, bw, "DJ from your phone or another computer",
         "The restreamer PC and the DJ device are separate. Go Live from any device with internet (phone browser, "
         "second laptop). The restreamer finds your show by its Cloudflare session id, not by which device you are on. "
-        "Only rule: one PC must run the black window the whole show.", min_h=24*mm)
+        "Only rule: one PC must run the black window the whole show. Someone else switching Windows users on that PC "
+        "is safe, it uses no sound card; signing you out or shutting down is not.", min_h=26*mm)
 
-callout(c, bx, ey - 4*mm - h1 - 5*mm, bw, "Keep the restreamer PC awake",
-        "Set Windows sleep to Never while plugged in. If that PC sleeps or crashes, listeners drop back to plain "
-        "WebRTC on their own, they are never left in silence. If it crashes the window restarts it in 3 seconds.",
-        min_h=22*mm)
+callout(c, bx, ey - 4*mm - h1 - 5*mm, bw, "What the DEEP BUFFER badge means",
+        "Grey OFF = no deep-buffer stream, listeners on plain WebRTC. Amber STARTING = coming up, wait. "
+        "Green ON = listeners have the deep buffer, send the guest link. Amber STALLED = the restreamer PC died or "
+        "slept; listeners fall back to plain WebRTC on their own, never silence. Set Windows sleep to Never while "
+        "plugged in. The badge re-checks the stream every 10s, so green never lies.",
+        min_h=28*mm)
 
 footer(c, 4)
 c.showPage()

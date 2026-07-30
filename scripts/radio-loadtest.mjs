@@ -15,11 +15,14 @@
 //   SUPABASE_ANON_KEY      (or VITE_SUPABASE_PUBLISHABLE_KEY)
 //
 // PREREQUISITES:
-//   1. Raise the Supabase anonymous sign-in rate limit first (that's what you're testing).
-//   2. The project has Turnstile captcha on sign-in. A script can't solve a captcha, so
-//      TEMPORARILY disable captcha (Supabase → Authentication → Attack Protection) for the
-//      test window, then re-enable it. If you see "captcha" errors below, that's why.
-//   3. Point at a PREVIEW url, not production — this creates throwaway anon users.
+//   1. The anonymous sign-in rate limit is already raised: 300/h, confirmed 2026-07-30. It is
+//      per hour PER IP, so this script spends the budget of the machine you run it from.
+//   2. Captcha is currently OFF (Supabase → Authentication → Attack Protection, confirmed
+//      2026-07-30), so no captcha step is needed. If that is ever re-enabled, a script cannot
+//      solve one: disable it for the test window, then turn it back on. "captcha" errors below
+//      mean it was switched back on.
+//   3. Point at a PREVIEW url, not production — this creates throwaway anon users. Delete them
+//      afterwards (Authentication → Users) or they accumulate in the project.
 
 import { createClient } from '@supabase/supabase-js';
 
