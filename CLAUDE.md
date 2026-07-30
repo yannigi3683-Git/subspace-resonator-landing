@@ -205,9 +205,10 @@ Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` t
 `index.html` has a static title, description, and apple-touch-icon for non-JS crawlers (Twitterbot, LinkedIn, Slack). The `apple-touch-icon` points to `/apple-touch-icon.png` (180x180 opaque square PNG, generated from favicon.svg).
 
 ### After each deploy
-1. Update `public/sitemap.xml` `lastmod` to the deploy date.
-2. Submit sitemap to Google Search Console: https://search.google.com/search-console
-3. Run Google Rich Results Test on the live URL.
+1. **Only if the deploy changed what a visitor sees** on a page listed in `public/sitemap.xml`, set that page's `lastmod` to today. `lastmod` means "when this page's content last changed", NOT "when the site was last deployed" — a deploy that only touches the restreamer, host-console internals, docs, tests or tooling changes nothing a crawler cares about, so leave `lastmod` alone. An untrue `lastmod` is worse than an old one: crawlers discount the signal from sites that bump it every deploy, which costs you the signal on the day the page really does change. (`/` sitting at an old date is correct, not stale, until the landing page itself changes.)
+2. Steps 3-4 only apply when step 1 actually fired. A radio-only or docs-only deploy is finished here.
+3. Submit sitemap to Google Search Console: https://search.google.com/search-console
+4. Run Google Rich Results Test on the live URL.
 
 ---
 
