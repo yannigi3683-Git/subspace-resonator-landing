@@ -640,4 +640,57 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
       );
     });
   });
+
+  // The restreamer runs on a different machine, so its console window is invisible when the host
+  // broadcasts from elsewhere. These assert the wiring only; the state machine itself is covered
+  // by deepBufferProbe.test.ts.
+  describe('deep-buffer status badge', () => {
+    async function goLive() {
+      mockPublisherConnect.mockImplementation(async () => {
+        await Promise.resolve();
+        publisherCallbacksRef.current?.onSessionReady('cf-deep-buffer');
+      });
+      render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+      await waitFor(() => screen.getByTestId('go-live-btn'));
+      fireEvent.click(screen.getByTestId('go-live-btn'));
+      await waitFor(() => screen.getByTestId('end-btn'), { timeout: 3000 });
+    }
+
+    function liveStationWith(streamUrl?: string) {
+      vi.mocked(useStation).mockReturnValue({
+        mode: 'live',
+        live_title: 'Test',
+        live_session: { cfSessionId: 'cf-deep-buffer', ...(streamUrl ? { streamUrl } : {}) },
+        slow_mode_s: 0,
+        locked: false,
+      } as ReturnType<typeof useStation>);
+    }
+
+    it('shows OFF and never fetches when the station advertises no stream', async () => {
+      const fetchSpy = vi.spyOn(globalThis, 'fetch');
+      liveStationWith();
+
+      await goLive();
+
+      expect(screen.getByTestId('deep-buffer-status')).toHaveTextContent('DEEP BUFFER: OFF');
+      expect(fetchSpy).not.toHaveBeenCalled();
+    });
+
+    it('probes the advertised playlist and reports STARTING on the first read', async () => {
+      const fetchSpy = vi
+        .spyOn(globalThis, 'fetch')
+        .mockResolvedValue(new Response('#EXTM3U\n#EXT-X-MEDIA-SEQUENCE:7\n', { status: 200 }));
+      liveStationWith('https://cdn.example/abc/stream.m3u8');
+
+      await goLive();
+
+      await waitFor(() =>
+        expect(screen.getByTestId('deep-buffer-status')).toHaveTextContent('DEEP BUFFER: STARTING'),
+      );
+      expect(fetchSpy).toHaveBeenCalledWith(
+        'https://cdn.example/abc/stream.m3u8',
+        expect.objectContaining({ cache: 'no-store' }),
+      );
+    });
+  });
 });
