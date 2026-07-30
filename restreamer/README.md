@@ -41,7 +41,14 @@ npm start                   # watch the station; restream while it's live
 
 ## Status
 
-- **Proven:** SFU pull (spike, 2026-07-04), HLS output spine (`npm run selfcheck`, green),
-  fMP4/CMAF format, state machine (`npm test`, 7/7).
-- **Not yet run end-to-end:** live pull → HLS → published `streamUrl` against staging, and the R2
-  sink (needs a bucket). Those are the staging integration step.
+**Shipped and in routine use.** Proven end-to-end on a real phone 2026-07-05: live SFU pull → HLS →
+published `streamUrl` → listener crossfade, against the production R2 sink (bucket `radio-hls`).
+Later fixes landed against that live sink (`c2015fb` R2 scan-overlap, `01b837d` 192k AAC).
+
+Host-facing operating instructions live in `HOW-TO-RUN.md`. The host sees whether this is running
+from the **DEEP BUFFER** badge in the console (`src/radio/admin/GoLivePanel.tsx`), which polls the
+published playlist rather than trusting `streamUrl`, so a PC that dies without clearing the row
+shows `STALLED` instead of a false green.
+
+Known gaps, deliberate: no remote start (a manual double-click on one Windows PC), no
+single-instance guard, and nothing ever deletes objects from R2 (a bucket lifecycle rule, not code).
