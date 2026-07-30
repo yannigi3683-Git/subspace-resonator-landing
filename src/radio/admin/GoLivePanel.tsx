@@ -13,11 +13,21 @@ import { loadHostPrefs, saveHostPrefs } from '../hostPrefs';
 import { extractArtwork } from '../artwork';
 import type { NowPlayingMode } from '../nowPlaying';
 import { useStation } from '../hooks/useStation';
+import { useDeepBufferStatus } from '../hooks/useDeepBufferStatus';
+import type { DeepBufferState } from '../hls/deepBufferProbe';
 // Shared with the server so the manual download and the automatic one on END BROADCAST
 // produce byte-identical files.
 import { buildChatTranscript, transcriptFilename, type TranscriptRow } from '../../../api/chatTranscript';
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
+
+// Deep-buffer badge. Colour follows the ON AIR badge convention below: 400 for text, 500 for the dot.
+const DEEP_BUFFER_UI: Record<DeepBufferState, { label: string; text: string; dot: string; glow: string }> = {
+  off: { label: 'DEEP BUFFER: OFF', text: 'text-muted-foreground', dot: 'bg-muted-foreground', glow: 'none' },
+  starting: { label: 'DEEP BUFFER: STARTING', text: 'text-amber-400', dot: 'bg-amber-500', glow: 'drop-shadow(0 0 4px #f59e0b)' },
+  on: { label: 'DEEP BUFFER: ON', text: 'text-green-400', dot: 'bg-green-500', glow: 'drop-shadow(0 0 4px #22c55e)' },
+  stalled: { label: 'DEEP BUFFER: STALLED', text: 'text-amber-400', dot: 'bg-amber-500', glow: 'drop-shadow(0 0 4px #f59e0b)' },
+};
 
 // Trigger a browser download of a text file (the broadcast's chat log) with no user prompt.
 function downloadTextFile(filename: string, text: string): void {
@@ -136,10 +146,19 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const filePlayingRef = useRef(false);
   filePlayingRef.current = filePlaying;
 
-  // The DB station row. Used only to detect a station left 'live' by a previous session
-  // (e.g. the host pressed F5 mid-broadcast, which kills the connection but not the DB flag).
+  // The DB station row. Detects a station left 'live' by a previous session (e.g. the host pressed
+  // F5 mid-broadcast, which kills the connection but not the DB flag), and carries the restreamer's
+  // advertised streamUrl.
   const station = useStation(supabase);
   const orphanedLive = status === 'idle' && station?.mode === 'live';
+
+  // Whether listeners are actually on the deep-buffer stream. The restreamer runs on another
+  // machine with no window to watch when the host is broadcasting from elsewhere, so this badge is
+  // the only signal that it picked the show up — and that it is still alive.
+  const deepBuffer = useDeepBufferStatus(
+    station?.live_session?.streamUrl,
+    status === 'live' || status === 'starting',
+  );
 
   // Read audio inputs. Before mic permission, entries have a deviceId but a blank label;
   // returns true if at least one device has a real (non-empty) label.
@@ -811,13 +830,27 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           // BROADCAST CONTROL
         </p>
         {status === 'live' && (
-          <span className="flex items-center gap-1.5 font-mono text-[11px] tracking-widest text-red-400">
+          <span className="flex items-center gap-4 flex-wrap justify-end">
             <span
-              className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"
-              style={{ filter: 'drop-shadow(0 0 4px #ef4444)' }}
-              aria-hidden="true"
-            />
-            ON AIR
+              data-testid="deep-buffer-status"
+              role={deepBuffer === 'stalled' ? 'alert' : undefined}
+              className={`flex items-center gap-1.5 font-mono text-[11px] tracking-widest ${DEEP_BUFFER_UI[deepBuffer].text}`}
+            >
+              <span
+                className={`inline-block w-2 h-2 rounded-full shrink-0 ${DEEP_BUFFER_UI[deepBuffer].dot}`}
+                style={{ filter: DEEP_BUFFER_UI[deepBuffer].glow }}
+                aria-hidden="true"
+              />
+              {DEEP_BUFFER_UI[deepBuffer].label}
+            </span>
+            <span className="flex items-center gap-1.5 font-mono text-[11px] tracking-widest text-red-400">
+              <span
+                className="inline-block w-2 h-2 rounded-full bg-red-500 animate-pulse shrink-0"
+                style={{ filter: 'drop-shadow(0 0 4px #ef4444)' }}
+                aria-hidden="true"
+              />
+              ON AIR
+            </span>
           </span>
         )}
       </div>
