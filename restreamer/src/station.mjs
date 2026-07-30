@@ -49,9 +49,14 @@ export function watchStation(supabase, onStation, { intervalMs = 3000, log = () 
 }
 
 // Merge streamUrl into the live_session jsonb (null clears it) so listeners flip to / off HLS.
-export async function setStreamUrl(supabase, streamUrl) {
+// This is a read-modify-write of the WHOLE jsonb with the service-role key, so it can clobber a
+// host publish-offer that lands between the read and the write — reverting live_session to a dead
+// cfSessionId and flapping every listener a second time. Pass the cfSessionId this call is for and
+// we bail if the host has since moved on. Omit it only for the unconditional boot clear.
+export async function setStreamUrl(supabase, streamUrl, forCfSessionId) {
   const station = await fetchStation(supabase);
   if (!station?.live_session) return;
+  if (forCfSessionId && station.live_session.cfSessionId !== forCfSessionId) return;
   const live_session = { ...station.live_session };
   if (streamUrl) live_session.streamUrl = streamUrl;
   else delete live_session.streamUrl;

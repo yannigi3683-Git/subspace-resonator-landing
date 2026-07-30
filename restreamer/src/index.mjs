@@ -11,7 +11,7 @@ import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
 import { startHls, rtpInputArgs } from './hls.mjs';
-import { makeCleanup } from './cleanup.mjs';
+import { makeCleanup, sweepStaleTempDirs } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
 
@@ -78,7 +78,7 @@ async function startFor(cfSessionId) {
     sink = { publicUrl: `${base}/stream.m3u8`, stop() { server.close(); } };
   }
 
-  const cleanupResources = makeCleanup({ ff, pull, sink, outDir });
+  const cleanupResources = makeCleanup({ ff, pull, sink, outDir, log });
 
   // If the stream never comes up, tear down THIS attempt's resources before bubbling the error —
   // otherwise ffmpeg keeps holding the RTP port and the next attempt fails to bind.
@@ -88,13 +88,13 @@ async function startFor(cfSessionId) {
     cleanupResources();
     throw e;
   }
-  await setStreamUrl(supabase, sink.publicUrl);
+  await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
   log('streamUrl published:', sink.publicUrl, '(rtp packets so far', pull.rtpCount() + ')');
 
   running = {
     cfSessionId,
     async stop() {
-      await setStreamUrl(supabase, null).catch((e) => log('clear streamUrl', e.message));
+      await setStreamUrl(supabase, null, cfSessionId).catch((e) => log('clear streamUrl', e.message));
       cleanupResources();
     },
   };
@@ -103,7 +103,7 @@ async function startFor(cfSessionId) {
     // ffmpeg died mid-show: drop streamUrl (listeners fall back to WebRTC) so the next poll restarts.
     if (running?.cfSessionId === cfSessionId) {
       log('ffmpeg exited', code, '- will restart on next poll');
-      setStreamUrl(supabase, null).catch(() => {});
+      setStreamUrl(supabase, null, cfSessionId).catch(() => {});
       cleanupResources();
       running = null;
     }
@@ -112,6 +112,15 @@ async function startFor(cfSessionId) {
 
 async function teardown() {
   if (running) { log('END', running.cfSessionId); await running.stop(); running = null; }
+}
+
+// On boot, reclaim temp dirs a previous run couldn't delete (ffmpeg's cwd was still held by the
+// dying process, see cleanup.mjs).
+try {
+  const swept = await sweepStaleTempDirs();
+  if (swept) log('swept', swept, 'stale temp dir(s) from a previous run');
+} catch (e) {
+  log('temp dir sweep failed', e.message);
 }
 
 // On boot, clear a streamUrl left over from a crashed/killed run (station is off but still points

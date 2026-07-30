@@ -56,7 +56,13 @@ export function updateIdentity(name: string, avatarId: string): Identity {
 
 const SESSION_KEY = 'radio_session';
 
-/** The broadcast (cfSessionId) the saved identity was last picked for, or null. */
+/**
+ * The broadcast the saved identity was last picked for, or null. The stored value is the
+ * broadcast id (`live_session.startedAt`), NOT cfSessionId — cfSessionId changes on a host
+ * reconnect mid-show, which would re-gate everyone. Whatever writes this must be the same value
+ * every reader compares against; storing one field and comparing another silently re-gated every
+ * returning listener.
+ */
 export function getIdentitySession(): string | null {
   try {
     return localStorage.getItem(SESSION_KEY);
@@ -65,9 +71,9 @@ export function getIdentitySession(): string | null {
   }
 }
 
-export function setIdentitySession(cfSessionId: string): void {
+export function setIdentitySession(broadcastId: string): void {
   try {
-    localStorage.setItem(SESSION_KEY, cfSessionId);
+    localStorage.setItem(SESSION_KEY, broadcastId);
   } catch {}
 }
 
@@ -76,8 +82,8 @@ export function setIdentitySession(cfSessionId: string): void {
  * from the one the saved identity was chosen for. Offline (no current id) never forces.
  */
 export function shouldForceReentry(
-  currentSessionId: string | null | undefined,
-  savedSessionId: string | null | undefined,
+  currentBroadcastId: string | null | undefined,
+  savedBroadcastId: string | null | undefined,
 ): boolean {
-  return !!currentSessionId && currentSessionId !== savedSessionId;
+  return !!currentBroadcastId && currentBroadcastId !== savedBroadcastId;
 }

@@ -75,6 +75,13 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
   const station = useStation(supabase);
   const getServerTime = useServerClock(supabase);
 
+  // The broadcast's identity, and the ONLY value allowed to drive re-entry. Keyed on startedAt,
+  // NOT cfSessionId: a host network drop re-publishes and mints a new cfSessionId mid-show, which
+  // used to kick everyone back to the gate. Only a host go-live after an end-broadcast changes
+  // startedAt. Declared once and shared by both checks below plus the store on entry — when the
+  // mount check and the store read different fields, every returning listener got re-gated.
+  const broadcastId = station?.mode === 'live' ? station.live_session?.startedAt : undefined;
+
   useEffect(() => {
     if (localStorage.getItem('radio_banned') === '1') {
       setView('banned');
@@ -84,8 +91,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
       const storedIdentity = getOrCreateIdentity();
       // Per-broadcast identity: a saved identity only carries over within the broadcast it was
       // picked for. A different (or first) live broadcast forces a fresh name/avatar pick.
-      const liveId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
-      const force = shouldForceReentry(liveId, getIdentitySession());
+      const force = shouldForceReentry(broadcastId, getIdentitySession());
       if (session && storedIdentity && !force) {
         setIdentity(storedIdentity);
         setUid(session.user.id);
@@ -99,17 +105,15 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [supabase]);
 
-  // A new broadcast starting (cfSessionId changes) forces re-entry even if the viewer was already
-  // in the room or sitting on standby. Keyed on the live broadcast id so the same broadcast never
-  // re-prompts; only a host go-live after an end-broadcast does.
-  const liveSessionId = station?.mode === 'live' ? station.live_session?.cfSessionId : undefined;
+  // A new broadcast starting forces re-entry even if the viewer was already in the room or
+  // sitting on standby (broadcastId is declared above, shared with the mount check).
   useEffect(() => {
     if (view === 'banned' || view === 'loading') return;
-    if (shouldForceReentry(liveSessionId, getIdentitySession())) {
+    if (shouldForceReentry(broadcastId, getIdentitySession())) {
       setIdentity(null);
       setView('gate');
     }
-  }, [liveSessionId, view]);
+  }, [broadcastId, view]);
 
   if (view === 'loading') {
     return (
@@ -158,7 +162,7 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
         onEntry={(id, userId) => {
           // Bind this pick to the current live broadcast so a close/reopen within the same
           // broadcast skips the gate; the next broadcast (new id) forces a fresh pick.
-          if (liveSessionId) setIdentitySession(liveSessionId);
+          if (broadcastId) setIdentitySession(broadcastId);
           setIdentity(id);
           setUid(userId);
           setView('room');
