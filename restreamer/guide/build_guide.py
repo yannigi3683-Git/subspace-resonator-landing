@@ -18,7 +18,7 @@ WHITE = HexColor("#FFFFFF")
 FONT = "Helvetica"
 FONT_B = "Helvetica-Bold"
 
-TOTAL_PAGES = 4
+TOTAL_PAGES = 5
 
 def wrap(c, text, font, size, max_w):
     c.setFont(font, size)
@@ -196,7 +196,7 @@ checklist = [
     "Browser AUDIO INPUT dropdown = Voicemeeter Output",
     "Test track playing, INPUT LEVEL meter moves in host console",
     "Broadcast title typed in",
-    "DJ device and restreamer PC on power, sleep/lock disabled",
+    "DJ device and restreamer PC on power, Windows sleep set to Never",
     "Internet stable, no VPN, no other big uploads running",
     "Clicked GO LIVE, ON AIR badge confirmed before announcing",
 ]
@@ -321,6 +321,52 @@ callout(c, bx, ey - 4*mm - h1 - 5*mm, bw, "What the DEEP BUFFER badge means",
         min_h=28*mm)
 
 footer(c, 4)
+c.showPage()
+
+# ---------------- PAGE 5 : Leaving the PC while on air ----------------
+header_bar(c, "Host Quick Guide  -  Leaving The PC While On Air")
+y = PAGE_H - 32*mm
+section_header(c, 18*mm, y, "F.  What You May And May Not Do Mid-Show")
+c.setFillColor(MUTED)
+c.setFont(FONT, 8.8)
+c.drawString(18*mm, y - 7*mm,
+    "Tested on the live site. The proof is always a listener device, never the host meters.")
+
+f_steps = [
+    ("Lock the screen (Windows key + L).  SAFE",
+     "Proven on air: a listener on mobile data kept hearing the music for over 7 minutes with the host PC "
+     "locked. Your Windows session stays alive and audio keeps flowing. This is the only safe way to walk "
+     "away from the PC.", True),
+    ("Switch to another Windows user.  SILENT SHOW",
+     "Windows hands the sound card to whoever logs in next. Voicemeeter goes quiet, but the console still "
+     "reads ON AIR and no warning appears anywhere. Listeners get silence and you will not know. Do not do it.",
+     False),
+    ("Log out of Windows.  SHOW OVER",
+     "Logging out closes everything in your session: the browser, Voicemeeter and the restreamer window. "
+     "Listeners immediately get a connection error. Nothing can survive this, there is no setting that helps.",
+     False),
+    ("Let the PC sleep or hibernate.  SHOW OVER",
+     "Same result as logging out. Set Windows sleep to Never while plugged in before the show starts.", False),
+]
+fh = 21*mm
+fy = y - 14*mm
+for i, (t, b, safe) in enumerate(f_steps):
+    box(c, bx, fy - fh, bw, fh, t, b, num=i+1,
+        fill=BOX_BG_ALT if safe else BOX_BG,
+        num_color=ACCENT if safe else ACCENT2)
+    fy = fy - fh - 5*mm
+
+h1 = callout(c, bx, fy - 2*mm, bw, "Never refresh the host tab",
+        "Reloading or closing the broadcast tab ends the show instantly, the same as clicking END BROADCAST. "
+        "If something looks wrong on screen, leave the tab alone and check a listener device first.",
+        min_h=22*mm)
+
+callout(c, bx, fy - 2*mm - h1 - 5*mm, bw, "If you logged out by mistake",
+        "1. Log back into Windows.  2. Start Voicemeeter first, then the browser.  3. Open the host console and "
+        "click DOWNLOAD CHAT LOG to save the chat.  4. Click END BROADCAST to clear the stuck session.  "
+        "5. Go Live again as normal. Listeners rejoin from the guest link.", min_h=26*mm)
+
+footer(c, 5)
 c.showPage()
 c.save()
 print("done")
