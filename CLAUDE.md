@@ -345,3 +345,7 @@ Key specs on record:
 - `2026-06-04-uxaudit-fixes-design.md` — 13-finding UX audit (implemented)
 - `2026-06-13-quick-access-links-design.md` — clickable Music Archive release rows (implemented)
 - `2026-07-18-guest-chat-upgrades-design.md` — radio chat emoji picker, reply, reactions, GIFs (implemented on `feat/chat-upgrades`)
+
+Owner manuals / recaps:
+- `docs/RADIO-CAPACITY.md` — how many listeners the radio holds + how to raise it (Supabase anon sign-in cap). The answer to the "how many can I host" question.
+- `docs/superpowers/recaps/2026-07-19-radio-capacity-recap.md` — capacity diagnosis + fix (shipped to prod, PR #7). Root cause = Supabase free-tier anon sign-in rate limit, NOT Cloudflare, NOT a code cap.
