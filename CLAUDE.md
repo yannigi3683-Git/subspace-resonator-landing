@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-26 baseline: 57 files, 462 tests — in-room moderation merged on top of chat retention and the host chat-log button; GIFs were dropped after Tenor's API shutdown, taking their 6 tests with them)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-30 baseline: 58 files, 474 tests — the deep-buffer status badge on top of the 2026-07-26 in-room moderation baseline of 57 files / 462 tests; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
@@ -310,7 +310,11 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 - **Console MODERATION tab is still a placeholder** — deliberate. The same hook and props drop into it as a follow-up.
 - **A kick must UNMOUNT the room, not swap its screen.** `LiveRoom` used to render REMOVED FROM ROOM / SIGNAL BLOCKED from an early return, which left every hook above it running: `usePresence` kept tracking (so the kicked listener never left the host's room list) and `useListenerTransport` kept playing. A kick looked like it did nothing. Removal is now escalated to `ListenerApp` via `onRemoved`, which unmounts `LiveRoom` and renders the screen itself. Tests assert the escalation, not the screen — asserting the screen is what hid this for a month.
 
-**Known constraint (unfixable in-browser):** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. Only a **server-side restream (HLS/Icecast/Cloudflare Stream Live)** fixes true lock-screen playback. The resume tap reconnects on reopen as the in-browser mitigation.
+**Known constraint (unfixable in-browser), and what solves it:** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background** — iOS/mobile suspend MediaStream audio; Wake Lock + MediaSession can't keep it alive. The resume tap reconnects on reopen as the in-browser mitigation. The actual fix is **built and in routine use**: the deep-buffer HLS restreamer (`restreamer/`, see below). It only applies while that program is running on a PC; with it off, the constraint above is exactly as stated.
+
+**Deep-buffer restreamer (`restreamer/`) — the host's view of it.** A standalone Node service that pulls the show off the SFU as an anonymous listener, transcodes to HLS, uploads to R2, and writes `station.live_session.streamUrl`. It touches no audio device and no local capture, so **it does not care which device the host DJs from** — `decideAction` (`restreamer/src/station.mjs`) polls the `station` row every 3s and starts/stops itself when the server flips `mode`. GO LIVE *is* its trigger; there is nothing to press. Its one manual step is a double-click of `start-restreamer.bat` on one Windows PC. Operating instructions: `restreamer/HOW-TO-RUN.md`.
+
+**DEEP BUFFER badge (host console).** `live_session.streamUrl` is now read by the host too, not just listeners: `useDeepBufferStatus.ts` + the pure reducer `src/radio/hls/deepBufferProbe.ts` drive an OFF / STARTING / ON / STALLED badge beside ON AIR in `GoLivePanel.tsx`. It exists because the restreamer's console window is invisible when the host broadcasts from another device — GO LIVE remotely used to mean hoping. **It probes liveness, it does not trust the URL:** a restreamer PC that loses power never clears `streamUrl`, so a URL-only badge would show green over silence. It re-fetches the `.m3u8` every 10s and checks the body changed; frozen 15s reads `STALLED` (same signal `shouldFallback` in `useListenerTransport.ts` uses to drop listeners back to WebRTC). Read-only: no server code, no schema, no new permissions, inert off air and when no `streamUrl` is advertised. Verified live 2026-07-30 (green, then STALLED on killing the restreamer mid-broadcast).
 
 **Listener capacity (the real ceiling):** NOT Cloudflare (bandwidth-only free tier, fine for hundreds) and NOT any code cap (none exists). The wall is **Supabase free-tier auth**: each listener does an anonymous sign-in, capped at **30/hour by default** — raise it in Supabase Dashboard → Authentication → Rate Limits (guest sign-ins → ~300/hr). This was the "test user vs real user" capacity question. `api/rtc-session.ts` caches token verification 60s (fewer getUser calls) and returns a `reason` (`rate_limited` vs `invalid_token`) so a rejection is provable in logs; EntryGate shows a calm "Room is busy" message on a rate-limit. Load-test with `scripts/radio-loadtest.mjs <url> <count>`. Full owner guide: `docs/RADIO-CAPACITY.md`. Beyond ~150, use the HLS restream. (Vercel keeps runtime logs only briefly — instrument before the broadcast, not after.)
 
@@ -324,7 +328,9 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 
 - **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
 - **Debut album JSON-LD** — add structured data once the album is released.
-- **Radio lock-screen audio** — server-side restream (HLS/Icecast/Cloudflare Stream Live) so listener audio survives a phone lock. Big, separate project; see the scoping spec under `docs/superpowers/specs/`.
+- **Restreamer remote start** — starting it is a physical double-click on one Windows PC. There is no way to start it while away, and no single-instance guard if two copies are ever launched. The documented (not set up) workaround is a Task Scheduler background task, see the appendix in `restreamer/HOW-TO-RUN.md`.
+- **R2 lifecycle rule** — nothing ever deletes HLS objects; each broadcast writes a fresh `<cfSessionId>/` prefix and they accumulate forever. A bucket lifecycle rule, not code.
+- **`npm run lint` is broken** — the repo has no `eslint.config.js` and no eslint dependency, so the documented command fails on every branch. `npm run build` (`tsc -b`) is the only type/quality gate today.
 
 ---
 
