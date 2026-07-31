@@ -5,7 +5,7 @@ import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
 import { Publisher } from '../rtc/publisher';
-import { transition, initialState, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
+import { transition, initialState, shouldResumeOnOnline, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 import { shouldStartCrossfade } from '../rtc/crossfade';
 import { QUALITY_PRESETS, QUALITY_LABELS, isBitrateAdapting, type QualityKey } from '../rtc/audioQuality';
 import { formatClock } from '../format';
@@ -291,6 +291,23 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     if (!stream || !publisher) return;
     await publisher.connect(stream, titleRef.current);
   }
+
+  // The retry budget is 6 attempts over ~31s of backoff, and while the network is down every one
+  // fails the instant it is made. A WiFi drop longer than half a minute therefore burns the whole
+  // budget and parks the FSM in `lost`, which is terminal — reconnecting the network did nothing
+  // and the host had to spot the error and press GO LIVE by hand (seen live 2026-07-31). Resume
+  // when the browser tells us the network is back. Server-side the broadcast is untouched, so the
+  // re-publish keeps the same startedAt: listeners keep their chat and never see the entry gate.
+  useEffect(() => {
+    const onOnline = () => {
+      if (!shouldResumeOnOnline(fsmRef.current.status, !!streamRef.current && !!publisherRef.current)) return;
+      setErrorMsg('');
+      setStatus('starting');
+      dispatchFsm({ type: 'CONNECT' });
+    };
+    window.addEventListener('online', onOnline);
+    return () => window.removeEventListener('online', onOnline);
+  }, [dispatchFsm]);
 
   // Tear down the audio graph after a failed/ended session so a retry starts clean.
   // A leaked AudioContext (and its file source node) is what makes the second GO LIVE

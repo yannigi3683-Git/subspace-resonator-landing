@@ -41,6 +41,22 @@ export function initialState(): FsmState {
   return { status: 'idle', retryCount: 0, nextDelayMs: BASE_DELAY_MS };
 }
 
+/**
+ * Whether a browser `online` event should resume the broadcast on its own.
+ *
+ * The retry budget is 6 attempts over ~31s of backoff. While the network is down every attempt
+ * fails the instant it is made, so a WiFi outage longer than half a minute burns the whole budget
+ * and parks the FSM in `lost`, which is terminal. Restoring the network then did nothing: the host
+ * had to notice and press GO LIVE by hand (verified live 2026-07-31).
+ *
+ * Only `lost` resumes. A shorter blip is still mid-backoff and its scheduled retry fires anyway,
+ * and `hasLiveStream` keeps a fatal setup error (mic blocked, not-admin, no mixer) from
+ * auto-retrying forever — those need the host, not another attempt.
+ */
+export function shouldResumeOnOnline(status: ConnectionStatus, hasLiveStream: boolean): boolean {
+  return status === 'lost' && hasLiveStream;
+}
+
 export function transition(
   state: FsmState,
   event: ConnectionEvent,

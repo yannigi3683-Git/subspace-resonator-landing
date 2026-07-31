@@ -75,10 +75,13 @@ badge shows `STALLED`.
 - **Instant off switch:** closing the window clears the stream; everyone is back on plain WebRTC with
   no site change.
 - **If your internet drops mid-show**, the window logs `ffmpeg exited 0 - will restart on next poll`
-  and then goes quiet for up to a minute. That is normal. Your browser needs about 25 seconds to
-  notice the drop and reconnect, and the restreamer picks the show back up on its own once it does.
-  Since 2026-07-26 that reconnect no longer restarts the broadcast, so listeners keep their name and
-  their chat. Nothing to do but wait.
+  and then goes quiet. That is normal. Sound stops within a second, but the console waits about 25
+  seconds before it accepts the connection is really gone. Once your internet is back the console
+  reconnects **by itself** and the restreamer picks the show back up. Nothing to press.
+  - Your listeners keep their name, their avatar and the whole chat through all of it. The
+    broadcast is never restarted, only its connection.
+  - Only if the console shows a red **"Connection lost"** after your internet is back does it need
+    you: press GO LIVE. That is still safe, and listeners still keep everything.
 - **`temp dir left behind (harmless)`** in the log is exactly what it says. Windows would not let the
   restreamer delete its scratch folder yet. The next start cleans it up. Ignore it.
 
