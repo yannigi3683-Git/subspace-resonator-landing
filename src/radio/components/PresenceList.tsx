@@ -50,7 +50,9 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
   }
 
   return (
-    <div className="px-3 py-2 border-t border-[#1a1a2e]">
+    // Host mode renders a 44px KICK/BAN row per listener, so an unbounded roster grew past the
+    // whole sidebar and collapsed the chat scroller (flex-1, min-height 0) to nothing.
+    <div className="px-3 py-2 border-t border-[#1a1a2e] shrink-0 max-h-[30vh] overflow-y-auto">
       <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest mb-2">
         {count} {count === 1 ? 'listener' : 'listeners'} online
       </p>
