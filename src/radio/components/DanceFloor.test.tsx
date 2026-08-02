@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
-  DanceFloor, crowdCapacity, crowdTileSize, vizCircle, roamPath, roamVars,
-  isCheering, CHEER_MS, readCrowdTestParam, padCrowd, obstacleRects, territories,
+  DanceFloor, crowdCapacity, crowdTileSize, obstacleRects,
+  isCheering, CHEER_MS, readCrowdTestParam, padCrowd,
 } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
@@ -21,115 +21,15 @@ const entry: PresenceEntry = {
   position: { x: 50, y: 50 },
 };
 
-const BOXES = [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const;
-
-// The crowd used to be a grid of fixed cells in a bottom strip, drifting ~2px inside its own
-// cell: it read as a formation, and nobody could reach the speakers because there was no floor
-// under them.
-// Each listener owns a private patch of floor and can only move inside it. No two patches
-// overlap, and a disc is convex, so the straight line the animation draws between waypoints
-// stays inside the patch too. That is the whole no-collision argument - there is no collision
-// code and no per-frame JavaScript.
-describe('territories', () => {
-  it('never hands out two patches that overlap', () => {
-    const overlaps: string[] = [];
-    for (const [w, h] of BOXES) {
-      const cells = territories(w, h, 120);
-      for (let a = 0; a < cells.length; a++) {
-        for (let b = a + 1; b < cells.length; b++) {
-          const gap = Math.hypot(cells[a].cx - cells[b].cx, cells[a].cy - cells[b].cy);
-          if (gap < cells[a].r + cells[b].r) overlaps.push(`${a}/${b} at ${w}x${h}`);
-        }
-      }
-    }
-    expect(overlaps.slice(0, 5)).toEqual([]);
-  });
-
-  it('keeps every patch clear of the visualizer and the PA stacks', () => {
-    const breaches: string[] = [];
-    for (const [w, h] of BOXES) {
-      const viz = vizCircle(w, h);
-      const rects = obstacleRects(w, h);
-      for (const c of territories(w, h, 120)) {
-        if (Math.hypot(c.cx - viz.cx, c.cy - viz.cy) < viz.r + c.r) {
-          breaches.push(`patch overlaps the visualizer at ${w}x${h}`);
-        }
-        for (const r of rects) {
-          if (c.cx > r.x0 - c.r && c.cx < r.x1 + c.r && c.cy > r.y0 - c.r && c.cy < r.y1 + c.r) {
-            breaches.push(`patch overlaps a PA stack at ${w}x${h}`);
-          }
-        }
-      }
-    }
-    expect(breaches.slice(0, 5)).toEqual([]);
-  });
-
-  it('finds room for everyone it is asked for', () => {
-    for (const [w, h] of BOXES) {
-      expect(territories(w, h, 40).length, `not enough patches at ${w}x${h}`).toBeGreaterThanOrEqual(40);
-    }
-  });
-
-  it('is deterministic, so every client lays the room out identically', () => {
-    expect(territories(1120, 900, 50)).toEqual(territories(1120, 900, 50));
-  });
-});
-
-describe('roamPath', () => {
-  const cell = { cx: 500, cy: 400, r: 60 };
-
-  it('stays inside its own patch, waypoints and the legs between them', () => {
-    for (let i = 0; i < 80; i++) {
-      const path = roamPath(`uid-${i}`, cell, 10);
-      for (let k = 0; k < path.length; k++) {
-        const a = path[k];
-        const b = path[(k + 1) % path.length];
-        for (let t = 0; t <= 1; t += 0.05) {
-          const x = a.x + (b.x - a.x) * t;
-          const y = a.y + (b.y - a.y) * t;
-          expect(Math.hypot(x - cell.cx, y - cell.cy)).toBeLessThanOrEqual(cell.r);
-        }
-      }
-    }
-  });
-
-  it('leaves room for the avatar itself, not just its centre', () => {
-    for (const p of roamPath('uid-a', cell, 25)) {
-      expect(Math.hypot(p.x - cell.cx, p.y - cell.cy)).toBeLessThanOrEqual(cell.r - 25);
-    }
-  });
-
-  it('is deterministic per listener and different between listeners', () => {
-    expect(roamPath('uid-a', cell, 0)).toEqual(roamPath('uid-a', cell, 0));
-    expect(roamPath('uid-a', cell, 0)).not.toEqual(roamPath('uid-b', cell, 0));
-  });
-
-  // The point of roaming: actually use the patch rather than jiggle at its centre.
-  it('uses its patch rather than shuffling at the centre', () => {
-    const reach = Array.from({ length: 40 }, (_, i) => {
-      const p = roamPath(`uid-${i}`, cell, 10);
-      return Math.max(...p.map((q) => Math.hypot(q.x - p[0].x, q.y - p[0].y)));
-    }).sort((a, b) => a - b);
-    expect(reach[Math.floor(reach.length / 2)]).toBeGreaterThan(cell.r * 0.5);
-  });
-
-  it('exposes the tour to CSS as offsets from the anchor', () => {
-    const { anchor, vars } = roamVars('uid-a', cell, 10);
-    expect(anchor).toEqual(roamPath('uid-a', cell, 10)[0]);
-    for (const k of ['--r1x', '--r1y', '--r4x', '--r4y']) {
-      expect(vars[k]).toMatch(/^-?\d+px$/);
-    }
-  });
-
+describe('crowd sizing', () => {
   it('models the PA stacks as obstacles wherever they are rendered', () => {
+    // Hidden below 400px by the JSX, so there is nothing to avoid there.
     expect(obstacleRects(360, 576)).toHaveLength(0);
     for (const [w, h] of [[412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
       expect(obstacleRects(w, h), `no PA obstacles at ${w}x${h}`).toHaveLength(2);
     }
   });
-});
 
-describe('crowd sizing', () => {
   // The region is several times the old bottom strip, so far fewer people fall into the badge.
   it('holds more people than the old bottom strip did', () => {
     expect(crowdCapacity(1600, 1080)).toBeGreaterThan(150);
@@ -228,11 +128,11 @@ describe('DanceFloor', () => {
     const { container, unmount } = render(
       <DanceFloor presenceList={[{ ...entry, cheerAt: Date.now() }]} station={liveStation} uid="u2" />,
     );
-    expect(container.querySelector('.radio-slot')!.className).toContain('z-[7]');
+    expect(container.querySelector('[data-crowd-tile]')!.className).toContain('z-[7]');
     unmount();
 
     const idle = render(<DanceFloor presenceList={[entry]} station={liveStation} uid="u2" />);
-    expect(idle.container.querySelector('.radio-slot')!.className).toContain('z-[5]');
+    expect(idle.container.querySelector('[data-crowd-tile]')!.className).toContain('z-[5]');
   });
 
   it('returns a listener to the idle bob once the cheer lapses', () => {
@@ -287,7 +187,7 @@ describe('DanceFloor', () => {
     const { container, rerender } = render(
       <DanceFloor presenceList={guests} station={liveStation} uid="u1" />,
     );
-    const namesBefore = Array.from(container.querySelectorAll('.radio-slot')).map(
+    const namesBefore = Array.from(container.querySelectorAll('[data-crowd-tile]')).map(
       (el) => el.textContent,
     );
 
@@ -296,18 +196,21 @@ describe('DanceFloor', () => {
     // after 'u3'; a deviceId-keyed sort keeps d1 < d2 < d3 unchanged.
     const reconnected = guests.map((g) => (g.deviceId === 'd2' ? { ...g, uid: 'zzz-reconnected' } : g));
     rerender(<DanceFloor presenceList={reconnected} station={liveStation} uid="u1" />);
-    const namesAfter = Array.from(container.querySelectorAll('.radio-slot')).map(
+    const namesAfter = Array.from(container.querySelectorAll('[data-crowd-tile]')).map(
       (el) => el.textContent,
     );
 
     expect(namesAfter).toEqual(namesBefore);
   });
 
-  it('routes the no-listener ghost preview through the same grid layout as live guests', () => {
+  // Positions come from the steering simulation, written straight to each node's transform -
+  // they are never React state, or 30fps across 200 avatars would re-render the room constantly.
+  it('places the no-listener ghost preview through the same simulation as live guests', () => {
     const { container } = render(<DanceFloor presenceList={[]} station={liveStation} uid="u1" />);
-    const tiles = container.querySelectorAll('.radio-slot');
+    const tiles = container.querySelectorAll('[data-crowd-tile]');
     expect(tiles.length).toBe(3);
-    const lefts = Array.from(tiles).map((el) => (el as HTMLElement).style.left);
-    expect(new Set(lefts).size).toBe(3);
+    const spots = Array.from(tiles).map((el) => (el as HTMLElement).style.transform);
+    expect(spots.every((t) => t.includes('translate3d'))).toBe(true);
+    expect(new Set(spots).size).toBe(3);
   });
 });

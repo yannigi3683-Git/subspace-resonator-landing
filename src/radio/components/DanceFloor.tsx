@@ -6,6 +6,8 @@ import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { PsyViz } from './PsyViz';
 import { PaStack } from './PaStack';
+import { useCrowdMotion } from '../hooks/useCrowdMotion';
+import type { CrowdEnv } from '../crowdMotion';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -133,120 +135,6 @@ export function crowdRegion(boxW: number, boxH: number) {
   };
 }
 
-export interface Waypoint { x: number; y: number }
-export interface Territory { cx: number; cy: number; r: number }
-
-// Fraction of its cell a patch fills. Below 1 so neighbouring patches keep a gap instead of
-// being exactly tangent, where floating point alone would decide whether two avatars touch.
-const PATCH_FILL = 0.94;
-
-/** Whether a disc of radius r centred here would touch the visualizer or a PA stack. */
-function discBlocked(cx: number, cy: number, r: number, boxW: number, boxH: number): boolean {
-  const viz = vizCircle(boxW, boxH);
-  if (Math.hypot(cx - viz.cx, cy - viz.cy) < viz.r + r) return true;
-  return obstacleRects(boxW, boxH).some((o) =>
-    cx > o.x0 - r && cx < o.x1 + r && cy > o.y0 - r && cy < o.y1 + r);
-}
-
-/**
- * One private patch of floor per listener, none of them touching.
- *
- * This is what makes crossings impossible without any collision code: an avatar can only ever
- * move inside its own disc, and no two discs overlap, so two avatars can never occupy the same
- * point. The cost is that a fuller room means smaller patches, which is the honest geometry -
- * the floor really is being divided between more people.
- *
- * Cells are laid out on a square-ish grid over the region and any cell touching a fixed prop is
- * dropped, so the grid gets finer until enough clear cells exist.
- */
-export function territories(boxW: number, boxH: number, total: number): Territory[] {
-  const region = crowdRegion(boxW, boxH);
-  const W = region.x1 - region.x0;
-  const H = region.y1 - region.y0;
-  if (total <= 0 || W <= 0 || H <= 0) return [];
-
-  const build = (cols: number): Territory[] => {
-    const rows = Math.max(1, Math.ceil((cols * H) / W));
-    const cw = W / cols;
-    const ch = H / rows;
-    // Inset so neighbouring patches have a real gap rather than being exactly tangent: at
-    // exact tangency floating point alone decides whether two avatars touch.
-    const r = (Math.min(cw, ch) / 2) * PATCH_FILL;
-    const out: Territory[] = [];
-    for (let row = 0; row < rows; row++) {
-      for (let col = 0; col < cols; col++) {
-        const cx = region.x0 + cw * (col + 0.5);
-        const cy = region.y0 + ch * (row + 0.5);
-        if (!discBlocked(cx, cy, r, boxW, boxH)) out.push({ cx, cy, r });
-      }
-    }
-    return out;
-  };
-
-  let cols = Math.max(1, Math.ceil(Math.sqrt((total * W) / H)));
-  let cells = build(cols);
-  // Props eat cells, so the first guess usually under-delivers. Tighten until everyone fits.
-  while (cells.length < total && cols < Math.floor(W / MIN_CELL_PX)) {
-    cols += 1;
-    cells = build(cols);
-  }
-  return cells;
-}
-
-/**
- * The roam path expressed as CSS custom properties: offsets in px from the tile's anchor, which
- * is where the grid placed it. Offsets rather than absolute positions so the tile keeps its
- * `translate(-50%,-50%)` centring and the animation composes with it.
- */
-export function roamVars(uid: string, cell: Territory, tileRadius: number) {
-  const path = roamPath(uid, cell, tileRadius);
-  const [anchor, ...rest] = path;
-  const vars: Record<string, string> = {};
-  rest.slice(0, 4).forEach((p, i) => {
-    vars[`--r${i + 1}x`] = `${Math.round(p.x - anchor.x)}px`;
-    vars[`--r${i + 1}y`] = `${Math.round(p.y - anchor.y)}px`;
-  });
-  return { anchor, vars };
-}
-
-/**
- * A deterministic looping tour of the floor for one listener. Seeded from the uid so somebody
- * stands in the same places on every device and across reloads, exactly as the grid and the bob
- * already are. Waypoints are rejection-sampled out of the visualizer, and the tour returns toward
- * where it began so people drift back rather than leaving in one direction forever.
- */
-export function roamPath(uid: string, cell: Territory, tileRadius = 0, steps = 5): Waypoint[] {
-  // Everything stays inside one disc, and a disc is convex, so the straight line the animation
-  // draws between any two waypoints is inside it too. That is the whole no-collision argument:
-  // discs do not overlap, so two avatars can never reach the same point. No obstacle checks are
-  // needed here either - a territory is only handed out if it was already clear of the props.
-  const reach = Math.max(0, cell.r - tileRadius);
-
-  let seed = hashUid(uid);
-  const next = () => {
-    // xorshift: hashUid alone repeats badly across the low bits when sampled many times.
-    seed ^= seed << 13; seed >>>= 0;
-    seed ^= seed >> 17;
-    seed ^= seed << 5; seed >>>= 0;
-    return seed / 0xffffffff;
-  };
-
-  const points: Waypoint[] = [];
-  for (let i = 0; i < steps; i++) {
-    // Uniform over the disc: sqrt on the radius, or every tour clusters near the centre.
-    const angle = next() * Math.PI * 2;
-    const radius = Math.sqrt(next()) * reach;
-    points.push({ x: cell.cx + Math.cos(angle) * radius, y: cell.cy + Math.sin(angle) * radius });
-  }
-  return points;
-}
-
-/**
- * How many listeners actually fit the measured band before tiles would overlap.
- * Replaces a fixed cap of 30, which was roughly the phone's capacity and so threw
- * away most of the crowd on a wide desktop window. Everyone past this is summed
- * into the "+N in the crowd" badge.
- */
 /** Floor area actually walkable: the region, less the visualizer and the fixed props. */
 function usableFloorPx(boxW: number, boxH: number): number {
   const r = crowdRegion(boxW, boxH);
@@ -260,9 +148,8 @@ function usableFloorPx(boxW: number, boxH: number): number {
 }
 
 export function crowdCapacity(boxW: number, boxH: number): number {
-  // How many private patches the floor can actually be divided into, which is now the real
-  // limit: everyone needs their own, and patches touching a fixed prop are not handed out.
-  return Math.max(1, Math.min(territories(boxW, boxH, CROWD_HARD_CAP).length, CROWD_HARD_CAP));
+  const usable = usableFloorPx(boxW, boxH);
+  return Math.max(1, Math.min(Math.floor(usable / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
 }
 
 /**
@@ -368,15 +255,25 @@ export function DanceFloor({
   const cap = crowdCapacity(box.w, box.h);
   const shown = Math.min(roster.length, cap);
   const tile = crowdTileSize(shown, box.w, box.h);
-  // One private patch per visible listener, assigned by position in the (deviceId-sorted) roster
-  // so every client lays the room out identically.
-  const patches = useMemo(() => territories(box.w, box.h, Math.max(1, shown)), [box.w, box.h, shown]);
   const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
     : [...roster]
         .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
         .slice(0, cap);
+
+  // The crowd steers itself: free movement over the whole floor, pushing apart from neighbours
+  // and out of the fixed props. Positions are written straight to these nodes, never to state.
+  const crowdEnv = useMemo<CrowdEnv>(() => ({
+    region: crowdRegion(box.w, box.h),
+    viz: vizCircle(box.w, box.h),
+    rects: obstacleRects(box.w, box.h),
+    radius: tile.size / 2,
+    speed: 26,
+  }), [box.w, box.h, tile.size]);
+  // The empty-room ghost preview goes through the same simulation, so there is only one way a
+  // tile ever gets positioned.
+  const nodes = useCrowdMotion(visible.map((e) => e.uid), crowdEnv, visible.length > 0);
 
   return (
     <div ref={floorRef} className="relative w-full h-full overflow-hidden bg-[#05060f]">
@@ -481,13 +378,6 @@ export function DanceFloor({
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        // Position comes from the tour's first waypoint, not a grid cell. With a grid anchor the
-        // crowd snapped back into formation every time the loop came round, which is the
-        // formation look this replaced.
-        const patch = patches[i % Math.max(1, patches.length)];
-        const { anchor, vars } = roamVars(entry.uid, patch, tile.size / 2);
-        const px = (anchor.x / box.w) * 100;
-        const py = (anchor.y / box.h) * 100;
         const { size, hasLabel } = tile;
         const cheering = isCheering(entry.cheerAt, now);
         return (
@@ -496,37 +386,24 @@ export function DanceFloor({
             // A cheering tile lifts above its neighbours. Every tile shared z-[5], so paint order
             // was DOM order and the one moment a listener wants to be seen was the moment their
             // glow could land behind someone else's avatar.
-            className={`radio-slot absolute ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
-            style={{
-              left: `${px}%`,
-              top: `${py}%`,
-              transform: 'translate(-50%, -50%)',
-              opacity: isGhost ? 0.3 : 1,
-            }}
+            ref={(el) => { nodes.current[i] = el; }}
+            data-crowd-tile=""
+            className={`absolute left-0 top-0 ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
+            style={{ opacity: isGhost ? 0.3 : 1 }}
           >
-            {/* Roaming needs its own element: the slot owns translate(-50%,-50%) and the inner
-                div owns the bob, and one element cannot carry two transforms. */}
-            <div
-              className="radio-roam relative flex flex-col items-center"
-              style={{
-                ...vars,
-                // Long, and seeded per listener, so the crowd is mid-journey on arrival rather
-                // than every avatar setting off from its anchor at once.
-                ['--roam-dur' as string]: `${70 + (h % 50)}s`,
-                animationDelay: `-${h % 70}s`,
-              }}
-            >
-              {/* "You": a follow-spot pooling on the floor under your feet, not a box around
-                  your avatar. Reads at any density and does not fight the neon look. */}
+            <div className="relative flex flex-col items-center">
+              {/* "You": a single mote orbiting your avatar. Reads at any size, unlike a ring,
+                  which read as a bulky square because the svg's artwork is inset from its box. */}
               {isSelf && (
                 <span
-                  className="radio-you absolute left-1/2 pointer-events-none"
+                  className="radio-orbit absolute pointer-events-none"
                   aria-hidden="true"
                   data-testid="you-marker"
                   style={{
-                    top: Math.round(size * 0.55),
-                    width: Math.round(size * 1.9),
-                    height: Math.round(size * 0.75),
+                    width: size + 10,
+                    height: size + 10,
+                    top: -5,
+                    ['--orbit-r' as string]: `${Math.round((size + 10) / 2)}px`,
                   }}
                 />
               )}

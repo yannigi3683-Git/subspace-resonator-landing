@@ -77,3 +77,27 @@ most of the floor empty.
 - Paths are deterministic per uid and differ between uids.
 - Capacity is larger than the old band's for the same box.
 - `prefers-reduced-motion` disables roaming along with the rest.
+
+
+## Final model: steering simulation (2026-08-02)
+
+`crowdMotion.ts` is a small steering system: wander toward a target, separate from near
+neighbours, and get pushed out of fixed props. `useCrowdMotion.ts` runs it.
+
+The per-frame JavaScript cost was accepted only after the two cheaper models failed the brief.
+It is kept small: spatial hash for O(n) neighbour lookups, a 30fps tick, direct
+`style.transform` writes so React never re-renders on movement, and the loop halts when the
+crowd is empty, the tab is hidden, or reduced motion is requested.
+
+Two findings worth keeping:
+
+- **A proportional obstacle push does not work.** It fades to nothing at the boundary and
+  balances against the wander pulling inward, so avatars settle just *inside* the clearance. The
+  push is constant while inside, and a hard positional constraint runs after integration, because
+  forces can be overpowered by a tight pocket of neighbours.
+- **An escape direction must have floor beyond it.** The PA stacks run off the side of the
+  region, so the shortest way out of one can be a direction where the region clamp puts the
+  avatar straight back inside it.
+
+Separation stays soft on purpose: neighbours brush and may slightly overlap, which is what was
+asked for. Obstacles are hard.

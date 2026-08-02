@@ -35,19 +35,26 @@
 }
 .radio-cheer { animation: radio-cheer 0.9s ease-in-out infinite; }
 
-/* "You", as a follow-spot on the floor rather than a box around the avatar. A ring reads as a
-   bulky square at small sizes (the svg's artwork is inset from its box, so the band never hugs
-   the glyph) and fights the neon look. A pool of light under your feet says "you" at any density
-   and matches the stage. */
-.radio-you {
-  background: radial-gradient(50% 50% at 50% 50%, rgba(255, 255, 255, 0.55), rgba(38, 198, 218, 0.28) 45%, transparent 72%);
-  filter: blur(2px);
+/* "You": one mote orbiting your avatar. A ring read as a bulky square (the svg's artwork is
+   inset from its box, so no band ever hugged the glyph), and a floor spotlight was lost in a
+   packed room. A moving point is findable at any density. The dot is drawn with a radial
+   gradient on the ::before so the element itself can carry the rotation. */
+.radio-orbit { animation: radio-orbit 3.4s linear infinite; }
+.radio-orbit::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
   border-radius: 9999px;
-  animation: radio-you 2.6s ease-in-out infinite;
+  background: #fff;
+  box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.9), 0 0 12px 3px rgba(38, 198, 218, 0.7);
+  transform: translateX(var(--orbit-r, 14px));
 }
-@keyframes radio-you {
-  0%, 100% { opacity: 0.55; transform: translateX(-50%) scaleX(0.92); }
-  50%      { opacity: 0.95; transform: translateX(-50%) scaleX(1.08); }
+@keyframes radio-orbit {
+  to { transform: rotate(360deg); }
 }
 
 /* Crowd tile wrapper: smooth the left/top jump when the grid re-slots on join/leave. */
@@ -179,7 +186,7 @@
   .radio-bob,
   .radio-roam,
   .radio-cheer,
-  .radio-you,
+  .radio-orbit,
   .radio-stars,
   .radio-aurora,
   .radio-spin,
