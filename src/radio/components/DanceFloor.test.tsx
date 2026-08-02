@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor, gridSlot, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
+import { DanceFloor, gridSlot, crowdCapacity, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
 type Slot = ReturnType<typeof gridSlot>;
@@ -36,6 +36,52 @@ const entry: PresenceEntry = {
   avatarId: 'nebula',
   position: { x: 50, y: 50 },
 };
+
+// The old fixed cap of 30 was roughly what a phone's band holds, so a wide desktop window
+// threw most of the crowd into the "+N" badge for no reason. Capacity now comes from the
+// measured band, and the overlap check below is what keeps it honest.
+describe('crowdCapacity', () => {
+  it('fits far more on a wide desktop stage than on a phone', () => {
+    const phone = crowdCapacity(390, 600);
+    const desktop = crowdCapacity(1400, 900);
+    expect(desktop).toBeGreaterThan(phone * 2);
+  });
+
+  it('never returns less than one, even for a degenerate box', () => {
+    expect(crowdCapacity(0, 0)).toBeGreaterThanOrEqual(1);
+    expect(crowdCapacity(10, 10)).toBeGreaterThanOrEqual(1);
+  });
+
+  it('places a full-capacity crowd without overlapping footprints', () => {
+    for (const [w, h] of [[390, 600], [768, 700], [1400, 900]] as const) {
+      const total = crowdCapacity(w, h);
+      const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, w, h));
+      for (let i = 0; i < slots.length; i++) {
+        for (let j = i + 1; j < slots.length; j++) {
+          expect(
+            footprintsOverlap(slots[i], slots[j], w, h),
+            `slots ${i} and ${j} overlap at ${w}x${h}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  // The volume pill sits absolute bottom-4 left-4 over this same strip, so the band is lifted
+  // clear of it. Without that it covered the bottom-left tiles and the "+N in the crowd" line.
+  it('keeps the crowd clear of the bottom controls gutter', () => {
+    for (const [w, h] of [[390, 600], [1400, 900]] as const) {
+      const total = crowdCapacity(w, h);
+      const lowest = Math.max(
+        ...Array.from({ length: total }, (_, i) => {
+          const s = gridSlot(i, total, `uid-${i}`, w, h);
+          return (s.py / 100) * h + (s.hasLabel ? s.size + LABEL_GAP + LABEL_H : s.size) / 2;
+        }),
+      );
+      expect(lowest, `crowd reaches the controls at ${w}x${h}`).toBeLessThanOrEqual(h - 64);
+    }
+  });
+});
 
 describe('DanceFloor', () => {
   it('renders the broadcaster (DJ) on the stage', () => {
