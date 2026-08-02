@@ -76,6 +76,32 @@ second transform, so wander gets its own wrapper between them. At the 200-tile h
 - Presence does not re-fire when the window elapses, so `DanceFloor` runs a 1s tick **only while
   at least one cheer is active**, never as a standing interval.
 
+## Behaviour at maximum density (measured 2026-08-02)
+
+| Device | Cap | Avatar | Labels | Drift |
+|---|---|---|---|---|
+| Phone 390x844 | 84 | 17px | none | 2.3px |
+| Tablet 768x1024 | 126 | 17px | none | 2.2px |
+| Laptop 1440x900 | 200 | 19px | none | 2.8px |
+| Desktop 1920x1080 | 200 | 23px | none | 4.2px |
+| Ultrawide 3440x1440 | 200 | 36px | none | 6.9px |
+
+At 300 listeners a phone shows 84 with `+216 in the crowd`; a laptop and up show 200 with `+100`.
+300 listeners render ~727 DOM nodes, all animated by CSS with no JS loop.
+
+**Wander shrinks to near nothing when the room is full, and that is the bound working.** Drift only
+ever spends the slack between a tile and its neighbour, and at capacity there is almost none. A
+packed floor genuinely has no room to roam.
+
+**Decided: the bob is deliberately NOT bounded the same way.** `radio-bob` sweeps a fixed 9px
+each way regardless of density, while the tightest vertical gap at capacity is 7.8-16.6px, so two
+stacked avatars can pass through each other on a full floor. This predates the feature and is kept
+on purpose: at that density there are **no name labels**, and label collision was the original
+reason the no-overlap rule exists. Small glowing dots overlapping as they dance reads as a crowded
+room, not as a defect. Options considered and rejected: driving the bob from the same reserved
+slack (a full floor goes visibly still), and lowering `CROWD_HARD_CAP` (fewer real people shown).
+Do not "fix" the asymmetry between bounded wander and unbounded bob without revisiting this.
+
 ## Non-goals
 
 - No tap-to-glow on the avatar itself (touch target, above).
