@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Disc3 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
@@ -44,6 +44,34 @@ export const CHEER_MS = 5000;
 
 export function isCheering(cheerAt: number | undefined, now: number): boolean {
   return typeof cheerAt === 'number' && now - cheerAt >= 0 && now - cheerAt < CHEER_MS;
+}
+
+// `/radio?crowdtest=200` pads the floor with locally-rendered stand-ins, so crowd density can be
+// judged without minting hundreds of anonymous Supabase users or pushing fake people into the
+// real room (presence rides one project-wide channel). They exist only in this browser's render
+// pass: nothing is tracked, sent, or visible to anyone else. Follows the existing `?debug` flag.
+const CROWD_TEST_MAX = 500;
+
+export function readCrowdTestParam(search: string): number {
+  const raw = new URLSearchParams(search).get('crowdtest');
+  if (raw === null) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(Math.floor(n), CROWD_TEST_MAX);
+}
+
+export function padCrowd(list: PresenceEntry[], extra: number): PresenceEntry[] {
+  if (extra <= 0) return list;
+  return [
+    ...list,
+    ...Array.from({ length: extra }, (_, i) => ({
+      uid: `crowdtest-${i}`,
+      deviceId: `crowdtest-${i}`,
+      name: `Test ${i + 1}`,
+      avatarId: AVATARS[i % AVATARS.length].id,
+      position: { x: 50, y: 50 },
+    })),
+  ];
 }
 
 // The band is LIFTED by the gutter, not shrunk by it. Shrinking cost the name labels for
@@ -192,7 +220,13 @@ export function DanceFloor({
   uid,
   nowPlaying,
 }: DanceFloorProps) {
-  const isGhost = presenceList.length === 0;
+  const crowdTest = useMemo(
+    () => (typeof window === 'undefined' ? 0 : readCrowdTestParam(window.location.search)),
+    [],
+  );
+  const roster = useMemo(() => padCrowd(presenceList, crowdTest), [presenceList, crowdTest]);
+
+  const isGhost = roster.length === 0;
   const live = station?.mode === 'live';
   const floorRef = useRef<HTMLDivElement>(null);
   const box = useMeasuredSize(floorRef);
@@ -203,7 +237,7 @@ export function DanceFloor({
   // cheer is actually live, so an idle room pays nothing.
   const [, forceTick] = useState(0);
   const now = Date.now();
-  const anyCheer = presenceList.some((e) => isCheering(e.cheerAt, now));
+  const anyCheer = roster.some((e) => isCheering(e.cheerAt, now));
   useEffect(() => {
     if (!anyCheer) return;
     const id = setInterval(() => forceTick((n) => n + 1), 1000);
@@ -211,10 +245,10 @@ export function DanceFloor({
   }, [anyCheer]);
 
   const cap = crowdCapacity(box.w, box.h);
-  const overflow = Math.max(0, presenceList.length - cap);
+  const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
-    : [...presenceList]
+    : [...roster]
         .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
         .slice(0, cap);
 

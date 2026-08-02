@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor, gridSlot, crowdCapacity, isCheering, CHEER_MS, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
+import { DanceFloor, gridSlot, crowdCapacity, isCheering, CHEER_MS, readCrowdTestParam, padCrowd, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
 type Slot = ReturnType<typeof gridSlot>;
@@ -139,6 +139,32 @@ describe('isCheering', () => {
   // Treating that as "cheering forever" would leave an avatar stuck lit.
   it('ignores a timestamp from the future', () => {
     expect(isCheering(t + 5000, t)).toBe(false);
+  });
+});
+
+// ?crowdtest=N exists so density can be judged without minting hundreds of anonymous Supabase
+// users or pushing fake people into the real room. It must stay inert unless explicitly asked for.
+describe('crowdtest param', () => {
+  it('is off unless the param is present and sane', () => {
+    for (const q of ['', '?debug', '?crowdtest=0', '?crowdtest=-5', '?crowdtest=abc']) {
+      expect(readCrowdTestParam(q)).toBe(0);
+    }
+  });
+
+  it('reads a count and clamps it', () => {
+    expect(readCrowdTestParam('?crowdtest=200')).toBe(200);
+    expect(readCrowdTestParam('?crowdtest=99999')).toBe(500);
+  });
+
+  it('pads the roster with distinct devices so dedupe keeps them all', () => {
+    const padded = padCrowd([], 50);
+    expect(padded).toHaveLength(50);
+    expect(new Set(padded.map((e) => e.deviceId)).size).toBe(50);
+  });
+
+  it('leaves the roster untouched when off', () => {
+    const real = [entry];
+    expect(padCrowd(real, 0)).toBe(real);
   });
 });
 
