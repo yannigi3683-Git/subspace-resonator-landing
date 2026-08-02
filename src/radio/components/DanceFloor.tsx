@@ -139,6 +139,19 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
   };
 
   const outside = (p: Waypoint) => Math.hypot(p.x - viz.cx, p.y - viz.cy) > viz.r;
+
+  /**
+   * The animation interpolates in a straight line between waypoints, so clearing the circle at
+   * each waypoint is not enough: two points on opposite sides send the avatar straight through
+   * the artwork. This is the distance from the circle's centre to the SEGMENT.
+   */
+  const segmentClears = (a: Waypoint, b: Waypoint) => {
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const lenSq = dx * dx + dy * dy;
+    const t = lenSq === 0 ? 0 : clamp(((viz.cx - a.x) * dx + (viz.cy - a.y) * dy) / lenSq, 0, 1);
+    return Math.hypot(a.x + t * dx - viz.cx, a.y + t * dy - viz.cy) > viz.r;
+  };
   // Last resort, and it must actually be outside: the region corner furthest from the artwork.
   // A radial push can be clamped straight back inside on a narrow box, so it cannot be trusted
   // as the final answer.
@@ -151,12 +164,30 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
 
   const points: Waypoint[] = [];
   for (let i = 0; i < steps; i++) {
-    let p = refuge;
-    for (let attempt = 0; attempt < 16; attempt++) {
+    const prev = points[i - 1];
+    // Fallback is "stay put for this leg", which is a degenerate segment and therefore always
+    // clear. Sampling almost always succeeds; this only has to be safe, not interesting.
+    let p = prev ?? refuge;
+    for (let attempt = 0; attempt < 40; attempt++) {
       const candidate = { x: region.x0 + next() * w, y: region.y0 + next() * h };
-      if (outside(candidate)) { p = candidate; break; }
+      if (!outside(candidate)) continue;
+      // The leg travelled to get here must clear the artwork too, not just the destination.
+      if (prev && !segmentClears(prev, candidate)) continue;
+      // The tour loops, so the last leg home is a real leg and has to clear it as well.
+      if (i === steps - 1 && !segmentClears(candidate, points[0])) continue;
+      p = candidate;
+      break;
     }
     points.push(p);
+  }
+
+  // Repair pass. Collapsing a waypoint onto its predecessor turns that leg into a point, so this
+  // always terminates and always ends with a tour that clears the artwork on every leg.
+  for (let i = 1; i < points.length; i++) {
+    if (!segmentClears(points[i - 1], points[i])) points[i] = points[i - 1];
+  }
+  if (!segmentClears(points[points.length - 1], points[0])) {
+    for (let i = 1; i < points.length; i++) points[i] = points[0];
   }
   return points;
 }
@@ -414,7 +445,7 @@ export function DanceFloor({
             {/* Roaming needs its own element: the slot owns translate(-50%,-50%) and the inner
                 div owns the bob, and one element cannot carry two transforms. */}
             <div
-              className="radio-roam flex flex-col items-center"
+              className="radio-roam relative flex flex-col items-center"
               style={{
                 ...vars,
                 // Long, and seeded per listener, so the crowd is mid-journey on arrival rather
@@ -423,14 +454,25 @@ export function DanceFloor({
                 animationDelay: `-${h % 70}s`,
               }}
             >
+              {/* "You": a follow-spot pooling on the floor under your feet, not a box around
+                  your avatar. Reads at any density and does not fight the neon look. */}
+              {isSelf && (
+                <span
+                  className="radio-you absolute left-1/2 pointer-events-none"
+                  aria-hidden="true"
+                  data-testid="you-marker"
+                  style={{
+                    top: Math.round(size * 0.55),
+                    width: Math.round(size * 1.9),
+                    height: Math.round(size * 0.75),
+                  }}
+                />
+              )}
               <div
-                // "You" is a hairline hugging the avatar, not a slab around it. A 2px ring plus a
-                // 2px offset read as a bulky square, because the glyph is inset within its svg box
-                // so the band sat visibly detached from the artwork.
-                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-1 ring-white/35' : ''}`}
+                className={cheering ? 'radio-dance radio-cheer' : 'radio-bob'}
                 style={cheering
                   // Halo scales with the avatar so it stops bleeding onto neighbours when packed.
-                  ? { ['--halo' as string]: `${Math.round(size * 0.45)}px` }
+                  ? { ['--halo' as string]: `${Math.round(size * 0.9)}px` }
                   : { animationDelay: delay, animationDuration: duration }}
                 data-cheering={cheering ? 'true' : undefined}
               >

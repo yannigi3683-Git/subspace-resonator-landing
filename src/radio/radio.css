@@ -30,10 +30,25 @@
    is driven by --halo (set from the avatar's rendered size) rather than fixed: a constant 14px
    bled well past a 17px avatar's neighbours on a packed floor, where gaps are only 8-16px. */
 @keyframes radio-cheer {
-  0%, 100% { filter: drop-shadow(0 0 calc(var(--halo, 10px) * 0.3) currentColor); }
-  50%      { filter: drop-shadow(0 0 var(--halo, 10px) currentColor); }
+  0%, 100% { filter: drop-shadow(0 0 calc(var(--halo, 10px) * 0.35) currentColor) brightness(1.4) saturate(1.3); }
+  50%      { filter: drop-shadow(0 0 var(--halo, 10px) currentColor) brightness(2.1) saturate(1.6); }
 }
 .radio-cheer { animation: radio-cheer 0.9s ease-in-out infinite; }
+
+/* "You", as a follow-spot on the floor rather than a box around the avatar. A ring reads as a
+   bulky square at small sizes (the svg's artwork is inset from its box, so the band never hugs
+   the glyph) and fights the neon look. A pool of light under your feet says "you" at any density
+   and matches the stage. */
+.radio-you {
+  background: radial-gradient(50% 50% at 50% 50%, rgba(255, 255, 255, 0.55), rgba(38, 198, 218, 0.28) 45%, transparent 72%);
+  filter: blur(2px);
+  border-radius: 9999px;
+  animation: radio-you 2.6s ease-in-out infinite;
+}
+@keyframes radio-you {
+  0%, 100% { opacity: 0.55; transform: translateX(-50%) scaleX(0.92); }
+  50%      { opacity: 0.95; transform: translateX(-50%) scaleX(1.08); }
+}
 
 /* Crowd tile wrapper: smooth the left/top jump when the grid re-slots on join/leave. */
 .radio-slot { transition: left 450ms ease, top 450ms ease; }
@@ -164,6 +179,7 @@
   .radio-bob,
   .radio-roam,
   .radio-cheer,
+  .radio-you,
   .radio-stars,
   .radio-aurora,
   .radio-spin,

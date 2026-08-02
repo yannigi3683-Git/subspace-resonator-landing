@@ -61,6 +61,30 @@ describe('roamPath', () => {
     }
   });
 
+  // The animation interpolates in a straight line between waypoints, so clear waypoints are not
+  // enough: two on opposite sides walk the avatar straight through the artwork. Found on the
+  // preview, because the original test only sampled the waypoints themselves.
+  it('never crosses the visualizer between waypoints', () => {
+    for (const [w, h] of BOXES) {
+      const viz = vizCircle(w, h);
+      for (let i = 0; i < 60; i++) {
+        const path = roamPath(`uid-${i}`, w, h);
+        for (let k = 0; k < path.length; k++) {
+          const a = path[k];
+          const b = path[(k + 1) % path.length]; // the tour loops, so the last leg home counts
+          for (let t = 0; t <= 1; t += 0.02) {
+            const x = a.x + (b.x - a.x) * t;
+            const y = a.y + (b.y - a.y) * t;
+            expect(
+              Math.hypot(x - viz.cx, y - viz.cy),
+              `uid-${i} walks through the visualizer on leg ${k} at ${w}x${h}`,
+            ).toBeGreaterThanOrEqual(viz.r);
+          }
+        }
+      }
+    }
+  });
+
   it('is deterministic per listener and different between listeners', () => {
     expect(roamPath('uid-a', 1120, 900)).toEqual(roamPath('uid-a', 1120, 900));
     expect(roamPath('uid-a', 1120, 900)).not.toEqual(roamPath('uid-b', 1120, 900));
@@ -206,6 +230,18 @@ describe('DanceFloor', () => {
     const tile = screen.getByRole('img', { name: 'StarWeaver' }).parentElement!;
     expect(tile.className).toContain('radio-bob');
     expect(tile.className).not.toContain('radio-cheer');
+  });
+
+  // A ring around the avatar read as a bulky square, because the svg's artwork is inset from its
+  // box so the band never hugged the glyph. "You" is a pool of light on the floor instead.
+  it('marks your own avatar with a follow-spot, and nobody else', () => {
+    const others: PresenceEntry[] = [entry, { ...entry, uid: 'u2', name: 'Other' }];
+    const mine = render(<DanceFloor presenceList={others} station={liveStation} uid="u1" />);
+    expect(mine.container.querySelectorAll('[data-testid="you-marker"]')).toHaveLength(1);
+    mine.unmount();
+
+    const stranger = render(<DanceFloor presenceList={others} station={liveStation} uid="nobody" />);
+    expect(stranger.container.querySelectorAll('[data-testid="you-marker"]')).toHaveLength(0);
   });
 
   it('renders a graphical avatar per listener (not two-letter initials)', () => {
