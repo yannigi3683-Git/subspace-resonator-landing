@@ -74,16 +74,32 @@ export function padCrowd(list: PresenceEntry[], extra: number): PresenceEntry[] 
   ];
 }
 
-// The band is LIFTED by the gutter, not shrunk by it. Shrinking cost the name labels for
-// ordinary small crowds on a phone (two rows in 86px instead of 150px, so no cell was tall
-// enough for a label), which is a worse trade than moving the same band up.
+// The visualizer's own geometry, mirrored from its wrapper in the JSX below
+// (left-1/2 top-[52%] -translate-y-1/2 w-[64vmin] max-w-[460px]). The crowd must
+// start below it: lifting the band to clear the volume pill pushed its top row up
+// into the artwork on a phone, where 64vmin is a large share of the screen.
+const VIZ_CENTER_Y = 0.52;
+const VIZ_VMIN_FRACTION = 0.64;
+const VIZ_MAX_PX = 460;
+const VIZ_CLEARANCE_PX = 4;
+
+function vizBottomPx(boxW: number, boxH: number) {
+  const size = Math.min(VIZ_VMIN_FRACTION * Math.min(boxW, boxH), VIZ_MAX_PX);
+  return boxH * VIZ_CENTER_Y + size / 2;
+}
+
+// The band is squeezed between two fixed obstacles rather than being a flat 25% slice: the
+// visualizer above it, and the volume pill below (LiveRoom, absolute bottom-4 left-4). Deriving
+// it from both is what keeps the crowd out of the artwork AND out from under the controls;
+// honouring only one of them puts avatars into the other.
 function bandPx(boxW: number, boxH: number) {
-  const h = (boxH * FLOOR_BAND.height) / 100;
+  const bottom = boxH - CONTROLS_GUTTER_PX;
   const naturalTop = (boxH * FLOOR_BAND.top) / 100;
+  const top = Math.max(naturalTop - CONTROLS_GUTTER_PX, vizBottomPx(boxW, boxH) + VIZ_CLEARANCE_PX);
   return {
     w: (boxW * FLOOR_BAND.width) / 100,
-    h,
-    top: Math.max(boxH * 0.45, naturalTop - CONTROLS_GUTTER_PX),
+    h: Math.max(MIN_CELL_PX, bottom - top),
+    top: Math.min(top, Math.max(0, bottom - MIN_CELL_PX)),
   };
 }
 
@@ -384,14 +400,17 @@ export function DanceFloor({
               }}
             >
               <div
-                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
+                // "You" is a hairline hugging the avatar, not a slab around it. A 2px ring plus a
+                // 2px offset read as a bulky square, because the glyph is inset within its svg box
+                // so the band sat visibly detached from the artwork.
+                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-1 ring-white/35' : ''}`}
                 style={cheering
                   // Halo scales with the avatar so it stops bleeding onto neighbours when packed.
                   ? { ['--halo' as string]: `${Math.round(size * 0.45)}px` }
                   : { animationDelay: delay, animationDuration: duration }}
                 data-cheering={cheering ? 'true' : undefined}
               >
-                <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
+                <Avatar avatarId={entry.avatarId} size={isSelf ? size + 6 : size} label={entry.name} />
               </div>
               {hasLabel && (
                 <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">

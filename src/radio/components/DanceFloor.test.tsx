@@ -121,6 +121,26 @@ describe('crowd wander', () => {
   });
 });
 
+// Regression: lifting the band to clear the volume pill pushed its top row up INTO the
+// visualizer on a phone, where 64vmin is a large share of the screen. The band is squeezed
+// between two obstacles, and honouring only one of them puts avatars inside the other.
+describe('crowd band clearance', () => {
+  const vizBottom = (w: number, h: number) => h * 0.52 + Math.min(0.64 * Math.min(w, h), 460) / 2;
+
+  it('keeps every avatar below the visualizer and above the controls', () => {
+    for (const [w, h] of [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
+      const total = crowdCapacity(w, h);
+      for (let i = 0; i < total; i++) {
+        const s = gridSlot(i, total, `uid-${i}`, w, h);
+        const top = (s.py / 100) * h - s.size / 2 - s.wanderYpx;
+        const bottom = (s.py / 100) * h + (s.hasLabel ? s.size + LABEL_GAP + LABEL_H : s.size) / 2 + s.wanderYpx;
+        expect(top, `tile ${i} overlaps the visualizer at ${w}x${h}`).toBeGreaterThanOrEqual(vizBottom(w, h));
+        expect(bottom, `tile ${i} reaches the controls at ${w}x${h}`).toBeLessThanOrEqual(h - 64);
+      }
+    }
+  });
+});
+
 describe('isCheering', () => {
   const t = 1_000_000;
 
