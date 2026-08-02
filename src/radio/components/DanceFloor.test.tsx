@@ -193,6 +193,21 @@ describe('DanceFloor', () => {
     expect(tile.className).toContain('radio-dance');
     expect(tile.className).toContain('radio-cheer');
     expect(tile.className).not.toContain('radio-bob');
+    // Sized off the avatar, not fixed: a constant radius bled onto neighbours when packed.
+    expect(tile.getAttribute('style')).toMatch(/--halo:\s*\d+px/);
+  });
+
+  // Every tile used to share z-[5], so paint order was DOM order and a cheer could land behind
+  // a neighbour's avatar - exactly when the listener wants to be seen.
+  it('lifts a cheering tile above the rest of the crowd', () => {
+    const { container, unmount } = render(
+      <DanceFloor presenceList={[{ ...entry, cheerAt: Date.now() }]} station={liveStation} uid="u2" />,
+    );
+    expect(container.querySelector('.radio-slot')!.className).toContain('z-[7]');
+    unmount();
+
+    const idle = render(<DanceFloor presenceList={[entry]} station={liveStation} uid="u2" />);
+    expect(idle.container.querySelector('.radio-slot')!.className).toContain('z-[5]');
   });
 
   it('returns a listener to the idle bob once the cheer lapses', () => {

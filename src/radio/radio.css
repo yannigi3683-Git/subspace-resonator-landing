@@ -20,10 +20,12 @@
 }
 .radio-wander { animation: radio-wander var(--wander-dur, 11s) ease-in-out infinite; }
 
-/* Happy reaction: a brighter halo for CHEER_MS, paired with the faster radio-dance. */
+/* Happy reaction: a brighter halo for CHEER_MS, paired with the faster radio-dance. The radius
+   is driven by --halo (set from the avatar's rendered size) rather than fixed: a constant 14px
+   bled well past a 17px avatar's neighbours on a packed floor, where gaps are only 8-16px. */
 @keyframes radio-cheer {
-  0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
-  50%      { filter: drop-shadow(0 0 14px currentColor); }
+  0%, 100% { filter: drop-shadow(0 0 calc(var(--halo, 10px) * 0.3) currentColor); }
+  50%      { filter: drop-shadow(0 0 var(--halo, 10px) currentColor); }
 }
 .radio-cheer { animation: radio-cheer 0.9s ease-in-out infinite; }
 

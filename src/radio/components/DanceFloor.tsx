@@ -361,7 +361,10 @@ export function DanceFloor({
         return (
           <div
             key={entry.uid}
-            className="radio-slot absolute z-[5] flex flex-col items-center"
+            // A cheering tile lifts above its neighbours. Every tile shared z-[5], so paint order
+            // was DOM order and the one moment a listener wants to be seen was the moment their
+            // glow could land behind someone else's avatar.
+            className={`radio-slot absolute ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
             style={{
               left: `${px}%`,
               top: `${py}%`,
@@ -382,7 +385,10 @@ export function DanceFloor({
             >
               <div
                 className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
-                style={cheering ? undefined : { animationDelay: delay, animationDuration: duration }}
+                style={cheering
+                  // Halo scales with the avatar so it stops bleeding onto neighbours when packed.
+                  ? { ['--halo' as string]: `${Math.round(size * 0.45)}px` }
+                  : { animationDelay: delay, animationDuration: duration }}
                 data-cheering={cheering ? 'true' : undefined}
               >
                 <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />

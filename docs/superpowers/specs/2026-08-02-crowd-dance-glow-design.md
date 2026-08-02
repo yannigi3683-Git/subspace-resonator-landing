@@ -102,6 +102,23 @@ room, not as a defect. Options considered and rejected: driving the bob from the
 slack (a full floor goes visibly still), and lowering `CROWD_HARD_CAP` (fewer real people shown).
 Do not "fix" the asymmetry between bounded wander and unbounded bob without revisiting this.
 
+## Cheer duration and the halo bleed (decided 2026-08-02)
+
+A longer cheer was considered (60s) and rejected. Duration does not address the actual
+complaint, which was the halo overlapping neighbours, and it makes the signal worse: with a 3s
+cooldown and 120 listeners, 20+ avatars would be lit simultaneously and a permanent glow is just
+the new baseline brightness. `CHEER_MS` stays at 5000 — a pulse, not a state. A listener who
+wants to stay lit can keep tapping, which is enthusiasm expressing itself rather than saturation.
+
+The overlap was fixed at the cause instead:
+
+- **The halo radius scales with the avatar** (`--halo`, set to `size * 0.45`). It was a fixed
+  14px, which bled well past a 17px avatar into neighbours on a packed floor where gaps are only
+  8-16px.
+- **A cheering tile lifts to `z-[7]`.** Every tile shared `z-[5]`, so paint order was DOM order
+  and a cheer could render *behind* a neighbour's avatar — precisely when its owner wants to be
+  seen.
+
 ## Non-goals
 
 - No tap-to-glow on the avatar itself (touch target, above).
