@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   DanceFloor, crowdCapacity, crowdRegion, crowdTileSize, vizCircle, roamPath, roamVars,
-  isCheering, CHEER_MS, readCrowdTestParam, padCrowd,
+  isCheering, CHEER_MS, readCrowdTestParam, padCrowd, obstacleRects,
 } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
@@ -21,26 +21,13 @@ const entry: PresenceEntry = {
   position: { x: 50, y: 50 },
 };
 
-// The old fixed cap of 30 was roughly what a phone's band holds, so a wide desktop window
-// threw most of the crowd into the "+N" badge for no reason. Capacity now comes from the
-// measured band, and the overlap check below is what keeps it honest.
-
-// Wander spends the same slack the static jitter came from, so the no-overlap guarantee has to
-// hold at the WORST CASE: both neighbours swung fully toward each other at the same instant.
-// Weakening this test instead of the amplitude would reintroduce exactly the overlap bug the
-// footprint math exists to prevent.
-
-// Regression: lifting the band to clear the volume pill pushed its top row up INTO the
-// visualizer on a phone, where 64vmin is a large share of the screen. The band is squeezed
-// between two obstacles, and honouring only one of them puts avatars inside the other.
-
 const BOXES = [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const;
 
 // The crowd used to be a grid of fixed cells in a bottom strip, drifting ~2px inside its own
 // cell. It read as a formation and nobody could reach the speakers, because there was no floor
 // under them. Positions now come from a roaming path over the whole region. The guarantee that
 // replaced "tiles never overlap" is this: a waypoint is always on the floor and never inside the
-// visualizer. Crossing paths are expected - that is what a crowd does.
+// visualizer or a PA stack. Crossing each other is expected - that is what a crowd does.
 describe('roamPath', () => {
   it('keeps every waypoint on the floor and out of the visualizer', () => {
     for (const [w, h] of BOXES) {
@@ -64,9 +51,13 @@ describe('roamPath', () => {
   // The animation interpolates in a straight line between waypoints, so clear waypoints are not
   // enough: two on opposite sides walk the avatar straight through the artwork. Found on the
   // preview, because the original test only sampled the waypoints themselves.
-  it('never crosses the visualizer between waypoints', () => {
+  it('never crosses the visualizer or the PA stacks between waypoints', () => {
+    // Collected rather than asserted per sample: this walks ~500k points, and an expect() per
+    // point takes long enough to time the test out.
+    const breaches: string[] = [];
     for (const [w, h] of BOXES) {
       const viz = vizCircle(w, h);
+      const rects = obstacleRects(w, h);
       for (let i = 0; i < 60; i++) {
         const path = roamPath(`uid-${i}`, w, h);
         for (let k = 0; k < path.length; k++) {
@@ -75,13 +66,24 @@ describe('roamPath', () => {
           for (let t = 0; t <= 1; t += 0.02) {
             const x = a.x + (b.x - a.x) * t;
             const y = a.y + (b.y - a.y) * t;
-            expect(
-              Math.hypot(x - viz.cx, y - viz.cy),
-              `uid-${i} walks through the visualizer on leg ${k} at ${w}x${h}`,
-            ).toBeGreaterThanOrEqual(viz.r);
+            if (Math.hypot(x - viz.cx, y - viz.cy) < viz.r) {
+              breaches.push(`uid-${i} through the visualizer, leg ${k}, ${w}x${h}`);
+            }
+            if (rects.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1)) {
+              breaches.push(`uid-${i} through a PA stack, leg ${k}, ${w}x${h}`);
+            }
           }
         }
       }
+    }
+    expect(breaches.slice(0, 5)).toEqual([]);
+  });
+
+  it('models the PA stacks as obstacles wherever they are rendered', () => {
+    // Hidden below 400px by the JSX, so there is nothing to avoid there.
+    expect(obstacleRects(360, 576)).toHaveLength(0);
+    for (const [w, h] of [[412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
+      expect(obstacleRects(w, h), `no PA obstacles at ${w}x${h}`).toHaveLength(2);
     }
   });
 

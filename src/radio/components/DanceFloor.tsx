@@ -79,6 +79,60 @@ export function vizCircle(boxW: number, boxH: number) {
   return { cx: boxW / 2, cy: boxH * VIZ_CENTER_Y, r: size / 2 + VIZ_CLEARANCE_PX };
 }
 
+// The PA stacks, mirrored from their JSX wrappers: top-[88px], left/right-[0.5%], and a width
+// that steps with the breakpoint. The svg is viewBox 200x260 rendered w-full h-auto, so its
+// height is 1.3x its width. Hidden entirely below 400px, where there is no room for them.
+const PA_TOP_PX = 88;
+const PA_ASPECT = 260 / 200;
+const OBSTACLE_MARGIN_PX = 12;
+
+export interface Rect { x0: number; y0: number; x1: number; y1: number }
+
+function paWidthPx(boxW: number): number {
+  // Thresholds are viewport-based in the JSX; on md+ the floor box is the viewport minus the
+  // 320px chat sidebar, which is why the largest step is checked at 704 rather than 1024.
+  if (boxW < 400) return 0;
+  if (boxW >= 704) return 210;
+  if (boxW >= 640) return 150;
+  return 96;
+}
+
+/** Fixed props the crowd must walk around, as rectangles. Currently the two PA stacks. */
+export function obstacleRects(boxW: number, boxH: number): Rect[] {
+  const w = paWidthPx(boxW);
+  if (w === 0) return [];
+  const h = w * PA_ASPECT;
+  const inset = boxW * 0.005;
+  const m = OBSTACLE_MARGIN_PX;
+  const top = PA_TOP_PX - m;
+  const bottom = Math.min(PA_TOP_PX + h + m, boxH);
+  return [
+    { x0: inset - m, y0: top, x1: inset + w + m, y1: bottom },
+    { x0: boxW - inset - w - m, y0: top, x1: boxW - inset + m, y1: bottom },
+  ];
+}
+
+const inRect = (p: Waypoint, r: Rect) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
+
+/** Segment vs axis-aligned box, by the slab method. */
+function segmentHitsRect(a: Waypoint, b: Waypoint, r: Rect): boolean {
+  if (inRect(a, r) || inRect(b, r)) return true;
+  const dx = b.x - a.x;
+  const dy = b.y - a.y;
+  let t0 = 0;
+  let t1 = 1;
+  for (const [p, q] of [[-dx, a.x - r.x0], [dx, r.x1 - a.x], [-dy, a.y - r.y0], [dy, r.y1 - a.y]]) {
+    if (p === 0) {
+      if (q < 0) return false; // parallel and outside this slab
+      continue;
+    }
+    const t = q / p;
+    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
+    else { if (t < t0) return false; if (t < t1) t1 = t; }
+  }
+  return t0 <= t1;
+}
+
 // The whole usable floor, not a strip. The old band was the bottom quarter, which is why nobody
 // could ever stand near the speakers: there was no floor under them. Top clears the now-playing
 // banner and the PA stack; bottom clears the volume pill.
@@ -138,7 +192,9 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
     return seed / 0xffffffff;
   };
 
-  const outside = (p: Waypoint) => Math.hypot(p.x - viz.cx, p.y - viz.cy) > viz.r;
+  const rects = obstacleRects(boxW, boxH);
+  const outside = (p: Waypoint) =>
+    Math.hypot(p.x - viz.cx, p.y - viz.cy) > viz.r && !rects.some((r) => inRect(p, r));
 
   /**
    * The animation interpolates in a straight line between waypoints, so clearing the circle at
@@ -150,7 +206,8 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
     const dy = b.y - a.y;
     const lenSq = dx * dx + dy * dy;
     const t = lenSq === 0 ? 0 : clamp(((viz.cx - a.x) * dx + (viz.cy - a.y) * dy) / lenSq, 0, 1);
-    return Math.hypot(a.x + t * dx - viz.cx, a.y + t * dy - viz.cy) > viz.r;
+    if (Math.hypot(a.x + t * dx - viz.cx, a.y + t * dy - viz.cy) <= viz.r) return false;
+    return !rects.some((r) => segmentHitsRect(a, b, r));
   };
   // Last resort, and it must actually be outside: the region corner furthest from the artwork.
   // A radial push can be clamped straight back inside on a narrow box, so it cannot be trusted
@@ -159,8 +216,10 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
     { x: region.x0, y: region.y0 }, { x: region.x1, y: region.y0 },
     { x: region.x0, y: region.y1 }, { x: region.x1, y: region.y1 },
   ];
-  const refuge = corners.reduce((best, c) =>
-    Math.hypot(c.x - viz.cx, c.y - viz.cy) > Math.hypot(best.x - viz.cx, best.y - viz.cy) ? c : best);
+  // Must itself be clear: the top corners are exactly where the PA stacks live.
+  const refuge = (corners.filter(outside).length ? corners.filter(outside) : corners)
+    .reduce((best, c) =>
+      Math.hypot(c.x - viz.cx, c.y - viz.cy) > Math.hypot(best.x - viz.cx, best.y - viz.cy) ? c : best);
 
   const points: Waypoint[] = [];
   for (let i = 0; i < steps; i++) {
@@ -198,10 +257,20 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
  * away most of the crowd on a wide desktop window. Everyone past this is summed
  * into the "+N in the crowd" badge.
  */
-export function crowdCapacity(boxW: number, boxH: number): number {
+/** Floor area actually walkable: the region, less the visualizer and the fixed props. */
+function usableFloorPx(boxW: number, boxH: number): number {
   const r = crowdRegion(boxW, boxH);
   const viz = vizCircle(boxW, boxH);
-  const usable = Math.max(0, (r.x1 - r.x0) * (r.y1 - r.y0) - Math.PI * viz.r * viz.r);
+  const blocked = obstacleRects(boxW, boxH).reduce((sum, o) => {
+    const w = Math.max(0, Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0));
+    const h = Math.max(0, Math.min(o.y1, r.y1) - Math.max(o.y0, r.y0));
+    return sum + w * h;
+  }, Math.PI * viz.r * viz.r);
+  return Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0) - blocked);
+}
+
+export function crowdCapacity(boxW: number, boxH: number): number {
+  const usable = usableFloorPx(boxW, boxH);
   return Math.max(1, Math.min(Math.floor(usable / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
 }
 
@@ -211,10 +280,7 @@ export function crowdCapacity(boxW: number, boxH: number): number {
  * drops the name label once it no longer fits beside the avatar.
  */
 export function crowdTileSize(total: number, boxW: number, boxH: number) {
-  const r = crowdRegion(boxW, boxH);
-  const viz = vizCircle(boxW, boxH);
-  const usable = Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0) - Math.PI * viz.r * viz.r);
-  const per = Math.sqrt(usable / Math.max(1, total));
+  const per = Math.sqrt(usableFloorPx(boxW, boxH) / Math.max(1, total));
   const size = Math.round(clamp(0.6 * per, AVATAR_MIN, AVATAR_BASE));
   return { size, hasLabel: per >= LABEL_W && per >= size + LABEL_GAP + LABEL_H };
 }
