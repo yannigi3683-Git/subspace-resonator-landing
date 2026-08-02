@@ -117,6 +117,33 @@ describe('PresenceList rename', () => {
       expect(m.onBan).toHaveBeenCalledWith(entry);
     });
 
+    // The chip branch truncates at 20 because it is decorative. The host branch must not:
+    // an unreachable listener is an unmoderatable one, and the abuser is as likely to be
+    // #63 as #3. The roster's own scroll container carries the height instead.
+    it('gives every listener a row for the host, with no overflow line', () => {
+      const m = mod();
+      const entries = Array.from({ length: 25 }, (_, i) => ({
+        ...makeEntry(i + 1),
+        deviceId: `dev-${String(i + 1).padStart(2, '0')}`,
+      }));
+      render(<PresenceList presenceList={entries} count={25} uid="uid-99" moderation={m} />);
+      expect(screen.getAllByRole('button', { name: /^kick /i })).toHaveLength(25);
+      expect(screen.queryByText(/more$/i)).not.toBeInTheDocument();
+    });
+
+    it('orders rows by deviceId so they do not reshuffle under a ban tap', () => {
+      const m = mod();
+      const entries = [
+        { ...makeEntry(3), deviceId: 'dev-c' },
+        { ...makeEntry(1), deviceId: 'dev-a' },
+        { ...makeEntry(2), deviceId: 'dev-b' },
+      ];
+      render(<PresenceList presenceList={entries} count={3} uid="uid-99" moderation={m} />);
+      const names = screen.getAllByRole('button', { name: /^kick /i })
+        .map((b) => b.getAttribute('aria-label'));
+      expect(names).toEqual(['Kick Listener1', 'Kick Listener2', 'Kick Listener3']);
+    });
+
     // Your own entry is rendered separately (with the rename pencil), so it can never be a
     // kick/ban target from this list.
     it('never offers moderation on your own entry', () => {

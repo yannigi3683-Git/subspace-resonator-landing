@@ -15,13 +15,50 @@ function hashUid(uid: string): number {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-// Render cap: past this many listeners we stop placing individual tiles and
-// show a "+N in the crowd" badge instead.
-const CROWD_RENDER_CAP = 30;
-
 // Floor band the crowd is confined to (percent of the DanceFloor box), clear
 // of the central visualizer and the stage riser above it.
 const FLOOR_BAND = { left: 6, top: 70, width: 88, height: 25 };
+
+// The volume pill (LiveRoom, absolute bottom-4 left-4) overlays this same
+// bottom strip, so it hid the crowd's bottom-left tiles. Taking the gutter off
+// the band lifts the whole crowd clear of it instead of special-casing a corner
+// out of a grid.
+const CONTROLS_GUTTER_PX = 64;
+
+// Smallest cell an avatar can have without spilling into its neighbour: the
+// avatar is 0.6 of the cell, clamped up to AVATAR_MIN, so below this the clamp
+// wins and tiles start overlapping. This is what actually limits the crowd.
+const AVATAR_MIN = 16;
+const MIN_CELL_PX = Math.ceil(AVATAR_MIN / 0.6);
+
+// Beyond this the tiles are indistinguishable dots and it is just DOM cost.
+const CROWD_HARD_CAP = 200;
+
+// The band is LIFTED by the gutter, not shrunk by it. Shrinking cost the name labels for
+// ordinary small crowds on a phone (two rows in 86px instead of 150px, so no cell was tall
+// enough for a label), which is a worse trade than moving the same band up.
+function bandPx(boxW: number, boxH: number) {
+  const h = (boxH * FLOOR_BAND.height) / 100;
+  const naturalTop = (boxH * FLOOR_BAND.top) / 100;
+  return {
+    w: (boxW * FLOOR_BAND.width) / 100,
+    h,
+    top: Math.max(boxH * 0.45, naturalTop - CONTROLS_GUTTER_PX),
+  };
+}
+
+/**
+ * How many listeners actually fit the measured band before tiles would overlap.
+ * Replaces a fixed cap of 30, which was roughly the phone's capacity and so threw
+ * away most of the crowd on a wide desktop window. Everyone past this is summed
+ * into the "+N in the crowd" badge.
+ */
+export function crowdCapacity(boxW: number, boxH: number): number {
+  const { w, h } = bandPx(boxW, boxH);
+  const cols = Math.max(1, Math.floor(w / MIN_CELL_PX));
+  const rows = Math.max(1, Math.floor(h / MIN_CELL_PX));
+  return Math.min(cols * rows, CROWD_HARD_CAP);
+}
 
 // Fallback box size for the very first paint (before ResizeObserver reports
 // real dimensions) and for jsdom in tests, which never measures a layout.
@@ -79,8 +116,7 @@ function useMeasuredSize(ref: RefObject<HTMLElement | null>) {
 // avatars), and jitter is capped at a fraction of the slack left after
 // sizing the avatar, so two adjacent tiles can never actually touch.
 export function gridSlot(index: number, total: number, uid: string, boxW: number, boxH: number) {
-  const bandWpx = (boxW * FLOOR_BAND.width) / 100;
-  const bandHpx = (boxH * FLOOR_BAND.height) / 100;
+  const { w: bandWpx, h: bandHpx, top: bandTopPx } = bandPx(boxW, boxH);
   const { cols, rows } = computeGridDims(total, bandWpx, bandHpx);
   const col = index % cols;
   const row = Math.floor(index / cols);
@@ -102,7 +138,7 @@ export function gridSlot(index: number, total: number, uid: string, boxW: number
   const jitterYpx = (((h >> 8) % 100) / 100 - 0.5) * 2 * maxJitterYpx;
 
   const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
-  const py = FLOOR_BAND.top + ((cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
+  const py = ((bandTopPx + cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
 
   return { px, py, size, hasLabel };
 }
@@ -137,15 +173,17 @@ export function DanceFloor({
   nowPlaying,
 }: DanceFloorProps) {
   const isGhost = presenceList.length === 0;
-  const overflow = Math.max(0, presenceList.length - CROWD_RENDER_CAP);
+  const live = station?.mode === 'live';
+  const floorRef = useRef<HTMLDivElement>(null);
+  const box = useMeasuredSize(floorRef);
+
+  const cap = crowdCapacity(box.w, box.h);
+  const overflow = Math.max(0, presenceList.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
     : [...presenceList]
         .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
-        .slice(0, CROWD_RENDER_CAP);
-  const live = station?.mode === 'live';
-  const floorRef = useRef<HTMLDivElement>(null);
-  const box = useMeasuredSize(floorRef);
+        .slice(0, cap);
 
   return (
     <div ref={floorRef} className="relative w-full h-full overflow-hidden bg-[#05060f]">

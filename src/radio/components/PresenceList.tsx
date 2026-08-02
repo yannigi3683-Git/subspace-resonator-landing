@@ -27,7 +27,15 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
   const [banArmedFor, setBanArmedFor] = useState<string | null>(null);
 
   const ownEntry = uid ? presenceList.find(e => e.uid === uid) : null;
-  const otherEntries = uid ? presenceList.filter(e => e.uid !== uid) : presenceList;
+  // Presence sync order reshuffles on every join and leave. Unsorted, a row can move between
+  // the host reading a name and their thumb landing on BAN, which is not undoable from the
+  // listener's side. Same deviceId comparator DanceFloor uses to keep the crowd still.
+  const otherEntries = (uid ? presenceList.filter(e => e.uid !== uid) : presenceList)
+    .slice()
+    .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid));
+  // Host mode is the moderation surface, so every listener needs a reachable row and the
+  // container scrolls. The chip branch stays truncated: there the list is only decorative.
+  const visibleEntries = moderation ? otherEntries : otherEntries.slice(0, 20);
 
   function openEdit() {
     setDraftName(ownEntry?.name ?? '');
@@ -50,7 +58,9 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
   }
 
   return (
-    <div className="px-3 py-2 border-t border-[#1a1a2e]">
+    // Host mode renders a 44px KICK/BAN row per listener, so an unbounded roster grew past the
+    // whole sidebar and collapsed the chat scroller (flex-1, min-height 0) to nothing.
+    <div className="px-3 py-2 border-t border-[#1a1a2e] shrink-0 max-h-[30vh] overflow-y-auto">
       <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest mb-2">
         {count} {count === 1 ? 'listener' : 'listeners'} online
       </p>
@@ -119,7 +129,7 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
       )}
 
       <div className={moderation ? 'flex flex-col gap-1' : 'flex flex-wrap gap-1'}>
-        {otherEntries.slice(0, 20).map((entry) => (
+        {visibleEntries.map((entry) => (
           moderation ? (
             <div key={entry.uid} className="flex items-center gap-2">
               <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
@@ -159,9 +169,9 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
             </span>
           )
         ))}
-        {otherEntries.length > 20 && (
+        {otherEntries.length > visibleEntries.length && (
           <span className="font-mono text-[10px] text-[#555]">
-            +{otherEntries.length - 20} more
+            +{otherEntries.length - visibleEntries.length} more
           </span>
         )}
       </div>

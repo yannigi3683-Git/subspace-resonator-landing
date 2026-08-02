@@ -3,6 +3,7 @@ import {
   transition,
   initialState,
   calcDelay,
+  shouldResumeOnOnline,
   MAX_RETRIES,
   type FsmState,
   type ConnectionEvent,
@@ -308,5 +309,33 @@ describe('full happy path', () => {
     ]);
     expect(state.status).toBe('live');
     expect(state.retryCount).toBe(0);
+  });
+});
+
+// A WiFi outage longer than the ~31s retry budget parks the FSM in `lost`, which is terminal.
+// Restoring the network used to do nothing at all — the host had to notice the console had given
+// up and press GO LIVE by hand (seen live 2026-07-31).
+describe('shouldResumeOnOnline', () => {
+  it('resumes when the budget was exhausted and the mixer stream is still alive', () => {
+    expect(shouldResumeOnOnline('lost', true)).toBe(true);
+  });
+
+  it('does not resume without a live stream (a fatal setup error, not a network drop)', () => {
+    expect(shouldResumeOnOnline('lost', false)).toBe(false);
+  });
+
+  it('does not resume from any non-terminal state: their own retry is already scheduled', () => {
+    for (const status of ['idle', 'connecting', 'live', 'degraded', 'reconnecting'] as const) {
+      expect(shouldResumeOnOnline(status, true)).toBe(false);
+    }
+  });
+
+  it('a resume from lost re-enters connecting and reconnects, with the budget reset', () => {
+    const lost: FsmState = { status: 'lost', retryCount: MAX_RETRIES, nextDelayMs: 30_000 };
+    expect(shouldResumeOnOnline(lost.status, true)).toBe(true);
+    const { next, effects } = transition(lost, { type: 'CONNECT' }, ZERO_RAND);
+    expect(next.status).toBe('connecting');
+    expect(next.retryCount).toBe(0);
+    expect(effects).toContainEqual({ type: 'CONNECT_RTC' });
   });
 });
