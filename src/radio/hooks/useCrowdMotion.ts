@@ -19,13 +19,33 @@ export function useCrowdMotion(uids: string[], env: CrowdEnv | null, enabled: bo
   const envRef = useRef<CrowdEnv | null>(env);
   envRef.current = env;
 
-  // Re-seed only when the roster or the floor actually changes, not on every render: reseeding
-  // teleports everybody back to their starting positions.
-  const signature = `${uids.join('|')}::${env ? `${env.region.x1}x${env.region.y1}:${env.radius}` : 'none'}`;
+  // A join or a leave must NOT disturb the people already on the floor. Re-seeding the whole
+  // crowd on any roster change meant one arrival teleported all 200 back to their starting
+  // layout, and in a busy room that happens faster than the simulation can spread them out - it
+  // is why a crowd above ~50 looked permanently clumped. Newcomers are seeded, leavers dropped,
+  // everyone else keeps their position. Only a geometry change (a resize) reseeds everybody,
+  // where a jump is expected anyway.
+  const roster = uids.join('|');
+  const geometry = env ? `${env.region.x1}x${env.region.y1}:${env.radius}` : 'none';
+  const signature = `${roster}::${geometry}`;
+  const byUidRef = useRef(new Map<string, Agent>());
+  const geometryRef = useRef('');
   const signatureRef = useRef('');
   if (env && signatureRef.current !== signature) {
+    const carried = geometryRef.current === geometry ? byUidRef.current : new Map<string, Agent>();
+    const newcomers = uids.filter((u) => !carried.has(u));
+    const fresh = seedAgents(newcomers, env);
+    const next = new Map<string, Agent>();
+    newcomers.forEach((u, i) => next.set(u, fresh[i]));
+    for (const u of uids) {
+      const existing = carried.get(u);
+      if (existing) next.set(u, existing);
+    }
+    byUidRef.current = next;
+    // Index order must match the caller's node order, which is the order of `uids`.
+    agentsRef.current = uids.map((u) => next.get(u)!);
     signatureRef.current = signature;
-    agentsRef.current = seedAgents(uids, env);
+    geometryRef.current = geometry;
   }
 
   useEffect(() => {

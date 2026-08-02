@@ -94,3 +94,57 @@ describe('crowd steering', () => {
     expect(() => stepAgents([], env, 33)).not.toThrow();
   });
 });
+
+/**
+ * How lumpy a set of positions is: variance-to-mean over a 4x4 grid of the floor. 1.0 is a
+ * perfectly even spread, higher is clumpier. The floor has a hole in the middle (the visualizer)
+ * so even a flawless crowd scores above 1, which is why every assertion below compares against a
+ * uniform-random baseline measured on the same floor rather than against a fixed number.
+ */
+function clumpiness(points: { x: number; y: number }[], e: CrowdEnv, g = 4): number {
+  const { region: r } = e;
+  const cells = new Array(g * g).fill(0);
+  for (const p of points) {
+    const gx = Math.min(g - 1, Math.floor(((p.x - r.x0) / (r.x1 - r.x0)) * g));
+    const gy = Math.min(g - 1, Math.floor(((p.y - r.y0) / (r.y1 - r.y0)) * g));
+    cells[gy * g + gx]++;
+  }
+  const mean = points.length / (g * g);
+  return cells.reduce((s, v) => s + (v - mean) ** 2, 0) / (g * g) / mean;
+}
+
+function uniformBaseline(n: number, e: CrowdEnv): number {
+  const runs = Array.from({ length: 25 }, () => {
+    const pts: { x: number; y: number }[] = [];
+    while (pts.length < n) {
+      const x = e.region.x0 + Math.random() * (e.region.x1 - e.region.x0);
+      const y = e.region.y0 + Math.random() * (e.region.y1 - e.region.y0);
+      if (isClear(x, y, e)) pts.push({ x, y });
+    }
+    return clumpiness(pts, e);
+  });
+  return runs.reduce((s, v) => s + v, 0) / runs.length;
+}
+
+// A packed floor used to land everyone on one side, because seedAgents read the FIRST output of a
+// freshly seeded xorshift32 and that value barely moves between nearby seeds - it became x.
+describe('crowd seeding spread', () => {
+  const phone: CrowdEnv = {
+    region: { x0: 12, y0: 210, x1: 378, y1: 676 },
+    viz: { cx: 195, cy: 385, r: 129 },
+    rects: [],
+    radius: 8,
+    speed: 26,
+  };
+
+  for (const [label, e] of [['desktop', env], ['phone', phone]] as const) {
+    for (const n of [50, 200]) {
+      it(`spreads ${n} avatars across the ${label} floor about as evenly as random`, () => {
+        // Sequential uids are the worst case (hashes land close together) and are exactly what
+        // `?crowdtest=N` generates, so this is the shape the owner actually looks at.
+        const crowd = seedAgents(Array.from({ length: n }, (_, i) => `crowdtest-${i}`), e);
+        expect(clumpiness(crowd, e)).toBeLessThan(uniformBaseline(n, e) * 1.6);
+      });
+    }
+  }
+});

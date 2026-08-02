@@ -46,15 +46,24 @@ const SEPARATION_FORCE = 6;
 const OBSTACLE_FORCE = 30;
 const ARRIVE_PX = 14;
 const MAX_STEP_MS = 100;
+const EPS = 0.01;
+
+// xorshift32's first output barely moves between nearby seeds - 5381/5382/5383 all give 0.3387.
+// That output becomes an avatar's x, so listeners whose uid hashes land close together all seeded
+// at the same horizontal position, which is what packed the crowd onto one side of the floor.
+// Discarding a few outputs first mixes the state; measured back to an even spread at 200.
+const RNG_WARMUP = 4;
 
 function rng(seed: number) {
   let s = seed >>> 0 || 1;
-  return () => {
+  const next = () => {
     s ^= s << 13; s >>>= 0;
     s ^= s >> 17;
     s ^= s << 5; s >>>= 0;
     return s / 0xffffffff;
   };
+  for (let i = 0; i < RNG_WARMUP; i++) next();
+  return next;
 }
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
@@ -78,7 +87,10 @@ function resolveObstacles(a: Agent, env: CrowdEnv): void {
     const dx = a.x - env.viz.cx;
     const dy = a.y - env.viz.cy;
     const d = Math.hypot(dx, dy);
-    const minV = env.viz.r + env.radius;
+    // Land a hair OUTSIDE the clearance, not exactly on it. Placing on the boundary leaves the
+    // result at the mercy of float rounding in the very hypot that checks it, so an avatar could
+    // read as inside a prop it had just been pushed out of.
+    const minV = env.viz.r + env.radius + EPS;
     if (d < minV) {
       const nx = d > 0.001 ? dx / d : 1;
       const ny = d > 0.001 ? dy / d : 0;
@@ -86,10 +98,10 @@ function resolveObstacles(a: Agent, env: CrowdEnv): void {
       a.y = env.viz.cy + ny * minV;
     }
     for (const r of env.rects) {
-      const x0 = r.x0 - env.radius;
-      const x1 = r.x1 + env.radius;
-      const y0 = r.y0 - env.radius;
-      const y1 = r.y1 + env.radius;
+      const x0 = r.x0 - env.radius - EPS;
+      const x1 = r.x1 + env.radius + EPS;
+      const y0 = r.y0 - env.radius - EPS;
+      const y1 = r.y1 + env.radius + EPS;
       if (a.x <= x0 || a.x >= x1 || a.y <= y0 || a.y >= y1) continue;
       const options: [number, number, number][] = [
         [a.x - x0, x0, a.y], [x1 - a.x, x1, a.y],
