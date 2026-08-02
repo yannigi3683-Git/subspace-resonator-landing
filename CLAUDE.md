@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-30 baseline: 58 files, 474 tests — the deep-buffer status badge on top of the 2026-07-26 in-room moderation baseline of 57 files / 462 tests; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them)
 
 ---
 
@@ -39,11 +39,12 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 npm run dev       # dev server at localhost:5173
 npm run build     # tsc -b && vite build  (TypeScript + bundle)
 npm run test      # vitest (watch mode; use `npx vitest run` for single pass)
-npm run lint      # eslint
 npm run preview   # preview production build
 ```
 
 Always run `npm run build` and `npm test` before pushing. Both must exit clean.
+
+**There is no linter, and that is deliberate (decided 2026-07-31).** `package.json` used to declare `"lint": "eslint ."`, but eslint was never installed and no config was ever committed, so the command failed on every branch from day one. An audit of all 296 commits found that a stock ESLint config would have caught **none** of this repo's real bugs, and that `react-hooks/exhaustive-deps` would have argued *for* the shape that caused `b64604f` (the crossfade interval killed by its own effect cleanup — `phase` was correctly in the dep array, and that was the bug). `tsconfig.*.json` already enforces `strict`, `noUnusedLocals`, `noUnusedParameters` and `noFallthroughCasesInSwitch`, so the type checker covers the overlap. The one mechanically-detectable defect in the history — a missing `.js` on an `api/` relative import, which shipped three times (`974ced0`, `082971f`, `be01237`) — is now guarded by `api/importExtensions.test.ts` in the normal test run. Do not re-add the lint script without new evidence.
 
 ---
 
@@ -351,7 +352,6 @@ Anything PERMISSIVE with a bare `true` is a hole. Reading the policy proves it i
 - **Debut album JSON-LD** — add structured data once the album is released.
 - **Restreamer remote start** — starting it is a physical double-click on one Windows PC. There is no way to start it while away, and no single-instance guard if two copies are ever launched. The documented (not set up) workaround is a Task Scheduler background task, see the appendix in `restreamer/HOW-TO-RUN.md`.
 - **R2 lifecycle rule** — nothing ever deletes HLS objects; each broadcast writes a fresh `<cfSessionId>/` prefix and they accumulate forever. A bucket lifecycle rule, not code.
-- **`npm run lint` is broken** — the repo has no `eslint.config.js` and no eslint dependency, so the documented command fails on every branch. `npm run build` (`tsc -b`) is the only type/quality gate today.
 
 ---
 
