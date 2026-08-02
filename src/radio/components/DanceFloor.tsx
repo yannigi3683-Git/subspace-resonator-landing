@@ -6,6 +6,8 @@ import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
 import { PsyViz } from './PsyViz';
 import { PaStack } from './PaStack';
+import { useCrowdMotion } from '../hooks/useCrowdMotion';
+import type { CrowdEnv } from '../crowdMotion';
 
 function hashUid(uid: string): number {
   let h = 5381;
@@ -15,14 +17,8 @@ function hashUid(uid: string): number {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-// Floor band the crowd is confined to (percent of the DanceFloor box), clear
-// of the central visualizer and the stage riser above it.
-const FLOOR_BAND = { left: 6, top: 70, width: 88, height: 25 };
-
-// The volume pill (LiveRoom, absolute bottom-4 left-4) overlays this same
-// bottom strip, so it hid the crowd's bottom-left tiles. Taking the gutter off
-// the band lifts the whole crowd clear of it instead of special-casing a corner
-// out of a grid.
+// The volume pill (LiveRoom, absolute bottom-4 left-4) sits over the floor's bottom strip and
+// hid the avatars under it, so the crowd region stops short of it.
 const CONTROLS_GUTTER_PX = 64;
 
 // Smallest cell an avatar can have without spilling into its neighbour: the
@@ -33,10 +29,6 @@ const MIN_CELL_PX = Math.ceil(AVATAR_MIN / 0.6);
 
 // Beyond this the tiles are indistinguishable dots and it is just DOM cost.
 const CROWD_HARD_CAP = 200;
-
-// Fraction of a tile's reserved jitter slack that wander is allowed to sweep. Below 1 so two
-// neighbours drifting toward each other stay strictly apart rather than exactly touching.
-const WANDER_AMPLITUDE = 0.8;
 
 // How long a cheer stays lit. Presence does not re-fire when this elapses, so DanceFloor ticks
 // while any cheer is live.
@@ -83,37 +75,92 @@ const VIZ_VMIN_FRACTION = 0.64;
 const VIZ_MAX_PX = 460;
 const VIZ_CLEARANCE_PX = 4;
 
-function vizBottomPx(boxW: number, boxH: number) {
+/** The visualizer as an exclusion circle. The crowd walks around it, never through it. */
+export function vizCircle(boxW: number, boxH: number) {
   const size = Math.min(VIZ_VMIN_FRACTION * Math.min(boxW, boxH), VIZ_MAX_PX);
-  return boxH * VIZ_CENTER_Y + size / 2;
+  return { cx: boxW / 2, cy: boxH * VIZ_CENTER_Y, r: size / 2 + VIZ_CLEARANCE_PX };
 }
 
-// The band is squeezed between two fixed obstacles rather than being a flat 25% slice: the
-// visualizer above it, and the volume pill below (LiveRoom, absolute bottom-4 left-4). Deriving
-// it from both is what keeps the crowd out of the artwork AND out from under the controls;
-// honouring only one of them puts avatars into the other.
-function bandPx(boxW: number, boxH: number) {
-  const bottom = boxH - CONTROLS_GUTTER_PX;
-  const naturalTop = (boxH * FLOOR_BAND.top) / 100;
-  const top = Math.max(naturalTop - CONTROLS_GUTTER_PX, vizBottomPx(boxW, boxH) + VIZ_CLEARANCE_PX);
+// The PA stacks, mirrored from their JSX wrappers: top-[88px], left/right-[0.5%], and a width
+// that steps with the breakpoint. The svg is viewBox 200x260 rendered w-full h-auto, so its
+// height is 1.3x its width. Hidden entirely below 400px, where there is no room for them.
+const PA_TOP_PX = 88;
+const PA_ASPECT = 260 / 200;
+const OBSTACLE_MARGIN_PX = 12;
+
+export interface Rect { x0: number; y0: number; x1: number; y1: number }
+
+function paWidthPx(boxW: number): number {
+  // Thresholds are viewport-based in the JSX; on md+ the floor box is the viewport minus the
+  // 320px chat sidebar, which is why the largest step is checked at 704 rather than 1024.
+  if (boxW < 400) return 0;
+  if (boxW >= 704) return 210;
+  if (boxW >= 640) return 150;
+  return 96;
+}
+
+/** Fixed props the crowd must walk around, as rectangles. Currently the two PA stacks. */
+export function obstacleRects(boxW: number, boxH: number): Rect[] {
+  const w = paWidthPx(boxW);
+  if (w === 0) return [];
+  const h = w * PA_ASPECT;
+  const inset = boxW * 0.005;
+  const m = OBSTACLE_MARGIN_PX;
+  const top = PA_TOP_PX - m;
+  const bottom = Math.min(PA_TOP_PX + h + m, boxH);
+  return [
+    { x0: inset - m, y0: top, x1: inset + w + m, y1: bottom },
+    { x0: boxW - inset - w - m, y0: top, x1: boxW - inset + m, y1: bottom },
+  ];
+}
+
+
+// The whole usable floor, not a strip. The old band was the bottom quarter, which is why nobody
+// could ever stand near the speakers: there was no floor under them. Top clears the now-playing
+// banner and the PA stack; bottom clears the volume pill.
+const REGION_TOP_FRACTION = 0.2;
+const REGION_SIDE_MARGIN = 0.03;
+// The now-playing banner plus the DJ on the riser. Fixed px, because both are fixed-height
+// elements: on a short window a fraction alone would put the crowd on top of the DJ.
+const STAGE_BOTTOM_PX = 210;
+
+export function crowdRegion(boxW: number, boxH: number) {
+  const x0 = boxW * REGION_SIDE_MARGIN;
+  const y0 = Math.max(boxH * REGION_TOP_FRACTION, STAGE_BOTTOM_PX);
   return {
-    w: (boxW * FLOOR_BAND.width) / 100,
-    h: Math.max(MIN_CELL_PX, bottom - top),
-    top: Math.min(top, Math.max(0, bottom - MIN_CELL_PX)),
+    x0,
+    y0,
+    x1: boxW - x0,
+    y1: Math.max(y0 + MIN_CELL_PX, boxH - CONTROLS_GUTTER_PX),
   };
 }
 
-/**
- * How many listeners actually fit the measured band before tiles would overlap.
- * Replaces a fixed cap of 30, which was roughly the phone's capacity and so threw
- * away most of the crowd on a wide desktop window. Everyone past this is summed
- * into the "+N in the crowd" badge.
- */
+/** Floor area actually walkable: the region, less the visualizer and the fixed props. */
+function usableFloorPx(boxW: number, boxH: number): number {
+  const r = crowdRegion(boxW, boxH);
+  const viz = vizCircle(boxW, boxH);
+  const blocked = obstacleRects(boxW, boxH).reduce((sum, o) => {
+    const w = Math.max(0, Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0));
+    const h = Math.max(0, Math.min(o.y1, r.y1) - Math.max(o.y0, r.y0));
+    return sum + w * h;
+  }, Math.PI * viz.r * viz.r);
+  return Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0) - blocked);
+}
+
 export function crowdCapacity(boxW: number, boxH: number): number {
-  const { w, h } = bandPx(boxW, boxH);
-  const cols = Math.max(1, Math.floor(w / MIN_CELL_PX));
-  const rows = Math.max(1, Math.floor(h / MIN_CELL_PX));
-  return Math.min(cols * rows, CROWD_HARD_CAP);
+  const usable = usableFloorPx(boxW, boxH);
+  return Math.max(1, Math.min(Math.floor(usable / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
+}
+
+/**
+ * Avatar size for a roaming crowd. Density comes from the floor area each listener has, not from
+ * a grid cell: there are no cells any more. Shrinks as the room fills, exactly as before, and
+ * drops the name label once it no longer fits beside the avatar.
+ */
+export function crowdTileSize(total: number, boxW: number, boxH: number) {
+  const per = Math.sqrt(usableFloorPx(boxW, boxH) / Math.max(1, total));
+  const size = Math.round(clamp(0.6 * per, AVATAR_MIN, AVATAR_BASE));
+  return { size, hasLabel: per >= LABEL_W && per >= size + LABEL_GAP + LABEL_H };
 }
 
 // Fallback box size for the very first paint (before ResizeObserver reports
@@ -129,21 +176,7 @@ export const AVATAR_BASE = 44;
 export const LABEL_W = 84;
 export const LABEL_GAP = 6;
 export const LABEL_H = 14;
-const FOOTPRINT_W = LABEL_W;
-const FOOTPRINT_H = AVATAR_BASE + LABEL_GAP + LABEL_H;
 
-// Pick a grid that fits everyone at full size if the band is big enough;
-// only fall back to the density-driven (shrinking) layout once it isn't.
-function computeGridDims(total: number, bandWpx: number, bandHpx: number) {
-  const fullCols = Math.max(1, Math.floor(bandWpx / FOOTPRINT_W));
-  const fullRows = Math.max(1, Math.floor(bandHpx / FOOTPRINT_H));
-  if (fullCols * fullRows >= total) {
-    const cols = Math.max(1, Math.min(fullCols, total));
-    return { cols, rows: Math.max(1, Math.ceil(total / cols)) };
-  }
-  const cols = Math.max(1, Math.round(Math.sqrt((total * bandWpx) / bandHpx)));
-  return { cols, rows: Math.max(1, Math.ceil(total / cols)) };
-}
 
 // Tracks the real pixel size of an element so the crowd grid can be computed
 // in actual px, not just band percentages — a phone (narrow, tall) and a
@@ -164,47 +197,6 @@ function useMeasuredSize(ref: RefObject<HTMLElement | null>) {
     return () => ro?.disconnect();
   }, [ref]);
   return box;
-}
-
-// Deterministic row/column slot for a listener within the visible (stably
-// sorted) crowd, computed in real pixels so it holds at any viewport size.
-// Avatar size is derived from the cell it's given (smaller cells -> smaller
-// avatars), and jitter is capped at a fraction of the slack left after
-// sizing the avatar, so two adjacent tiles can never actually touch.
-export function gridSlot(index: number, total: number, uid: string, boxW: number, boxH: number) {
-  const { w: bandWpx, h: bandHpx, top: bandTopPx } = bandPx(boxW, boxH);
-  const { cols, rows } = computeGridDims(total, bandWpx, bandHpx);
-  const col = index % cols;
-  const row = Math.floor(index / cols);
-
-  const cellWpx = bandWpx / cols;
-  const cellHpx = bandHpx / rows;
-  const size = Math.round(clamp(0.6 * Math.min(cellWpx, cellHpx), 16, AVATAR_BASE));
-  // Only show the label if its footprint (label width, avatar+gap+label height)
-  // actually fits the cell — otherwise it would spill into the neighboring tile.
-  const hasLabel = cellWpx >= LABEL_W && cellHpx >= size + LABEL_GAP + LABEL_H;
-
-  const footprintWpx = hasLabel ? LABEL_W : size;
-  const footprintHpx = hasLabel ? size + LABEL_GAP + LABEL_H : size;
-
-  const h = hashUid(uid);
-  const maxJitterXpx = Math.max(0, 0.25 * (cellWpx - footprintWpx));
-  const maxJitterYpx = Math.max(0, 0.25 * (cellHpx - footprintHpx));
-  const jitterXpx = ((h % 100) / 100 - 0.5) * 2 * maxJitterXpx;
-  const jitterYpx = (((h >> 8) % 100) / 100 - 0.5) * 2 * maxJitterYpx;
-
-  const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
-  const py = ((bandTopPx + cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
-
-  // Wander re-spends the SAME slack the static jitter is drawn from, so drifting cannot buy a
-  // tile more room than the layout already proved it has. Worst case is two neighbours swinging
-  // at each other: centres start a cell apart and close by 2*wander, which stays wider than the
-  // footprint for any cell >= footprint. WANDER_AMPLITUDE is the margin that keeps that
-  // inequality strict instead of merely tangent.
-  const wanderXpx = WANDER_AMPLITUDE * maxJitterXpx;
-  const wanderYpx = WANDER_AMPLITUDE * maxJitterYpx;
-
-  return { px, py, size, hasLabel, wanderXpx, wanderYpx };
 }
 
 interface DanceFloorProps {
@@ -261,12 +253,27 @@ export function DanceFloor({
   }, [anyCheer]);
 
   const cap = crowdCapacity(box.w, box.h);
+  const shown = Math.min(roster.length, cap);
+  const tile = crowdTileSize(shown, box.w, box.h);
   const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
     : [...roster]
         .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
         .slice(0, cap);
+
+  // The crowd steers itself: free movement over the whole floor, pushing apart from neighbours
+  // and out of the fixed props. Positions are written straight to these nodes, never to state.
+  const crowdEnv = useMemo<CrowdEnv>(() => ({
+    region: crowdRegion(box.w, box.h),
+    viz: vizCircle(box.w, box.h),
+    rects: obstacleRects(box.w, box.h),
+    radius: tile.size / 2,
+    speed: 26,
+  }), [box.w, box.h, tile.size]);
+  // The empty-room ghost preview goes through the same simulation, so there is only one way a
+  // tile ever gets positioned.
+  const nodes = useCrowdMotion(visible.map((e) => e.uid), crowdEnv, visible.length > 0);
 
   return (
     <div ref={floorRef} className="relative w-full h-full overflow-hidden bg-[#05060f]">
@@ -371,8 +378,7 @@ export function DanceFloor({
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        const { px, py, size, hasLabel, wanderXpx, wanderYpx } =
-          gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const { size, hasLabel } = tile;
         const cheering = isCheering(entry.cheerAt, now);
         return (
           <div
@@ -380,33 +386,32 @@ export function DanceFloor({
             // A cheering tile lifts above its neighbours. Every tile shared z-[5], so paint order
             // was DOM order and the one moment a listener wants to be seen was the moment their
             // glow could land behind someone else's avatar.
-            className={`radio-slot absolute ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
-            style={{
-              left: `${px}%`,
-              top: `${py}%`,
-              transform: 'translate(-50%, -50%)',
-              opacity: isGhost ? 0.3 : 1,
-            }}
+            ref={(el) => { nodes.current[i] = el; }}
+            data-crowd-tile=""
+            className={`absolute left-0 top-0 ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
+            style={{ opacity: isGhost ? 0.3 : 1 }}
           >
-            {/* Wander needs its own element: the slot owns translate(-50%,-50%) and the inner
-                div owns the bob, and one element cannot carry two transforms. */}
-            <div
-              className="radio-wander flex flex-col items-center"
-              style={{
-                ['--wx' as string]: `${wanderXpx}px`,
-                ['--wy' as string]: `${wanderYpx}px`,
-                ['--wander-dur' as string]: `${9 + (h % 9)}s`,
-                animationDelay: `-${h % 9}s`,
-              }}
-            >
+            <div className="relative flex flex-col items-center">
+              {/* "You": a single mote orbiting your avatar. Reads at any size, unlike a ring,
+                  which read as a bulky square because the svg's artwork is inset from its box. */}
+              {isSelf && (
+                <span
+                  className="radio-orbit absolute pointer-events-none"
+                  aria-hidden="true"
+                  data-testid="you-marker"
+                  style={{
+                    width: size + 10,
+                    height: size + 10,
+                    top: -5,
+                    ['--orbit-r' as string]: `${Math.round((size + 10) / 2)}px`,
+                  }}
+                />
+              )}
               <div
-                // "You" is a hairline hugging the avatar, not a slab around it. A 2px ring plus a
-                // 2px offset read as a bulky square, because the glyph is inset within its svg box
-                // so the band sat visibly detached from the artwork.
-                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-1 ring-white/35' : ''}`}
+                className={cheering ? 'radio-dance radio-cheer' : 'radio-bob'}
                 style={cheering
                   // Halo scales with the avatar so it stops bleeding onto neighbours when packed.
-                  ? { ['--halo' as string]: `${Math.round(size * 0.45)}px` }
+                  ? { ['--halo' as string]: `${Math.round(size * 0.9)}px` }
                   : { animationDelay: delay, animationDuration: duration }}
                 data-cheering={cheering ? 'true' : undefined}
               >

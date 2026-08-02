@@ -11,23 +11,51 @@
 }
 .radio-bob { animation: radio-bob 3s ease-in-out infinite; }
 
-/* Lateral drift. Sweeps only the slack gridSlot already reserved for this tile (passed in as
-   --wx/--wy in px), so wandering can never close the gap the layout proved it has. Lives on its
-   own wrapper because the slot div owns translate(-50%,-50%) and the inner div owns the bob. */
-@keyframes radio-wander {
-  0%, 100% { transform: translate(calc(var(--wx, 0px) * -1), calc(var(--wy, 0px) * -1)); }
-  50%      { transform: translate(var(--wx, 0px), var(--wy, 0px)); }
+/* Roaming. Each listener walks a deterministic looping tour of the floor, passed in as five
+   waypoint offsets in px (--r1x..--r5y) relative to where their tile is anchored. Replaced a
+   jitter-sized wander that could only sweep the slack inside one grid cell, which at density was
+   about 2px and read as a formation standing still. Pure CSS so 200 roamers cost no JS per frame.
+   Lives on its own wrapper: the slot div owns translate(-50%,-50%) and the inner div owns the bob. */
+@keyframes radio-roam {
+  0%   { transform: translate(0, 0); }
+  20%  { transform: translate(var(--r1x, 0px), var(--r1y, 0px)); }
+  40%  { transform: translate(var(--r2x, 0px), var(--r2y, 0px)); }
+  60%  { transform: translate(var(--r3x, 0px), var(--r3y, 0px)); }
+  80%  { transform: translate(var(--r4x, 0px), var(--r4y, 0px)); }
+  100% { transform: translate(0, 0); }
 }
-.radio-wander { animation: radio-wander var(--wander-dur, 11s) ease-in-out infinite; }
+.radio-roam { animation: radio-roam var(--roam-dur, 90s) ease-in-out infinite; will-change: transform; }
 
 /* Happy reaction: a brighter halo for CHEER_MS, paired with the faster radio-dance. The radius
    is driven by --halo (set from the avatar's rendered size) rather than fixed: a constant 14px
    bled well past a 17px avatar's neighbours on a packed floor, where gaps are only 8-16px. */
 @keyframes radio-cheer {
-  0%, 100% { filter: drop-shadow(0 0 calc(var(--halo, 10px) * 0.3) currentColor); }
-  50%      { filter: drop-shadow(0 0 var(--halo, 10px) currentColor); }
+  0%, 100% { filter: drop-shadow(0 0 calc(var(--halo, 10px) * 0.35) currentColor) brightness(1.4) saturate(1.3); }
+  50%      { filter: drop-shadow(0 0 var(--halo, 10px) currentColor) brightness(2.1) saturate(1.6); }
 }
 .radio-cheer { animation: radio-cheer 0.9s ease-in-out infinite; }
+
+/* "You": one mote orbiting your avatar. A ring read as a bulky square (the svg's artwork is
+   inset from its box, so no band ever hugged the glyph), and a floor spotlight was lost in a
+   packed room. A moving point is findable at any density. The dot is drawn with a radial
+   gradient on the ::before so the element itself can carry the rotation. */
+.radio-orbit { animation: radio-orbit 3.4s linear infinite; }
+.radio-orbit::before {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 5px;
+  height: 5px;
+  margin: -2.5px 0 0 -2.5px;
+  border-radius: 9999px;
+  background: #fff;
+  box-shadow: 0 0 6px 1px rgba(255, 255, 255, 0.9), 0 0 12px 3px rgba(38, 198, 218, 0.7);
+  transform: translateX(var(--orbit-r, 14px));
+}
+@keyframes radio-orbit {
+  to { transform: rotate(360deg); }
+}
 
 /* Crowd tile wrapper: smooth the left/top jump when the grid re-slots on join/leave. */
 .radio-slot { transition: left 450ms ease, top 450ms ease; }
@@ -156,8 +184,9 @@
 @media (prefers-reduced-motion: reduce) {
   .radio-dance,
   .radio-bob,
-  .radio-wander,
+  .radio-roam,
   .radio-cheer,
+  .radio-orbit,
   .radio-stars,
   .radio-aurora,
   .radio-spin,
