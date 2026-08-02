@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { Disc3 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
@@ -34,16 +34,72 @@ const MIN_CELL_PX = Math.ceil(AVATAR_MIN / 0.6);
 // Beyond this the tiles are indistinguishable dots and it is just DOM cost.
 const CROWD_HARD_CAP = 200;
 
-// The band is LIFTED by the gutter, not shrunk by it. Shrinking cost the name labels for
-// ordinary small crowds on a phone (two rows in 86px instead of 150px, so no cell was tall
-// enough for a label), which is a worse trade than moving the same band up.
+// Fraction of a tile's reserved jitter slack that wander is allowed to sweep. Below 1 so two
+// neighbours drifting toward each other stay strictly apart rather than exactly touching.
+const WANDER_AMPLITUDE = 0.8;
+
+// How long a cheer stays lit. Presence does not re-fire when this elapses, so DanceFloor ticks
+// while any cheer is live.
+export const CHEER_MS = 5000;
+
+export function isCheering(cheerAt: number | undefined, now: number): boolean {
+  return typeof cheerAt === 'number' && now - cheerAt >= 0 && now - cheerAt < CHEER_MS;
+}
+
+// `/radio?crowdtest=200` pads the floor with locally-rendered stand-ins, so crowd density can be
+// judged without minting hundreds of anonymous Supabase users or pushing fake people into the
+// real room (presence rides one project-wide channel). They exist only in this browser's render
+// pass: nothing is tracked, sent, or visible to anyone else. Follows the existing `?debug` flag.
+const CROWD_TEST_MAX = 500;
+
+export function readCrowdTestParam(search: string): number {
+  const raw = new URLSearchParams(search).get('crowdtest');
+  if (raw === null) return 0;
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n <= 0) return 0;
+  return Math.min(Math.floor(n), CROWD_TEST_MAX);
+}
+
+export function padCrowd(list: PresenceEntry[], extra: number): PresenceEntry[] {
+  if (extra <= 0) return list;
+  return [
+    ...list,
+    ...Array.from({ length: extra }, (_, i) => ({
+      uid: `crowdtest-${i}`,
+      deviceId: `crowdtest-${i}`,
+      name: `Test ${i + 1}`,
+      avatarId: AVATARS[i % AVATARS.length].id,
+      position: { x: 50, y: 50 },
+    })),
+  ];
+}
+
+// The visualizer's own geometry, mirrored from its wrapper in the JSX below
+// (left-1/2 top-[52%] -translate-y-1/2 w-[64vmin] max-w-[460px]). The crowd must
+// start below it: lifting the band to clear the volume pill pushed its top row up
+// into the artwork on a phone, where 64vmin is a large share of the screen.
+const VIZ_CENTER_Y = 0.52;
+const VIZ_VMIN_FRACTION = 0.64;
+const VIZ_MAX_PX = 460;
+const VIZ_CLEARANCE_PX = 4;
+
+function vizBottomPx(boxW: number, boxH: number) {
+  const size = Math.min(VIZ_VMIN_FRACTION * Math.min(boxW, boxH), VIZ_MAX_PX);
+  return boxH * VIZ_CENTER_Y + size / 2;
+}
+
+// The band is squeezed between two fixed obstacles rather than being a flat 25% slice: the
+// visualizer above it, and the volume pill below (LiveRoom, absolute bottom-4 left-4). Deriving
+// it from both is what keeps the crowd out of the artwork AND out from under the controls;
+// honouring only one of them puts avatars into the other.
 function bandPx(boxW: number, boxH: number) {
-  const h = (boxH * FLOOR_BAND.height) / 100;
+  const bottom = boxH - CONTROLS_GUTTER_PX;
   const naturalTop = (boxH * FLOOR_BAND.top) / 100;
+  const top = Math.max(naturalTop - CONTROLS_GUTTER_PX, vizBottomPx(boxW, boxH) + VIZ_CLEARANCE_PX);
   return {
     w: (boxW * FLOOR_BAND.width) / 100,
-    h,
-    top: Math.max(boxH * 0.45, naturalTop - CONTROLS_GUTTER_PX),
+    h: Math.max(MIN_CELL_PX, bottom - top),
+    top: Math.min(top, Math.max(0, bottom - MIN_CELL_PX)),
   };
 }
 
@@ -140,7 +196,15 @@ export function gridSlot(index: number, total: number, uid: string, boxW: number
   const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
   const py = ((bandTopPx + cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
 
-  return { px, py, size, hasLabel };
+  // Wander re-spends the SAME slack the static jitter is drawn from, so drifting cannot buy a
+  // tile more room than the layout already proved it has. Worst case is two neighbours swinging
+  // at each other: centres start a cell apart and close by 2*wander, which stays wider than the
+  // footprint for any cell >= footprint. WANDER_AMPLITUDE is the margin that keeps that
+  // inequality strict instead of merely tangent.
+  const wanderXpx = WANDER_AMPLITUDE * maxJitterXpx;
+  const wanderYpx = WANDER_AMPLITUDE * maxJitterYpx;
+
+  return { px, py, size, hasLabel, wanderXpx, wanderYpx };
 }
 
 interface DanceFloorProps {
@@ -172,16 +236,35 @@ export function DanceFloor({
   uid,
   nowPlaying,
 }: DanceFloorProps) {
-  const isGhost = presenceList.length === 0;
+  const crowdTest = useMemo(
+    () => (typeof window === 'undefined' ? 0 : readCrowdTestParam(window.location.search)),
+    [],
+  );
+  const roster = useMemo(() => padCrowd(presenceList, crowdTest), [presenceList, crowdTest]);
+
+  const isGhost = roster.length === 0;
   const live = station?.mode === 'live';
   const floorRef = useRef<HTMLDivElement>(null);
   const box = useMeasuredSize(floorRef);
 
+  // A cheer expires on a clock, not on a presence event, so nothing would otherwise re-render it
+  // away. `now` is read per render (never held in state, which would leave a fresh cheer compared
+  // against a stale clock); the tick exists only to force those renders, and only runs while a
+  // cheer is actually live, so an idle room pays nothing.
+  const [, forceTick] = useState(0);
+  const now = Date.now();
+  const anyCheer = roster.some((e) => isCheering(e.cheerAt, now));
+  useEffect(() => {
+    if (!anyCheer) return;
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [anyCheer]);
+
   const cap = crowdCapacity(box.w, box.h);
-  const overflow = Math.max(0, presenceList.length - cap);
+  const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
-    : [...presenceList]
+    : [...roster]
         .sort((a, b) => (a.deviceId ?? a.uid).localeCompare(b.deviceId ?? b.uid))
         .slice(0, cap);
 
@@ -288,11 +371,16 @@ export function DanceFloor({
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        const { px, py, size, hasLabel } = gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const { px, py, size, hasLabel, wanderXpx, wanderYpx } =
+          gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const cheering = isCheering(entry.cheerAt, now);
         return (
           <div
             key={entry.uid}
-            className="radio-slot absolute z-[5] flex flex-col items-center"
+            // A cheering tile lifts above its neighbours. Every tile shared z-[5], so paint order
+            // was DOM order and the one moment a listener wants to be seen was the moment their
+            // glow could land behind someone else's avatar.
+            className={`radio-slot absolute ${cheering ? 'z-[7]' : 'z-[5]'} flex flex-col items-center`}
             style={{
               left: `${px}%`,
               top: `${py}%`,
@@ -300,17 +388,36 @@ export function DanceFloor({
               opacity: isGhost ? 0.3 : 1,
             }}
           >
+            {/* Wander needs its own element: the slot owns translate(-50%,-50%) and the inner
+                div owns the bob, and one element cannot carry two transforms. */}
             <div
-              className={`radio-bob ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
-              style={{ animationDelay: delay, animationDuration: duration }}
+              className="radio-wander flex flex-col items-center"
+              style={{
+                ['--wx' as string]: `${wanderXpx}px`,
+                ['--wy' as string]: `${wanderYpx}px`,
+                ['--wander-dur' as string]: `${9 + (h % 9)}s`,
+                animationDelay: `-${h % 9}s`,
+              }}
             >
-              <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
+              <div
+                // "You" is a hairline hugging the avatar, not a slab around it. A 2px ring plus a
+                // 2px offset read as a bulky square, because the glyph is inset within its svg box
+                // so the band sat visibly detached from the artwork.
+                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-1 ring-white/35' : ''}`}
+                style={cheering
+                  // Halo scales with the avatar so it stops bleeding onto neighbours when packed.
+                  ? { ['--halo' as string]: `${Math.round(size * 0.45)}px` }
+                  : { animationDelay: delay, animationDuration: duration }}
+                data-cheering={cheering ? 'true' : undefined}
+              >
+                <Avatar avatarId={entry.avatarId} size={isSelf ? size + 6 : size} label={entry.name} />
+              </div>
+              {hasLabel && (
+                <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
+                  {entry.name.slice(0, 14)}
+                </span>
+              )}
             </div>
-            {hasLabel && (
-              <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
-                {entry.name.slice(0, 14)}
-              </span>
-            )}
           </div>
         );
       })}

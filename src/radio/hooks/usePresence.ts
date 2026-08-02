@@ -9,7 +9,14 @@ export interface UsePresenceResult {
   isKicked: boolean;
   isBanned: boolean;
   rename: (name: string, avatarId: string) => void;
+  /** Broadcast a "happy" pulse to the room. Rate limited; returns false when the tap was dropped. */
+  cheer: () => boolean;
 }
+
+// track() rebroadcasts to every subscriber, so an unthrottled button at 120 listeners is a
+// presence storm competing with the audio stream. Enforced in the hook, not the button, so a
+// second trigger cannot bypass it.
+export const CHEER_COOLDOWN_MS = 3000;
 
 /**
  * Collapse presence entries from the same browser down to one (keeping the most recent).
@@ -34,13 +41,14 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     channelRef.current = channel;
 
     const syncPresence = () => {
-      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
+      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number }; cheerAt?: number }>();
       const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
         uid: p.uid,
         name: p.name,
         avatarId: p.avatarId,
         deviceId: p.deviceId,
         position: p.position,
+        cheerAt: p.cheerAt,
       }));
       setPresenceList(dedupeByDevice(list));
     };
@@ -91,6 +99,24 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     };
   }, [supabase, uid, identity.name, identity.avatarId, identity.deviceId, identity.position.x, identity.position.y]);
 
+  const lastCheerRef = useRef(0);
+  const cheer = useCallback(() => {
+    const now = Date.now();
+    if (!channelRef.current || now - lastCheerRef.current < CHEER_COOLDOWN_MS) return false;
+    lastCheerRef.current = now;
+    // Re-track rather than send a broadcast event: presence is already the room's shared state,
+    // and a re-track reaches late joiners' first sync too.
+    channelRef.current.track({
+      uid,
+      name: identity.name,
+      avatarId: identity.avatarId,
+      deviceId: identity.deviceId,
+      position: identity.position,
+      cheerAt: now,
+    }).catch(() => {});
+    return true;
+  }, [uid, identity.name, identity.avatarId, identity.deviceId, identity.position.x, identity.position.y]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const rename = useCallback((name: string, avatarId: string) => {
     if (!channelRef.current) return;
     updateIdentity(name, avatarId);
@@ -103,5 +129,5 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     }).catch(() => {});
   }, [uid, identity.position.x, identity.position.y]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { presenceList, count: presenceList.length, isKicked, isBanned, rename };
+  return { presenceList, count: presenceList.length, isKicked, isBanned, rename, cheer };
 }

@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Smile, X } from 'lucide-react';
+import { Smile, Sparkles, X } from 'lucide-react';
 import { formatSlowModeRemaining } from '../chatRules';
 import { EMOJI } from '../emojiSet';
 import type { ChatMessage } from '../types';
@@ -12,11 +12,17 @@ interface ChatInputProps {
   disabled?: boolean;
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;
+  /**
+   * Pulse this listener's avatar on the dance floor for everyone to see. Lives here rather than
+   * on the avatar itself: at crowd scale a tile is near the 16px floor, well under the 44px
+   * touch-target minimum, so tapping your own dot is not reliably hittable.
+   */
+  onCheer?: () => void;
 }
 
 const MAX_BODY = 500;
 
-export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply }: ChatInputProps) {
+export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply, onCheer }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -108,6 +114,18 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
           >
             <Smile size={20} />
           </button>
+          {onCheer && (
+            <button
+              type="button"
+              onClick={onCheer}
+              aria-label="Cheer"
+              title="Light up your avatar"
+              data-testid="cheer-btn"
+              className="ml-1 flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg min-w-[44px] min-h-[44px] hover:text-[#FFD700] hover:border-[#FFD700] transition-colors"
+            >
+              <Sparkles size={20} />
+            </button>
+          )}
           {emojiOpen && (
             <div
               role="menu"
