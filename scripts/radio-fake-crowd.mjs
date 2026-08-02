@@ -6,8 +6,8 @@
 // This one does the opposite — it does exactly what usePresence.ts does (anonymous sign-in →
 // subscribe to the private 'room:main' channel → track()) and nothing else. No audio is pulled.
 //
-// Usage:
-//   node scripts/radio-fake-crowd.mjs [count]     (default 20)
+// Usage (--env-file lets Node read .env itself, so there is no env-var juggling):
+//   node --env-file=.env scripts/radio-fake-crowd.mjs [count]     (default 20)
 // Runs until Ctrl+C, which untracks everyone so the room empties immediately.
 //
 // Env (same as radio-loadtest.mjs; the anon key is public by design):
