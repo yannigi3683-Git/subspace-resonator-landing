@@ -11,6 +11,22 @@
 }
 .radio-bob { animation: radio-bob 3s ease-in-out infinite; }
 
+/* Lateral drift. Sweeps only the slack gridSlot already reserved for this tile (passed in as
+   --wx/--wy in px), so wandering can never close the gap the layout proved it has. Lives on its
+   own wrapper because the slot div owns translate(-50%,-50%) and the inner div owns the bob. */
+@keyframes radio-wander {
+  0%, 100% { transform: translate(calc(var(--wx, 0px) * -1), calc(var(--wy, 0px) * -1)); }
+  50%      { transform: translate(var(--wx, 0px), var(--wy, 0px)); }
+}
+.radio-wander { animation: radio-wander var(--wander-dur, 11s) ease-in-out infinite; }
+
+/* Happy reaction: a brighter halo for CHEER_MS, paired with the faster radio-dance. */
+@keyframes radio-cheer {
+  0%, 100% { filter: drop-shadow(0 0 4px currentColor); }
+  50%      { filter: drop-shadow(0 0 14px currentColor); }
+}
+.radio-cheer { animation: radio-cheer 0.9s ease-in-out infinite; }
+
 /* Crowd tile wrapper: smooth the left/top jump when the grid re-slots on join/leave. */
 .radio-slot { transition: left 450ms ease, top 450ms ease; }
 
@@ -138,6 +154,8 @@
 @media (prefers-reduced-motion: reduce) {
   .radio-dance,
   .radio-bob,
+  .radio-wander,
+  .radio-cheer,
   .radio-stars,
   .radio-aurora,
   .radio-spin,

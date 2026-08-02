@@ -46,4 +46,8 @@ export interface PresenceEntry {
   // presence ghost (old uid) and the current entry from the same device into one avatar.
   deviceId?: string;
   position: { x: number; y: number };
+  // Epoch ms of this listener's last "happy" tap. Rides the presence payload rather than a
+  // table: a mood is ephemeral and should die with the session, so it needs no schema and no
+  // RLS. Trade-off accepted: no history, and it does not survive a reconnect.
+  cheerAt?: number;
 }

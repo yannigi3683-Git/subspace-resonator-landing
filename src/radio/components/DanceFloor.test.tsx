@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor, gridSlot, crowdCapacity, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
+import { DanceFloor, gridSlot, crowdCapacity, isCheering, CHEER_MS, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
 type Slot = ReturnType<typeof gridSlot>;
@@ -83,6 +83,65 @@ describe('crowdCapacity', () => {
   });
 });
 
+// Wander spends the same slack the static jitter came from, so the no-overlap guarantee has to
+// hold at the WORST CASE: both neighbours swung fully toward each other at the same instant.
+// Weakening this test instead of the amplitude would reintroduce exactly the overlap bug the
+// footprint math exists to prevent.
+describe('crowd wander', () => {
+  function worstCaseOverlap(a: Slot, b: Slot, boxW: number, boxH: number) {
+    const dx = Math.abs(((a.px - b.px) / 100) * boxW) - (a.wanderXpx + b.wanderXpx);
+    const dy = Math.abs(((a.py - b.py) / 100) * boxH) - (a.wanderYpx + b.wanderYpx);
+    const fa = footprintOf(a);
+    const fb = footprintOf(b);
+    return dx < (fa.w + fb.w) / 2 && dy < (fa.h + fb.h) / 2;
+  }
+
+  it('never overlaps even when neighbours drift at each other', () => {
+    for (const [w, h] of [[390, 600], [768, 700], [1400, 900]] as const) {
+      const total = crowdCapacity(w, h);
+      const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, w, h));
+      for (let i = 0; i < slots.length; i++) {
+        for (let j = i + 1; j < slots.length; j++) {
+          expect(
+            worstCaseOverlap(slots[i], slots[j], w, h),
+            `slots ${i} and ${j} collide while wandering at ${w}x${h}`,
+          ).toBe(false);
+        }
+      }
+    }
+  });
+
+  it('gives every tile a non-negative drift budget', () => {
+    const total = crowdCapacity(390, 600);
+    for (let i = 0; i < total; i++) {
+      const s = gridSlot(i, total, `uid-${i}`, 390, 600);
+      expect(s.wanderXpx).toBeGreaterThanOrEqual(0);
+      expect(s.wanderYpx).toBeGreaterThanOrEqual(0);
+    }
+  });
+});
+
+describe('isCheering', () => {
+  const t = 1_000_000;
+
+  it('is false without a cheer', () => {
+    expect(isCheering(undefined, t)).toBe(false);
+  });
+
+  it('is true inside the window and false once it lapses', () => {
+    expect(isCheering(t - 1, t)).toBe(true);
+    expect(isCheering(t - (CHEER_MS - 1), t)).toBe(true);
+    expect(isCheering(t - CHEER_MS, t)).toBe(false);
+    expect(isCheering(t - 60_000, t)).toBe(false);
+  });
+
+  // Presence carries the sender's clock, so a skewed device can hand us a future timestamp.
+  // Treating that as "cheering forever" would leave an avatar stuck lit.
+  it('ignores a timestamp from the future', () => {
+    expect(isCheering(t + 5000, t)).toBe(false);
+  });
+});
+
 describe('DanceFloor', () => {
   it('renders the broadcaster (DJ) on the stage', () => {
     render(<DanceFloor presenceList={[entry]} station={liveStation} uid="u1" />);
@@ -94,6 +153,33 @@ describe('DanceFloor', () => {
     render(<DanceFloor presenceList={[entry]} station={liveStation} uid="u1" />);
     expect(screen.getByText(/on air/i)).toBeInTheDocument();
     expect(screen.getByText(/live dj/i)).toBeInTheDocument();
+  });
+
+  it('lights up a cheering listener with the fast animation and the halo', () => {
+    render(
+      <DanceFloor
+        presenceList={[{ ...entry, cheerAt: Date.now() }]}
+        station={liveStation}
+        uid="u2"
+      />,
+    );
+    const tile = screen.getByRole('img', { name: 'StarWeaver' }).parentElement!;
+    expect(tile.className).toContain('radio-dance');
+    expect(tile.className).toContain('radio-cheer');
+    expect(tile.className).not.toContain('radio-bob');
+  });
+
+  it('returns a listener to the idle bob once the cheer lapses', () => {
+    render(
+      <DanceFloor
+        presenceList={[{ ...entry, cheerAt: Date.now() - CHEER_MS - 1 }]}
+        station={liveStation}
+        uid="u2"
+      />,
+    );
+    const tile = screen.getByRole('img', { name: 'StarWeaver' }).parentElement!;
+    expect(tile.className).toContain('radio-bob');
+    expect(tile.className).not.toContain('radio-cheer');
   });
 
   it('renders a graphical avatar per listener (not two-letter initials)', () => {

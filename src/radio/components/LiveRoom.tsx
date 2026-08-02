@@ -29,7 +29,7 @@ interface LiveRoomProps {
 export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, onRemoved }: LiveRoomProps) {
   const { messages, sendMessage, sending, sendError } = useChat(supabase, identity, uid, station.live_session?.startedAt);
   const { reactions, toggleReaction } = useReactions(supabase, identity, uid, station.live_session?.startedAt);
-  const { presenceList, count, isKicked, isBanned, rename } = usePresence(supabase, identity, uid);
+  const { presenceList, count, isKicked, isBanned, rename, cheer } = usePresence(supabase, identity, uid);
   const moderation = useModeration(supabase);
   const [hostLoginOpen, setHostLoginOpen] = useState(false);
 
@@ -269,6 +269,9 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
           disabled={station.locked && !moderation.canModerate}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
+          // Deliberately not gated on `station.locked`: a locked chat silences typing, not the
+          // room's mood, and the cheer carries no text to moderate.
+          onCheer={cheer}
         />
       </div>
 

@@ -34,6 +34,18 @@ const MIN_CELL_PX = Math.ceil(AVATAR_MIN / 0.6);
 // Beyond this the tiles are indistinguishable dots and it is just DOM cost.
 const CROWD_HARD_CAP = 200;
 
+// Fraction of a tile's reserved jitter slack that wander is allowed to sweep. Below 1 so two
+// neighbours drifting toward each other stay strictly apart rather than exactly touching.
+const WANDER_AMPLITUDE = 0.8;
+
+// How long a cheer stays lit. Presence does not re-fire when this elapses, so DanceFloor ticks
+// while any cheer is live.
+export const CHEER_MS = 5000;
+
+export function isCheering(cheerAt: number | undefined, now: number): boolean {
+  return typeof cheerAt === 'number' && now - cheerAt >= 0 && now - cheerAt < CHEER_MS;
+}
+
 // The band is LIFTED by the gutter, not shrunk by it. Shrinking cost the name labels for
 // ordinary small crowds on a phone (two rows in 86px instead of 150px, so no cell was tall
 // enough for a label), which is a worse trade than moving the same band up.
@@ -140,7 +152,15 @@ export function gridSlot(index: number, total: number, uid: string, boxW: number
   const px = FLOOR_BAND.left + ((cellWpx * (col + 0.5) + jitterXpx) / boxW) * 100;
   const py = ((bandTopPx + cellHpx * (row + 0.5) + jitterYpx) / boxH) * 100;
 
-  return { px, py, size, hasLabel };
+  // Wander re-spends the SAME slack the static jitter is drawn from, so drifting cannot buy a
+  // tile more room than the layout already proved it has. Worst case is two neighbours swinging
+  // at each other: centres start a cell apart and close by 2*wander, which stays wider than the
+  // footprint for any cell >= footprint. WANDER_AMPLITUDE is the margin that keeps that
+  // inequality strict instead of merely tangent.
+  const wanderXpx = WANDER_AMPLITUDE * maxJitterXpx;
+  const wanderYpx = WANDER_AMPLITUDE * maxJitterYpx;
+
+  return { px, py, size, hasLabel, wanderXpx, wanderYpx };
 }
 
 interface DanceFloorProps {
@@ -176,6 +196,19 @@ export function DanceFloor({
   const live = station?.mode === 'live';
   const floorRef = useRef<HTMLDivElement>(null);
   const box = useMeasuredSize(floorRef);
+
+  // A cheer expires on a clock, not on a presence event, so nothing would otherwise re-render it
+  // away. `now` is read per render (never held in state, which would leave a fresh cheer compared
+  // against a stale clock); the tick exists only to force those renders, and only runs while a
+  // cheer is actually live, so an idle room pays nothing.
+  const [, forceTick] = useState(0);
+  const now = Date.now();
+  const anyCheer = presenceList.some((e) => isCheering(e.cheerAt, now));
+  useEffect(() => {
+    if (!anyCheer) return;
+    const id = setInterval(() => forceTick((n) => n + 1), 1000);
+    return () => clearInterval(id);
+  }, [anyCheer]);
 
   const cap = crowdCapacity(box.w, box.h);
   const overflow = Math.max(0, presenceList.length - cap);
@@ -288,7 +321,9 @@ export function DanceFloor({
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
         const duration = `${3 + (h % 6) * 0.4}s`;
-        const { px, py, size, hasLabel } = gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const { px, py, size, hasLabel, wanderXpx, wanderYpx } =
+          gridSlot(i, visible.length, entry.uid, box.w, box.h);
+        const cheering = isCheering(entry.cheerAt, now);
         return (
           <div
             key={entry.uid}
@@ -300,17 +335,30 @@ export function DanceFloor({
               opacity: isGhost ? 0.3 : 1,
             }}
           >
+            {/* Wander needs its own element: the slot owns translate(-50%,-50%) and the inner
+                div owns the bob, and one element cannot carry two transforms. */}
             <div
-              className={`radio-bob ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
-              style={{ animationDelay: delay, animationDuration: duration }}
+              className="radio-wander flex flex-col items-center"
+              style={{
+                ['--wx' as string]: `${wanderXpx}px`,
+                ['--wy' as string]: `${wanderYpx}px`,
+                ['--wander-dur' as string]: `${9 + (h % 9)}s`,
+                animationDelay: `-${h % 9}s`,
+              }}
             >
-              <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
+              <div
+                className={`${cheering ? 'radio-dance radio-cheer' : 'radio-bob'} ${isSelf ? 'rounded-full ring-2 ring-white/80 ring-offset-2 ring-offset-transparent' : ''}`}
+                style={cheering ? undefined : { animationDelay: delay, animationDuration: duration }}
+                data-cheering={cheering ? 'true' : undefined}
+              >
+                <Avatar avatarId={entry.avatarId} size={isSelf ? size + 12 : size} label={entry.name} />
+              </div>
+              {hasLabel && (
+                <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
+                  {entry.name.slice(0, 14)}
+                </span>
+              )}
             </div>
-            {hasLabel && (
-              <span className="font-mono text-white/80 text-[11px] leading-none mt-1.5 max-w-[84px] truncate">
-                {entry.name.slice(0, 14)}
-              </span>
-            )}
           </div>
         );
       })}
