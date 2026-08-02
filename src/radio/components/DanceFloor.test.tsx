@@ -1,26 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { DanceFloor, gridSlot, crowdCapacity, isCheering, CHEER_MS, readCrowdTestParam, padCrowd, LABEL_W, LABEL_GAP, LABEL_H } from './DanceFloor';
+import {
+  DanceFloor, crowdCapacity, crowdRegion, crowdTileSize, vizCircle, roamPath, roamVars,
+  isCheering, CHEER_MS, readCrowdTestParam, padCrowd,
+} from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
-
-type Slot = ReturnType<typeof gridSlot>;
-
-// Mirrors the footprint math in gridSlot: the label is wider than the avatar,
-// and adds its height + gap below it once shown.
-function footprintOf(slot: Slot) {
-  return {
-    w: slot.hasLabel ? LABEL_W : slot.size,
-    h: slot.hasLabel ? slot.size + LABEL_GAP + LABEL_H : slot.size,
-  };
-}
-
-function footprintsOverlap(a: Slot, b: Slot, boxW: number, boxH: number) {
-  const dx = Math.abs(((a.px - b.px) / 100) * boxW);
-  const dy = Math.abs(((a.py - b.py) / 100) * boxH);
-  const fa = footprintOf(a);
-  const fb = footprintOf(b);
-  return dx < (fa.w + fb.w) / 2 && dy < (fa.h + fb.h) / 2;
-}
 
 const liveStation = {
   mode: 'live',
@@ -40,104 +24,85 @@ const entry: PresenceEntry = {
 // The old fixed cap of 30 was roughly what a phone's band holds, so a wide desktop window
 // threw most of the crowd into the "+N" badge for no reason. Capacity now comes from the
 // measured band, and the overlap check below is what keeps it honest.
-describe('crowdCapacity', () => {
-  it('fits far more on a wide desktop stage than on a phone', () => {
-    const phone = crowdCapacity(390, 600);
-    const desktop = crowdCapacity(1400, 900);
-    expect(desktop).toBeGreaterThan(phone * 2);
-  });
-
-  it('never returns less than one, even for a degenerate box', () => {
-    expect(crowdCapacity(0, 0)).toBeGreaterThanOrEqual(1);
-    expect(crowdCapacity(10, 10)).toBeGreaterThanOrEqual(1);
-  });
-
-  it('places a full-capacity crowd without overlapping footprints', () => {
-    for (const [w, h] of [[390, 600], [768, 700], [1400, 900]] as const) {
-      const total = crowdCapacity(w, h);
-      const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, w, h));
-      for (let i = 0; i < slots.length; i++) {
-        for (let j = i + 1; j < slots.length; j++) {
-          expect(
-            footprintsOverlap(slots[i], slots[j], w, h),
-            `slots ${i} and ${j} overlap at ${w}x${h}`,
-          ).toBe(false);
-        }
-      }
-    }
-  });
-
-  // The volume pill sits absolute bottom-4 left-4 over this same strip, so the band is lifted
-  // clear of it. Without that it covered the bottom-left tiles and the "+N in the crowd" line.
-  it('keeps the crowd clear of the bottom controls gutter', () => {
-    for (const [w, h] of [[390, 600], [1400, 900]] as const) {
-      const total = crowdCapacity(w, h);
-      const lowest = Math.max(
-        ...Array.from({ length: total }, (_, i) => {
-          const s = gridSlot(i, total, `uid-${i}`, w, h);
-          return (s.py / 100) * h + (s.hasLabel ? s.size + LABEL_GAP + LABEL_H : s.size) / 2;
-        }),
-      );
-      expect(lowest, `crowd reaches the controls at ${w}x${h}`).toBeLessThanOrEqual(h - 64);
-    }
-  });
-});
 
 // Wander spends the same slack the static jitter came from, so the no-overlap guarantee has to
 // hold at the WORST CASE: both neighbours swung fully toward each other at the same instant.
 // Weakening this test instead of the amplitude would reintroduce exactly the overlap bug the
 // footprint math exists to prevent.
-describe('crowd wander', () => {
-  function worstCaseOverlap(a: Slot, b: Slot, boxW: number, boxH: number) {
-    const dx = Math.abs(((a.px - b.px) / 100) * boxW) - (a.wanderXpx + b.wanderXpx);
-    const dy = Math.abs(((a.py - b.py) / 100) * boxH) - (a.wanderYpx + b.wanderYpx);
-    const fa = footprintOf(a);
-    const fb = footprintOf(b);
-    return dx < (fa.w + fb.w) / 2 && dy < (fa.h + fb.h) / 2;
-  }
 
-  it('never overlaps even when neighbours drift at each other', () => {
-    for (const [w, h] of [[390, 600], [768, 700], [1400, 900]] as const) {
-      const total = crowdCapacity(w, h);
-      const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, w, h));
-      for (let i = 0; i < slots.length; i++) {
-        for (let j = i + 1; j < slots.length; j++) {
+// Regression: lifting the band to clear the volume pill pushed its top row up INTO the
+// visualizer on a phone, where 64vmin is a large share of the screen. The band is squeezed
+// between two obstacles, and honouring only one of them puts avatars inside the other.
+
+const BOXES = [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const;
+
+// The crowd used to be a grid of fixed cells in a bottom strip, drifting ~2px inside its own
+// cell. It read as a formation and nobody could reach the speakers, because there was no floor
+// under them. Positions now come from a roaming path over the whole region. The guarantee that
+// replaced "tiles never overlap" is this: a waypoint is always on the floor and never inside the
+// visualizer. Crossing paths are expected - that is what a crowd does.
+describe('roamPath', () => {
+  it('keeps every waypoint on the floor and out of the visualizer', () => {
+    for (const [w, h] of BOXES) {
+      const region = crowdRegion(w, h);
+      const viz = vizCircle(w, h);
+      for (let i = 0; i < 60; i++) {
+        for (const p of roamPath(`uid-${i}`, w, h)) {
+          expect(p.x, `x off-floor at ${w}x${h}`).toBeGreaterThanOrEqual(region.x0);
+          expect(p.x, `x off-floor at ${w}x${h}`).toBeLessThanOrEqual(region.x1);
+          expect(p.y, `y off-floor at ${w}x${h}`).toBeGreaterThanOrEqual(region.y0);
+          expect(p.y, `y off-floor at ${w}x${h}`).toBeLessThanOrEqual(region.y1);
           expect(
-            worstCaseOverlap(slots[i], slots[j], w, h),
-            `slots ${i} and ${j} collide while wandering at ${w}x${h}`,
-          ).toBe(false);
+            Math.hypot(p.x - viz.cx, p.y - viz.cy),
+            `waypoint inside the visualizer at ${w}x${h}`,
+          ).toBeGreaterThan(viz.r);
         }
       }
     }
   });
 
-  it('gives every tile a non-negative drift budget', () => {
-    const total = crowdCapacity(390, 600);
-    for (let i = 0; i < total; i++) {
-      const s = gridSlot(i, total, `uid-${i}`, 390, 600);
-      expect(s.wanderXpx).toBeGreaterThanOrEqual(0);
-      expect(s.wanderYpx).toBeGreaterThanOrEqual(0);
+  it('is deterministic per listener and different between listeners', () => {
+    expect(roamPath('uid-a', 1120, 900)).toEqual(roamPath('uid-a', 1120, 900));
+    expect(roamPath('uid-a', 1120, 900)).not.toEqual(roamPath('uid-b', 1120, 900));
+  });
+
+  // The whole point: they should actually cross the floor, not shuffle in place. The old wander
+  // managed about 2px at density, which is what prompted this.
+  it('travels a real distance rather than shuffling in place', () => {
+    const [w, h] = [1120, 900];
+    const region = crowdRegion(w, h);
+    const span = Math.min(region.x1 - region.x0, region.y1 - region.y0);
+    const reach = Array.from({ length: 40 }, (_, i) => {
+      const p = roamPath(`uid-${i}`, w, h);
+      return Math.max(...p.map((q) => Math.hypot(q.x - p[0].x, q.y - p[0].y)));
+    });
+    const median = reach.sort((a, b) => a - b)[Math.floor(reach.length / 2)];
+    expect(median).toBeGreaterThan(span * 0.25);
+  });
+
+  it('exposes the tour to CSS as offsets from the anchor', () => {
+    const { anchor, vars } = roamVars('uid-a', 1120, 900);
+    expect(anchor).toEqual(roamPath('uid-a', 1120, 900)[0]);
+    for (const k of ['--r1x', '--r1y', '--r4x', '--r4y']) {
+      expect(vars[k]).toMatch(/^-?\d+px$/);
     }
   });
 });
 
-// Regression: lifting the band to clear the volume pill pushed its top row up INTO the
-// visualizer on a phone, where 64vmin is a large share of the screen. The band is squeezed
-// between two obstacles, and honouring only one of them puts avatars inside the other.
-describe('crowd band clearance', () => {
-  const vizBottom = (w: number, h: number) => h * 0.52 + Math.min(0.64 * Math.min(w, h), 460) / 2;
+describe('crowd sizing', () => {
+  // The region is several times the old bottom strip, so far fewer people fall into the badge.
+  it('holds more people than the old bottom strip did', () => {
+    expect(crowdCapacity(1600, 1080)).toBeGreaterThan(150);
+    expect(crowdCapacity(390, 780)).toBeGreaterThan(84);
+  });
 
-  it('keeps every avatar below the visualizer and above the controls', () => {
-    for (const [w, h] of [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
-      const total = crowdCapacity(w, h);
-      for (let i = 0; i < total; i++) {
-        const s = gridSlot(i, total, `uid-${i}`, w, h);
-        const top = (s.py / 100) * h - s.size / 2 - s.wanderYpx;
-        const bottom = (s.py / 100) * h + (s.hasLabel ? s.size + LABEL_GAP + LABEL_H : s.size) / 2 + s.wanderYpx;
-        expect(top, `tile ${i} overlaps the visualizer at ${w}x${h}`).toBeGreaterThanOrEqual(vizBottom(w, h));
-        expect(bottom, `tile ${i} reaches the controls at ${w}x${h}`).toBeLessThanOrEqual(h - 64);
-      }
-    }
+  it('shrinks avatars as the floor fills, never below the readable floor', () => {
+    const roomy = crowdTileSize(5, 1120, 900);
+    const packed = crowdTileSize(200, 1120, 900);
+    expect(roomy.size).toBeGreaterThan(packed.size);
+    expect(packed.size).toBeGreaterThanOrEqual(16);
+    expect(roomy.hasLabel).toBe(true);
+    expect(packed.hasLabel).toBe(false);
   });
 });
 
@@ -257,33 +222,9 @@ describe('DanceFloor', () => {
     expect(screen.getByText(/off air/i)).toBeInTheDocument();
   });
 
-  it('never overlaps crowd tile footprints (avatar + label), at any count or screen size', () => {
-    for (const total of [2, 4, 8, 15, 30]) {
-      for (const [boxW, boxH] of [[340, 560], [375, 667], [430, 700], [1400, 800]]) {
-        const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, boxW, boxH));
-        for (let a = 0; a < slots.length; a++) {
-          for (let b = a + 1; b < slots.length; b++) {
-            expect(footprintsOverlap(slots[a], slots[b], boxW, boxH)).toBe(false);
-          }
-        }
-      }
-    }
-  });
 
-  it('keeps labels visible for a typical guest count on a narrow phone', () => {
-    const boxW = 375;
-    const boxH = 667;
-    const total = 4;
-    const slots = Array.from({ length: total }, (_, i) => gridSlot(i, total, `uid-${i}`, boxW, boxH));
-    for (const slot of slots) {
-      expect(slot.hasLabel).toBe(true);
-    }
-    for (let a = 0; a < slots.length; a++) {
-      for (let b = a + 1; b < slots.length; b++) {
-        expect(footprintsOverlap(slots[a], slots[b], boxW, boxH)).toBe(false);
-      }
-    }
-  });
+
+
 
   it('does not reshuffle the crowd order when a device reconnects with a new uid', () => {
     const guests: PresenceEntry[] = [

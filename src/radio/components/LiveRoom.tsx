@@ -133,8 +133,10 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
             </div>
           )}
 
+          {/* Desktop keeps the floating pill; on a phone it sat on top of the dancers, so there
+              it becomes its own row below the floor (see after this panel) instead. */}
           {playing && (
-            <div className="absolute bottom-4 left-4 z-20 flex items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-4 py-2">
+            <div className="hidden md:flex absolute bottom-4 left-4 z-20 items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-4 py-2">
               <span className="w-2 h-2 bg-[#FF0033] pixel-blink shrink-0" aria-hidden="true" />
               <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
               <input
@@ -187,6 +189,25 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
             </div>
           )}
         </div>
+
+        {/* Phone volume: a row of its own under the floor rather than an overlay on it. As an
+            absolute pill it covered the dancers in the bottom-left corner, and the floor has no
+            spare corner to give once the crowd roams the whole space. */}
+        {playing && (
+          <div className="flex md:hidden shrink-0 items-center gap-3 px-4 py-2 border-t border-[#1a1a2e] bg-[#0a0010]">
+            <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.05}
+              value={volume}
+              onChange={(e) => setVolume(Number(e.target.value))}
+              aria-label="Volume"
+              className="flex-1 accent-primary"
+            />
+          </div>
+        )}
       </div>
 
       {/* Chat sidebar — full screen on mobile when chat tab active */}
