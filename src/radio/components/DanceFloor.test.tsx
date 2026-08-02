@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
-  DanceFloor, crowdCapacity, crowdRegion, crowdTileSize, vizCircle, roamPath, roamVars,
-  isCheering, CHEER_MS, readCrowdTestParam, padCrowd, obstacleRects,
+  DanceFloor, crowdCapacity, crowdTileSize, vizCircle, roamPath, roamVars,
+  isCheering, CHEER_MS, readCrowdTestParam, padCrowd, obstacleRects, territories,
 } from './DanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
@@ -24,54 +24,39 @@ const entry: PresenceEntry = {
 const BOXES = [[360, 576], [390, 780], [412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const;
 
 // The crowd used to be a grid of fixed cells in a bottom strip, drifting ~2px inside its own
-// cell. It read as a formation and nobody could reach the speakers, because there was no floor
-// under them. Positions now come from a roaming path over the whole region. The guarantee that
-// replaced "tiles never overlap" is this: a waypoint is always on the floor and never inside the
-// visualizer or a PA stack. Crossing each other is expected - that is what a crowd does.
-describe('roamPath', () => {
-  it('keeps every waypoint on the floor and out of the visualizer', () => {
+// cell: it read as a formation, and nobody could reach the speakers because there was no floor
+// under them.
+// Each listener owns a private patch of floor and can only move inside it. No two patches
+// overlap, and a disc is convex, so the straight line the animation draws between waypoints
+// stays inside the patch too. That is the whole no-collision argument - there is no collision
+// code and no per-frame JavaScript.
+describe('territories', () => {
+  it('never hands out two patches that overlap', () => {
+    const overlaps: string[] = [];
     for (const [w, h] of BOXES) {
-      const region = crowdRegion(w, h);
-      const viz = vizCircle(w, h);
-      for (let i = 0; i < 60; i++) {
-        for (const p of roamPath(`uid-${i}`, w, h)) {
-          expect(p.x, `x off-floor at ${w}x${h}`).toBeGreaterThanOrEqual(region.x0);
-          expect(p.x, `x off-floor at ${w}x${h}`).toBeLessThanOrEqual(region.x1);
-          expect(p.y, `y off-floor at ${w}x${h}`).toBeGreaterThanOrEqual(region.y0);
-          expect(p.y, `y off-floor at ${w}x${h}`).toBeLessThanOrEqual(region.y1);
-          expect(
-            Math.hypot(p.x - viz.cx, p.y - viz.cy),
-            `waypoint inside the visualizer at ${w}x${h}`,
-          ).toBeGreaterThan(viz.r);
+      const cells = territories(w, h, 120);
+      for (let a = 0; a < cells.length; a++) {
+        for (let b = a + 1; b < cells.length; b++) {
+          const gap = Math.hypot(cells[a].cx - cells[b].cx, cells[a].cy - cells[b].cy);
+          if (gap < cells[a].r + cells[b].r) overlaps.push(`${a}/${b} at ${w}x${h}`);
         }
       }
     }
+    expect(overlaps.slice(0, 5)).toEqual([]);
   });
 
-  // The animation interpolates in a straight line between waypoints, so clear waypoints are not
-  // enough: two on opposite sides walk the avatar straight through the artwork. Found on the
-  // preview, because the original test only sampled the waypoints themselves.
-  it('never crosses the visualizer or the PA stacks between waypoints', () => {
-    // Collected rather than asserted per sample: this walks ~500k points, and an expect() per
-    // point takes long enough to time the test out.
+  it('keeps every patch clear of the visualizer and the PA stacks', () => {
     const breaches: string[] = [];
     for (const [w, h] of BOXES) {
       const viz = vizCircle(w, h);
       const rects = obstacleRects(w, h);
-      for (let i = 0; i < 60; i++) {
-        const path = roamPath(`uid-${i}`, w, h);
-        for (let k = 0; k < path.length; k++) {
-          const a = path[k];
-          const b = path[(k + 1) % path.length]; // the tour loops, so the last leg home counts
-          for (let t = 0; t <= 1; t += 0.02) {
-            const x = a.x + (b.x - a.x) * t;
-            const y = a.y + (b.y - a.y) * t;
-            if (Math.hypot(x - viz.cx, y - viz.cy) < viz.r) {
-              breaches.push(`uid-${i} through the visualizer, leg ${k}, ${w}x${h}`);
-            }
-            if (rects.some((r) => x >= r.x0 && x <= r.x1 && y >= r.y0 && y <= r.y1)) {
-              breaches.push(`uid-${i} through a PA stack, leg ${k}, ${w}x${h}`);
-            }
+      for (const c of territories(w, h, 120)) {
+        if (Math.hypot(c.cx - viz.cx, c.cy - viz.cy) < viz.r + c.r) {
+          breaches.push(`patch overlaps the visualizer at ${w}x${h}`);
+        }
+        for (const r of rects) {
+          if (c.cx > r.x0 - c.r && c.cx < r.x1 + c.r && c.cy > r.y0 - c.r && c.cy < r.y1 + c.r) {
+            breaches.push(`patch overlaps a PA stack at ${w}x${h}`);
           }
         }
       }
@@ -79,38 +64,67 @@ describe('roamPath', () => {
     expect(breaches.slice(0, 5)).toEqual([]);
   });
 
-  it('models the PA stacks as obstacles wherever they are rendered', () => {
-    // Hidden below 400px by the JSX, so there is nothing to avoid there.
-    expect(obstacleRects(360, 576)).toHaveLength(0);
-    for (const [w, h] of [[412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
-      expect(obstacleRects(w, h), `no PA obstacles at ${w}x${h}`).toHaveLength(2);
+  it('finds room for everyone it is asked for', () => {
+    for (const [w, h] of BOXES) {
+      expect(territories(w, h, 40).length, `not enough patches at ${w}x${h}`).toBeGreaterThanOrEqual(40);
+    }
+  });
+
+  it('is deterministic, so every client lays the room out identically', () => {
+    expect(territories(1120, 900, 50)).toEqual(territories(1120, 900, 50));
+  });
+});
+
+describe('roamPath', () => {
+  const cell = { cx: 500, cy: 400, r: 60 };
+
+  it('stays inside its own patch, waypoints and the legs between them', () => {
+    for (let i = 0; i < 80; i++) {
+      const path = roamPath(`uid-${i}`, cell, 10);
+      for (let k = 0; k < path.length; k++) {
+        const a = path[k];
+        const b = path[(k + 1) % path.length];
+        for (let t = 0; t <= 1; t += 0.05) {
+          const x = a.x + (b.x - a.x) * t;
+          const y = a.y + (b.y - a.y) * t;
+          expect(Math.hypot(x - cell.cx, y - cell.cy)).toBeLessThanOrEqual(cell.r);
+        }
+      }
+    }
+  });
+
+  it('leaves room for the avatar itself, not just its centre', () => {
+    for (const p of roamPath('uid-a', cell, 25)) {
+      expect(Math.hypot(p.x - cell.cx, p.y - cell.cy)).toBeLessThanOrEqual(cell.r - 25);
     }
   });
 
   it('is deterministic per listener and different between listeners', () => {
-    expect(roamPath('uid-a', 1120, 900)).toEqual(roamPath('uid-a', 1120, 900));
-    expect(roamPath('uid-a', 1120, 900)).not.toEqual(roamPath('uid-b', 1120, 900));
+    expect(roamPath('uid-a', cell, 0)).toEqual(roamPath('uid-a', cell, 0));
+    expect(roamPath('uid-a', cell, 0)).not.toEqual(roamPath('uid-b', cell, 0));
   });
 
-  // The whole point: they should actually cross the floor, not shuffle in place. The old wander
-  // managed about 2px at density, which is what prompted this.
-  it('travels a real distance rather than shuffling in place', () => {
-    const [w, h] = [1120, 900];
-    const region = crowdRegion(w, h);
-    const span = Math.min(region.x1 - region.x0, region.y1 - region.y0);
+  // The point of roaming: actually use the patch rather than jiggle at its centre.
+  it('uses its patch rather than shuffling at the centre', () => {
     const reach = Array.from({ length: 40 }, (_, i) => {
-      const p = roamPath(`uid-${i}`, w, h);
+      const p = roamPath(`uid-${i}`, cell, 10);
       return Math.max(...p.map((q) => Math.hypot(q.x - p[0].x, q.y - p[0].y)));
-    });
-    const median = reach.sort((a, b) => a - b)[Math.floor(reach.length / 2)];
-    expect(median).toBeGreaterThan(span * 0.25);
+    }).sort((a, b) => a - b);
+    expect(reach[Math.floor(reach.length / 2)]).toBeGreaterThan(cell.r * 0.5);
   });
 
   it('exposes the tour to CSS as offsets from the anchor', () => {
-    const { anchor, vars } = roamVars('uid-a', 1120, 900);
-    expect(anchor).toEqual(roamPath('uid-a', 1120, 900)[0]);
+    const { anchor, vars } = roamVars('uid-a', cell, 10);
+    expect(anchor).toEqual(roamPath('uid-a', cell, 10)[0]);
     for (const k of ['--r1x', '--r1y', '--r4x', '--r4y']) {
       expect(vars[k]).toMatch(/^-?\d+px$/);
+    }
+  });
+
+  it('models the PA stacks as obstacles wherever they are rendered', () => {
+    expect(obstacleRects(360, 576)).toHaveLength(0);
+    for (const [w, h] of [[412, 850], [448, 1024], [1120, 900], [1600, 1080]] as const) {
+      expect(obstacleRects(w, h), `no PA obstacles at ${w}x${h}`).toHaveLength(2);
     }
   });
 });

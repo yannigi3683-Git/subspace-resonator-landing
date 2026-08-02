@@ -112,26 +112,6 @@ export function obstacleRects(boxW: number, boxH: number): Rect[] {
   ];
 }
 
-const inRect = (p: Waypoint, r: Rect) => p.x >= r.x0 && p.x <= r.x1 && p.y >= r.y0 && p.y <= r.y1;
-
-/** Segment vs axis-aligned box, by the slab method. */
-function segmentHitsRect(a: Waypoint, b: Waypoint, r: Rect): boolean {
-  if (inRect(a, r) || inRect(b, r)) return true;
-  const dx = b.x - a.x;
-  const dy = b.y - a.y;
-  let t0 = 0;
-  let t1 = 1;
-  for (const [p, q] of [[-dx, a.x - r.x0], [dx, r.x1 - a.x], [-dy, a.y - r.y0], [dy, r.y1 - a.y]]) {
-    if (p === 0) {
-      if (q < 0) return false; // parallel and outside this slab
-      continue;
-    }
-    const t = q / p;
-    if (p < 0) { if (t > t1) return false; if (t > t0) t0 = t; }
-    else { if (t < t0) return false; if (t < t1) t1 = t; }
-  }
-  return t0 <= t1;
-}
 
 // The whole usable floor, not a strip. The old band was the bottom quarter, which is why nobody
 // could ever stand near the speakers: there was no floor under them. Top clears the now-playing
@@ -154,14 +134,72 @@ export function crowdRegion(boxW: number, boxH: number) {
 }
 
 export interface Waypoint { x: number; y: number }
+export interface Territory { cx: number; cy: number; r: number }
+
+// Fraction of its cell a patch fills. Below 1 so neighbouring patches keep a gap instead of
+// being exactly tangent, where floating point alone would decide whether two avatars touch.
+const PATCH_FILL = 0.94;
+
+/** Whether a disc of radius r centred here would touch the visualizer or a PA stack. */
+function discBlocked(cx: number, cy: number, r: number, boxW: number, boxH: number): boolean {
+  const viz = vizCircle(boxW, boxH);
+  if (Math.hypot(cx - viz.cx, cy - viz.cy) < viz.r + r) return true;
+  return obstacleRects(boxW, boxH).some((o) =>
+    cx > o.x0 - r && cx < o.x1 + r && cy > o.y0 - r && cy < o.y1 + r);
+}
+
+/**
+ * One private patch of floor per listener, none of them touching.
+ *
+ * This is what makes crossings impossible without any collision code: an avatar can only ever
+ * move inside its own disc, and no two discs overlap, so two avatars can never occupy the same
+ * point. The cost is that a fuller room means smaller patches, which is the honest geometry -
+ * the floor really is being divided between more people.
+ *
+ * Cells are laid out on a square-ish grid over the region and any cell touching a fixed prop is
+ * dropped, so the grid gets finer until enough clear cells exist.
+ */
+export function territories(boxW: number, boxH: number, total: number): Territory[] {
+  const region = crowdRegion(boxW, boxH);
+  const W = region.x1 - region.x0;
+  const H = region.y1 - region.y0;
+  if (total <= 0 || W <= 0 || H <= 0) return [];
+
+  const build = (cols: number): Territory[] => {
+    const rows = Math.max(1, Math.ceil((cols * H) / W));
+    const cw = W / cols;
+    const ch = H / rows;
+    // Inset so neighbouring patches have a real gap rather than being exactly tangent: at
+    // exact tangency floating point alone decides whether two avatars touch.
+    const r = (Math.min(cw, ch) / 2) * PATCH_FILL;
+    const out: Territory[] = [];
+    for (let row = 0; row < rows; row++) {
+      for (let col = 0; col < cols; col++) {
+        const cx = region.x0 + cw * (col + 0.5);
+        const cy = region.y0 + ch * (row + 0.5);
+        if (!discBlocked(cx, cy, r, boxW, boxH)) out.push({ cx, cy, r });
+      }
+    }
+    return out;
+  };
+
+  let cols = Math.max(1, Math.ceil(Math.sqrt((total * W) / H)));
+  let cells = build(cols);
+  // Props eat cells, so the first guess usually under-delivers. Tighten until everyone fits.
+  while (cells.length < total && cols < Math.floor(W / MIN_CELL_PX)) {
+    cols += 1;
+    cells = build(cols);
+  }
+  return cells;
+}
 
 /**
  * The roam path expressed as CSS custom properties: offsets in px from the tile's anchor, which
  * is where the grid placed it. Offsets rather than absolute positions so the tile keeps its
  * `translate(-50%,-50%)` centring and the animation composes with it.
  */
-export function roamVars(uid: string, boxW: number, boxH: number) {
-  const path = roamPath(uid, boxW, boxH);
+export function roamVars(uid: string, cell: Territory, tileRadius: number) {
+  const path = roamPath(uid, cell, tileRadius);
   const [anchor, ...rest] = path;
   const vars: Record<string, string> = {};
   rest.slice(0, 4).forEach((p, i) => {
@@ -177,11 +215,12 @@ export function roamVars(uid: string, boxW: number, boxH: number) {
  * already are. Waypoints are rejection-sampled out of the visualizer, and the tour returns toward
  * where it began so people drift back rather than leaving in one direction forever.
  */
-export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Waypoint[] {
-  const region = crowdRegion(boxW, boxH);
-  const viz = vizCircle(boxW, boxH);
-  const w = region.x1 - region.x0;
-  const h = region.y1 - region.y0;
+export function roamPath(uid: string, cell: Territory, tileRadius = 0, steps = 5): Waypoint[] {
+  // Everything stays inside one disc, and a disc is convex, so the straight line the animation
+  // draws between any two waypoints is inside it too. That is the whole no-collision argument:
+  // discs do not overlap, so two avatars can never reach the same point. No obstacle checks are
+  // needed here either - a territory is only handed out if it was already clear of the props.
+  const reach = Math.max(0, cell.r - tileRadius);
 
   let seed = hashUid(uid);
   const next = () => {
@@ -192,61 +231,12 @@ export function roamPath(uid: string, boxW: number, boxH: number, steps = 5): Wa
     return seed / 0xffffffff;
   };
 
-  const rects = obstacleRects(boxW, boxH);
-  const outside = (p: Waypoint) =>
-    Math.hypot(p.x - viz.cx, p.y - viz.cy) > viz.r && !rects.some((r) => inRect(p, r));
-
-  /**
-   * The animation interpolates in a straight line between waypoints, so clearing the circle at
-   * each waypoint is not enough: two points on opposite sides send the avatar straight through
-   * the artwork. This is the distance from the circle's centre to the SEGMENT.
-   */
-  const segmentClears = (a: Waypoint, b: Waypoint) => {
-    const dx = b.x - a.x;
-    const dy = b.y - a.y;
-    const lenSq = dx * dx + dy * dy;
-    const t = lenSq === 0 ? 0 : clamp(((viz.cx - a.x) * dx + (viz.cy - a.y) * dy) / lenSq, 0, 1);
-    if (Math.hypot(a.x + t * dx - viz.cx, a.y + t * dy - viz.cy) <= viz.r) return false;
-    return !rects.some((r) => segmentHitsRect(a, b, r));
-  };
-  // Last resort, and it must actually be outside: the region corner furthest from the artwork.
-  // A radial push can be clamped straight back inside on a narrow box, so it cannot be trusted
-  // as the final answer.
-  const corners: Waypoint[] = [
-    { x: region.x0, y: region.y0 }, { x: region.x1, y: region.y0 },
-    { x: region.x0, y: region.y1 }, { x: region.x1, y: region.y1 },
-  ];
-  // Must itself be clear: the top corners are exactly where the PA stacks live.
-  const refuge = (corners.filter(outside).length ? corners.filter(outside) : corners)
-    .reduce((best, c) =>
-      Math.hypot(c.x - viz.cx, c.y - viz.cy) > Math.hypot(best.x - viz.cx, best.y - viz.cy) ? c : best);
-
   const points: Waypoint[] = [];
   for (let i = 0; i < steps; i++) {
-    const prev = points[i - 1];
-    // Fallback is "stay put for this leg", which is a degenerate segment and therefore always
-    // clear. Sampling almost always succeeds; this only has to be safe, not interesting.
-    let p = prev ?? refuge;
-    for (let attempt = 0; attempt < 40; attempt++) {
-      const candidate = { x: region.x0 + next() * w, y: region.y0 + next() * h };
-      if (!outside(candidate)) continue;
-      // The leg travelled to get here must clear the artwork too, not just the destination.
-      if (prev && !segmentClears(prev, candidate)) continue;
-      // The tour loops, so the last leg home is a real leg and has to clear it as well.
-      if (i === steps - 1 && !segmentClears(candidate, points[0])) continue;
-      p = candidate;
-      break;
-    }
-    points.push(p);
-  }
-
-  // Repair pass. Collapsing a waypoint onto its predecessor turns that leg into a point, so this
-  // always terminates and always ends with a tour that clears the artwork on every leg.
-  for (let i = 1; i < points.length; i++) {
-    if (!segmentClears(points[i - 1], points[i])) points[i] = points[i - 1];
-  }
-  if (!segmentClears(points[points.length - 1], points[0])) {
-    for (let i = 1; i < points.length; i++) points[i] = points[0];
+    // Uniform over the disc: sqrt on the radius, or every tour clusters near the centre.
+    const angle = next() * Math.PI * 2;
+    const radius = Math.sqrt(next()) * reach;
+    points.push({ x: cell.cx + Math.cos(angle) * radius, y: cell.cy + Math.sin(angle) * radius });
   }
   return points;
 }
@@ -270,8 +260,9 @@ function usableFloorPx(boxW: number, boxH: number): number {
 }
 
 export function crowdCapacity(boxW: number, boxH: number): number {
-  const usable = usableFloorPx(boxW, boxH);
-  return Math.max(1, Math.min(Math.floor(usable / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
+  // How many private patches the floor can actually be divided into, which is now the real
+  // limit: everyone needs their own, and patches touching a fixed prop are not handed out.
+  return Math.max(1, Math.min(territories(boxW, boxH, CROWD_HARD_CAP).length, CROWD_HARD_CAP));
 }
 
 /**
@@ -375,7 +366,11 @@ export function DanceFloor({
   }, [anyCheer]);
 
   const cap = crowdCapacity(box.w, box.h);
-  const tile = crowdTileSize(Math.min(roster.length, cap), box.w, box.h);
+  const shown = Math.min(roster.length, cap);
+  const tile = crowdTileSize(shown, box.w, box.h);
+  // One private patch per visible listener, assigned by position in the (deviceId-sorted) roster
+  // so every client lays the room out identically.
+  const patches = useMemo(() => territories(box.w, box.h, Math.max(1, shown)), [box.w, box.h, shown]);
   const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
@@ -481,7 +476,7 @@ export function DanceFloor({
       </div>
 
       {/* ── DANCEFLOOR CROWD ─────────────────────────────────── */}
-      {visible.map((entry) => {
+      {visible.map((entry, i) => {
         const isSelf = entry.uid === uid;
         const h = hashUid(entry.uid);
         const delay = `${(h % 20) * 120}ms`;
@@ -489,7 +484,8 @@ export function DanceFloor({
         // Position comes from the tour's first waypoint, not a grid cell. With a grid anchor the
         // crowd snapped back into formation every time the loop came round, which is the
         // formation look this replaced.
-        const { anchor, vars } = roamVars(entry.uid, box.w, box.h);
+        const patch = patches[i % Math.max(1, patches.length)];
+        const { anchor, vars } = roamVars(entry.uid, patch, tile.size / 2);
         const px = (anchor.x / box.w) * 100;
         const py = (anchor.y / box.h) * 100;
         const { size, hasLabel } = tile;
