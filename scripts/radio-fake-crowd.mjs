@@ -7,8 +7,10 @@
 // subscribe to the private 'room:main' channel → track()) and nothing else. No audio is pulled.
 //
 // Usage (--env-file lets Node read .env itself, so there is no env-var juggling):
-//   node --env-file=.env scripts/radio-fake-crowd.mjs [count] [nameOffset] [--chat]
+//   node --env-file=.env scripts/radio-fake-crowd.mjs [count] [nameOffset] [--chat[=burst]]
 //                                                     (default 20, 0, presence only)
+// --chat=200 posts 200 numbered messages up front (to fill the panel for a scroll test) and
+// then keeps up ambient chatter; plain --chat is ambient only.
 // Runs until Ctrl+C, which untracks everyone so the room empties immediately.
 //
 // To grow a crowd you already have, start a SECOND window with an offset rather than
@@ -37,7 +39,12 @@
 import { createClient } from '@supabase/supabase-js';
 
 const args = process.argv.slice(2);
-const withChat = args.includes('--chat');
+// --chat = ambient chatter. --chat=200 = post 200 up front first, to fill the panel for a
+// scrolling test. The burst is spread across the fakes because chat_allowed() enforces slow
+// mode PER UID: one fake cannot post 200 times, sixty fakes posting in turn can.
+const chatArg = args.find((a) => a === '--chat' || a.startsWith('--chat='));
+const withChat = Boolean(chatArg);
+const burst = chatArg?.includes('=') ? Number(chatArg.split('=')[1]) : 0;
 const positional = args.filter((a) => !a.startsWith('--'));
 const count = Number(positional[0] ?? 20);
 // Shifts the Test NN labels so a second window's crowd does not duplicate the first's names.
@@ -137,13 +144,16 @@ const LINES = [
 let sent = 0;
 let chatErrors = 0;
 
-async function say(fake) {
+async function say(fake, seq) {
+  const line = LINES[Math.floor(Math.random() * LINES.length)];
   const { error } = await fake.supabase.from('chat_messages').insert({
     uid: fake.uid,
     device_id: fake.deviceId,
     display_name: fake.name,
     avatar_id: fake.avatarId,
-    body: LINES[Math.floor(Math.random() * LINES.length)],
+    // Numbered so the order is readable on screen: scrolling up should show a clean
+    // descending run, which is how you spot a gap or a duplicate.
+    body: seq ? `#${seq} ${line}` : line,
     is_host: false,
     reply_to_id: null,
     reply_to_name: null,
@@ -159,12 +169,27 @@ async function say(fake) {
   }
 }
 
+const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+
 if (withChat && clients.length) {
   console.log('\n--chat: fakes will talk. Real rows in chat_messages, 48h TTL, and they will');
   console.log('appear in the END BROADCAST transcript. Needs the station LIVE and unlocked.');
-  // Staggered opening burst, then an occasional line, so the panel fills the way a real room
-  // does rather than as one wall of text.
-  for (const fake of clients) setTimeout(() => say(fake), 500 + Math.random() * 15000);
+
+  if (burst > 0) {
+    console.log(`Posting ${burst} messages, round-robin across ${clients.length} fakes …`);
+    for (let i = 0; i < burst; i++) {
+      await say(clients[i % clients.length], i + 1);
+      // Paced so each individual fake's turn comes round slower than the slow-mode window.
+      await sleep(120);
+      if ((i + 1) % 50 === 0) console.log(`  ${i + 1}/${burst} …`);
+    }
+    console.log(`Burst done: ${sent} landed, ${chatErrors} refused.`);
+    console.log('Note: the chat panel keeps the newest 100 (MAX_MESSAGES in useChat.ts).');
+  } else {
+    // Staggered opening burst, then an occasional line, so the panel fills the way a real room
+    // does rather than as one wall of text.
+    for (const fake of clients) setTimeout(() => say(fake), 500 + Math.random() * 15000);
+  }
   setInterval(() => say(clients[Math.floor(Math.random() * clients.length)]), 20000);
 }
 
