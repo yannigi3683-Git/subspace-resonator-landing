@@ -12,8 +12,11 @@ import { writeFile } from 'node:fs/promises';
 import { startHls } from './hls.mjs';
 import { serveLocal } from './sink/local.mjs';
 
-const FFMPEG = process.env.FFMPEG_PATH || 'C:/Users/yanni/AppData/Local/Microsoft/WinGet/Links/ffmpeg.exe';
-const FFPROBE = process.env.FFPROBE_PATH || 'C:/Users/yanni/AppData/Local/Microsoft/WinGet/Links/ffprobe.exe';
+// Resolved via PATH, not from .env: this check must run on a fresh machine (the "did the move to
+// another PC work" test) where .env may not be edited yet. Absolute fallbacks here were one host's
+// paths, so the check failed on every other machine for a reason unrelated to what it tests.
+const FFMPEG = process.env.FFMPEG_PATH || 'ffmpeg';
+const FFPROBE = process.env.FFPROBE_PATH || 'ffprobe';
 const PORT = 8791;
 const BASE = `http://127.0.0.1:${PORT}`;
 const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
