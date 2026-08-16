@@ -26,6 +26,16 @@ npm run selfcheck           # proves the HLS output spine locally (no creds, no 
 npm start                   # watch the station; restream while it's live
 ```
 
+`selfcheck` resolves `ffmpeg`/`ffprobe` from **PATH** unless `FFMPEG_PATH`/`FFPROBE_PATH` are set. It
+deliberately does not read `.env`: its job includes proving a *fresh* machine works before `.env` has
+been edited, and absolute fallbacks (previously one host's WinGet paths) made it fail everywhere else
+for a reason unrelated to what it tests.
+
+**Machine-portable.** No native dependencies (verified: zero `.node`/`binding.gyp` in the tree), so
+the folder can be copied to another Windows PC as-is, `node_modules` included, with no reinstall. The
+only machine-specific value is `FFMPEG_PATH`. Host-facing walkthrough: "Moving it to another
+computer" in `HOW-TO-RUN.md`. **One instance only** — see the gaps below.
+
 ## Files
 
 | File | Role |

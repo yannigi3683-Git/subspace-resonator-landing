@@ -42,6 +42,90 @@ back to plain WebRTC.
 a good workaround on a shared PC: Windows only lets one person be on the screen at a time, so
 connecting to your own user bumps whoever else is using the machine to the lock screen.
 
+## Moving it to another computer
+
+Nothing in this program is tied to one machine. It uses no sound card and no local recording, so any
+Windows PC that stays awake with internet can run it.
+
+**First, check you actually need to.** If you only want to DJ from a different computer, you do not
+have to move anything. Open the console on the new computer, Go Live, and leave the black window
+running on this PC exactly as it is (see the section above). Move the program only when you want to
+stop depending on this PC at all.
+
+### The one thing people get wrong
+
+Copying the folder is most of the job, but not all of it. Two programs the restreamer needs live
+**outside** the folder, so they do not travel with it:
+
+- **Node.js**, which runs the code.
+- **ffmpeg**, which converts the audio.
+
+Without both installed, double-clicking `start-restreamer.bat` on the new computer just flashes a
+window and dies.
+
+### Steps
+
+1. On the new computer, click Start, type `PowerShell`, press Enter. A blue window opens.
+2. Type this and press Enter. Click Yes if Windows asks permission.
+   ```
+   winget install OpenJS.NodeJS.LTS
+   ```
+3. Type this and press Enter.
+   ```
+   winget install Gyan.FFmpeg
+   ```
+4. **Close the blue window and open a fresh one.** Windows only notices newly installed programs in
+   a new window. Skipping this makes the next step look like the install failed when it worked fine.
+5. Type this and press Enter:
+   ```
+   where.exe ffmpeg
+   ```
+   It prints a line ending in `ffmpeg.exe`. Write that line down, step 8 needs it.
+6. Copy this whole `restreamer` folder to a USB stick, then paste it on the new computer somewhere
+   simple like `C:\restreamer`. Avoid Documents or OneDrive: folder-syncing software fights with the
+   temporary files the restreamer creates.
+7. There is **no install step**. The folder already contains everything else it needs (none of it is
+   Windows-specific or machine-specific), so you do not need to run `npm install`.
+8. Open `.env` in the copied folder (right-click, Open with, Notepad). Find the line starting
+   `FFMPEG_PATH=` and replace everything after the `=` with the path from step 5. Use forward
+   slashes and keep it on one line. **Change nothing else in that file.** Every other value is a web
+   address or a key and is already correct. Save and close.
+9. Test it before you rely on it. In the blue window:
+   ```
+   cd C:\restreamer
+   npm run selfcheck
+   ```
+   It makes a test tone, runs it through the real converter, then fetches it back and checks it plays.
+   It needs no broadcast and no internet. You want the last line to say `SELF-CHECK GREEN`. Anything
+   else means stop and fix it before a show.
+10. Set the new computer to never sleep while plugged in: Settings, System, Power, Screen and sleep,
+    "When plugged in, put my device to sleep after" = Never.
+11. **Close the black window on this PC.** See the warning below.
+
+After that, every show is the same routine as always: double-click `start-restreamer.bat` on the new
+computer, Go Live from wherever you DJ, wait for the DEEP BUFFER badge to go green, send the link.
+
+### Only ever run ONE copy
+
+Do not leave the black window open on two computers at once. Two copies both send audio to the same
+place and overwrite each other's files, so your listeners get broken sound. Nothing on screen warns
+you, on either machine. There is no protection against this built in, so it is on you to remember.
+
+One black window, on one computer, always. This is the same rule as the Task Scheduler note at the
+bottom of this file, and it applies across two PCs in exactly the same way.
+
+### Keep the keys safe
+
+`.env` holds the master keys to the database and the file storage. Copying the folder copies that
+file too, which is the point, but it means:
+
+- Move it by hand on a USB stick. Never by email, never pasted into a chat, never committed to git.
+- **Delete the copy from the USB stick** once the new computer has it. A forgotten stick in a drawer
+  is a spare set of your production keys.
+- Only put it on a computer you control, not one an untrusted person uses.
+- If that computer is ever lost, sold, or given away, change the Supabase secret key and the R2
+  access key.
+
 ## Sharing the PC with someone else
 
 The restreamer touches **no audio device** — it downloads the show from Cloudflare and uploads it
