@@ -1,8 +1,11 @@
-import { useState, useEffect } from 'react';
-import type { SupabaseClient } from '@supabase/supabase-js';
+import { useState, useEffect, useRef } from 'react';
+import type { RealtimeChannel, SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
 import { dedupeByDevice } from '../hooks/usePresence';
+import { makeSupabase } from '../supabaseClient';
 import type { PresenceEntry } from '../types';
+
+const OBSERVER_REBUILD_MS = 60_000;
 
 interface Props {
   supabase: SupabaseClient;
@@ -16,15 +19,40 @@ export default function AdminConsole({ supabase, authToken }: Props) {
   const [listenerCount, setListenerCount] = useState(0);
   const [broadcastStatus, setBroadcastStatus] = useState<BroadcastStatus>('idle');
 
+  const authTokenRef = useRef(authToken);
+  authTokenRef.current = authToken;
+
   useEffect(() => {
     // Count presence on the SAME channel listeners join (usePresence -> 'room:main').
     // The host only observes here (never track()s), so it isn't counted as a listener.
-    const channel = supabase.channel('room:main', { config: { private: true } });
-    const sync = () => {
+    //
+    // ponytail: rebuild every 60s on a DEDICATED client. This observer never reconnects on a
+    // healthy show, so it never receives a second presence_state — the only thing that prunes a
+    // stale entry — and the map freezes for the rest of the broadcast. Measured 2026-08-21: the
+    // console read 7+ while the server held 3 and the guest room held 3. The rebuild also re-auths
+    // before the admin JWT ages out, which is what drops the private channel in the first place.
+    // Its own client so a rebuild cannot touch the socket carrying room:control / room:nowplaying
+    // to listeners. Narrow to a status-driven rebuild only if the 60s rejoin ever costs something
+    // measurable.
+    //
+    // persistSession/autoRefreshToken off, and its own storageKey: two GoTrue clients sharing the
+    // default key on one origin both refresh the same session and can knock the host out of the
+    // console. This client is fed tokens by hand and must never touch auth storage.
+    const observer = makeSupabase({
+      persistSession: false,
+      autoRefreshToken: false,
+      storageKey: 'sb-radio-presence-observer',
+    });
+    if (!observer) return;
+
+    let channel: RealtimeChannel | null = null;
+    let cancelled = false;
+
+    const sync = (ch: RealtimeChannel) => {
       // Dedupe by deviceId the same way listeners do (usePresence -> dedupeByDevice), so the
       // host count matches the room. Without this, same-device ghosts (anon re-auth mints a new
       // uid, rename re-subscribe, extra tabs) inflate the host number over long broadcasts.
-      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
+      const state = ch.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
       const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
         uid: p.uid,
         name: p.name,
@@ -34,13 +62,47 @@ export default function AdminConsole({ supabase, authToken }: Props) {
       }));
       setListenerCount(dedupeByDevice(list).length);
     };
-    channel
-      .on('presence', { event: 'sync' }, sync)
-      .on('presence', { event: 'join' }, sync)
-      .on('presence', { event: 'leave' }, sync)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [supabase]);
+
+    // Never clears listenerCount: the replacement's first presence_state lands ~200ms after the
+    // teardown, and a flash of 0 would fire the badge's key-change animation every minute.
+    const build = async () => {
+      try {
+        await observer.realtime.setAuth(await authTokenRef.current());
+      } catch {
+        return; // next rebuild retries; the last known count stays on screen
+      }
+      if (cancelled) return;
+      const ch = observer.channel('room:main', { config: { private: true } });
+      channel = ch;
+      ch
+        .on('presence', { event: 'sync' }, () => sync(ch))
+        .on('presence', { event: 'join' }, () => sync(ch))
+        .on('presence', { event: 'leave' }, () => sync(ch))
+        // Logged, not swallowed: a silently dropped channel is exactly how the count froze.
+        .subscribe((status) => {
+          if (status !== 'SUBSCRIBED') console.warn('[radio] presence observer:', status);
+        });
+    };
+
+    void build();
+
+    // Remove THEN create: supabase-js `channel(topic)` returns the existing channel for a matching
+    // topic, so building the replacement first would just hand back the stale one.
+    const timer = setInterval(() => {
+      void (async () => {
+        if (channel) await observer.removeChannel(channel);
+        channel = null;
+        if (!cancelled) await build();
+      })();
+    }, OBSERVER_REBUILD_MS);
+
+    return () => {
+      cancelled = true;
+      clearInterval(timer);
+      if (channel) void observer.removeChannel(channel);
+      void observer.realtime.disconnect();
+    };
+  }, []);
 
   // Truthful live indicator: only 'live' means audio is actually going out.
   // 'starting'/'ending' are transitional; 'idle'/'error' are off the air.
