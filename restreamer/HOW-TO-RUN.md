@@ -166,6 +166,18 @@ badge shows `STALLED`.
     broadcast is never restarted, only its connection.
   - Only if the console shows a red **"Connection lost"** after your internet is back does it need
     you: press GO LIVE. That is still safe, and listeners still keep everything.
+- **Everything the window prints is also saved to a file**, so you can look up what happened after
+  the fact instead of trying to catch it live. Open the `restreamer` folder, then the `logs` folder,
+  and open today's file (for example `2026-08-21.log`). One file per day, and it keeps adding to the
+  same file if you start and stop the program several times.
+  - This is what answers "the sound glitched sometime this afternoon, what was that?". Search the
+    file for `GO LIVE` (the show, or your connection, started), `streamUrl published` (deep buffer
+    is live), `ffmpeg exited` (the feed stopped and is being restarted) or `action error`.
+  - Nothing private is in there. No chat, no listener names, no keys. Safe to send on if someone is
+    helping you.
+  - The files are small, a few kilobytes per show. Delete old ones any time you like, nothing
+    depends on them.
+
 - **`temp dir left behind (harmless)`** in the log is exactly what it says. Windows would not let the
   restreamer delete its scratch folder yet. The next start cleans it up. Ignore it.
 

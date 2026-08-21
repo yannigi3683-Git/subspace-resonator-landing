@@ -49,6 +49,7 @@ computer" in `HOW-TO-RUN.md`. **One instance only** — see the gaps below.
 | `src/sink/r2.mjs` | Prod sink: mirror HLS to Cloudflare R2 (playlist last, immutable segments) |
 | `src/selfcheck.mjs` | Live output-spine proof: tone → mux → serve → fetch → decode |
 | `src/config.mjs` | Env load + ASCII-sanitize |
+| `src/log.mjs` | Timestamped `log()` that tees the console to `logs/YYYY-MM-DD.log` (unit-tested). The console window dies with the process and the host is normally not watching it, so an unattended event left no record: reconstructing one host reconnect on 2026-08-21 took an R2 bucket listing plus a process-start-time check. A log dir that cannot be written is abandoned permanently rather than retried, because a full disk must never take a live broadcast down |
 
 ## Status
 
