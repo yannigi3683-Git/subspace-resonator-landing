@@ -14,9 +14,12 @@ import { startHls, rtpInputArgs } from './hls.mjs';
 import { makeCleanup, sweepStaleTempDirs } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
+import { makeLog } from './log.mjs';
 
 const RTP_PORT = 5004; // single broadcast, fixed local port
-const log = (...a) => console.log(new Date().toISOString().slice(11, 19), ...a);
+// Also appends to restreamer/logs/YYYY-MM-DD.log, because the console window dies with the
+// process and the host is usually not looking at it. See log.mjs.
+const log = makeLog();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const cfg = loadConfig();
