@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PresenceEntry, Identity } from '../types';
 import { updateIdentity } from '../identity';
+import { usePresenceObserver } from './usePresenceObserver';
 
 export interface UsePresenceResult {
   presenceList: PresenceEntry[];
@@ -18,20 +19,17 @@ export interface UsePresenceResult {
 // second trigger cannot bypass it.
 export const CHEER_COOLDOWN_MS = 3000;
 
-/**
- * Collapse presence entries from the same browser down to one (keeping the most recent).
- * Supabase presence is keyed per connection, and anonymous re-auth mints a new uid, so a stale
- * ghost (old uid) can sit beside the current entry (new uid) — both from the same device. Keying
- * on the stable deviceId (falling back to uid for legacy/ghost entries) collapses that duplicate.
- */
-export function dedupeByDevice(list: PresenceEntry[]): PresenceEntry[] {
-  const byDevice = new Map<string, PresenceEntry>();
-  for (const entry of list) byDevice.set(entry.deviceId || entry.uid, entry);
-  return [...byDevice.values()];
-}
-
 export function usePresence(supabase: SupabaseClient, identity: Identity, uid: string): UsePresenceResult {
-  const [presenceList, setPresenceList] = useState<PresenceEntry[]>([]);
+  // Who is in the room comes from a rejoining observer, NOT from this hook's own channel. This one
+  // track()s, so rebuilding it to re-prune would broadcast leave+join to the whole room every cycle
+  // and teleport this listener's avatar on every other screen. The observer never tracks, so it can
+  // rejoin freely. Measured 2026-08-22: the dance floor showed ~21 while the server held 12.
+  const getToken = useCallback(async () => {
+    const { data } = await supabase.auth.getSession();
+    return data.session?.access_token ?? '';
+  }, [supabase]);
+  const presenceList = usePresenceObserver(getToken);
+
   const [isKicked, setIsKicked] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -40,23 +38,13 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     const channel = supabase.channel('room:main', { config: { private: true } });
     channelRef.current = channel;
 
-    const syncPresence = () => {
-      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number }; cheerAt?: number }>();
-      const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
-        uid: p.uid,
-        name: p.name,
-        avatarId: p.avatarId,
-        deviceId: p.deviceId,
-        position: p.position,
-        cheerAt: p.cheerAt,
-      }));
-      setPresenceList(dedupeByDevice(list));
-    };
-
+    // These three bindings are load-bearing even though they do nothing: supabase-js only enables
+    // presence on a channel that has presence bindings, and without them track() has nothing to
+    // write to. The roster itself is read from the observer, not from here.
     channel
-      .on('presence', { event: 'sync' }, syncPresence)
-      .on('presence', { event: 'join' }, syncPresence)
-      .on('presence', { event: 'leave' }, syncPresence)
+      .on('presence', { event: 'sync' }, () => {})
+      .on('presence', { event: 'join' }, () => {})
+      .on('presence', { event: 'leave' }, () => {})
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'kicks' },
