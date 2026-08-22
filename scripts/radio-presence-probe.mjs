@@ -42,7 +42,7 @@ if (!Number.isFinite(totalSeconds) || totalSeconds < 1 || !Number.isFinite(inter
   process.exit(1);
 }
 
-// Mirrors dedupeByDevice in src/radio/hooks/usePresence.ts, which BOTH UIs apply. Presence is
+// Mirrors dedupeByDevice in src/radio/hooks/usePresenceObserver.ts, which BOTH UIs apply. Presence is
 // keyed per connection and anon re-auth mints a new uid, so one browser can hold two refs.
 function dedupeByDevice(rows) {
   const byDevice = new Map();
