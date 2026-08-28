@@ -61,8 +61,8 @@ export default function App() {
         <meta property="og:url" content="https://subspaceresonator.com/" />
         <meta property="og:type" content="music.musician" />
         <meta property="og:image" content="https://subspaceresonator.com/og-image.jpg" />
-        <meta property="og:image:width" content="1200" />
-        <meta property="og:image:height" content="630" />
+        <meta property="og:image:width" content="1824" />
+        <meta property="og:image:height" content="1216" />
         <meta name="twitter:card" content="summary_large_image" />
         <meta name="twitter:title" content="Subspace Resonator | Goa &amp; Psychedelic Trance" />
         <meta name="twitter:description" content="Goa &amp; Psychedelic Trance producer. Stream releases, book direct." />

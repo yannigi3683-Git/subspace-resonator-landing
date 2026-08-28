@@ -17,6 +17,7 @@ const HeroSection = () => {
             alt="Subspace Resonator logo"
             className="relative w-full h-full object-contain logo-glitch-idle"
             loading="eager"
+            fetchPriority="high"
           />
         </div>
         <h1 className="sr-only">Subspace Resonator — Goa &amp; Psychedelic Trance</h1>

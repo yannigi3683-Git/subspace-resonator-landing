@@ -54,6 +54,13 @@ Hosted on **Vercel**. Production URL: https://subspaceresonator.com/
 
 - **Auto-deploy is connected** (as of 2026-06-12): GitHub repo `yannigi3683-Git/subspace-resonator-landing` is linked in Vercel. Pushing to **`master`** auto-builds and deploys to production. Production branch is `master` (Vercel Settings -> Environments -> Production -> Branch Tracking).
 - **Manual deploy** (if ever needed): `npx vercel --prod` from the project root (CLI is linked via `.vercel/project.json`, authed as `yannigi3683-git`). Do not use `--prebuilt` (ships stale local `.vercel/output`).
+- **Cache headers live in `vercel.json`, and the two rules are not interchangeable.** `/assets/(.*)`
+  is `public, max-age=31536000, immutable` because Vite stamps a content hash into those filenames,
+  so a changed file is always a changed name. Everything else keeps `max-age=0, must-revalidate` via
+  the catch-all block, which is what lets a new `index.html` be picked up instantly. Never widen the
+  immutable rule past `/assets/` — an immutable `index.html` would pin visitors to a stale build with
+  no way to push them off it. Verify after a deploy:
+  `curl -sI https://subspaceresonator.com/assets/<new-hash>.js | grep -i cache-control`
 - **Verify a deploy shipped:** `curl -s "https://subspaceresonator.com/?cb=$(date +%s)" | grep -c "og:"` — a healthy production HTML has ~12 `og:` tags. Zero means a stale/old build is being served.
 - **Verify the API shipped too** (the HTML check above passes while the radio is stone dead): `npm run check:api` (add a URL argument to check a preview: `npm run check:api -- <preview-url>/api/rtc-session`). Prints `API ALIVE` on 401, which is the healthy answer for a tokenless request; `API BROKEN` on anything else, meaning the function is not booting and host + listeners are both down. Source: `scripts/check-api.mjs`. Read the reason with `npx vercel logs <deployment-url>` while re-running the check in another window; the log only tails live traffic.
 - **Roll back a broken production deploy:** `npx vercel rollback <last-good-deployment-url> --yes` (find it with `npx vercel ls`). Takes ~30s and beats debugging a live outage. Used 2026-07-26 when `08f36fe` shipped an API that 500ed on every request.
@@ -108,6 +115,32 @@ Hosted on **Vercel**. Production URL: https://subspaceresonator.com/
 Each component has a matching `.test.tsx` file in the same folder.
 
 ---
+
+## Site Content Admin (`src/components/admin/`)
+
+The landing page is no longer hardcoded. Text, socials, discography, gigs, booking details
+and the gallery are read from Supabase at startup by `src/lib/siteContent.ts` (`hydrate()` is
+called at module top level, line ~340, so **every visitor issues a `site_content` select before
+first paint**) and edited in-browser through `AdminPanel.tsx`.
+
+- **Storage:** one row, `site_content` table, `id = 'singleton'`, whole config as a JSON `data`
+  column. Gallery images live in the Supabase Storage bucket `gallery`.
+- **Opening it:** Ctrl+Shift+A anywhere on the landing page, then e-mail/password sign-in;
+  authorisation is `supabase.rpc('has_role', ...)`, the same RPC the radio console uses.
+- **The panel ships in the entry chunk to every visitor.** It is statically imported at
+  `App.tsx:15` and rendered unconditionally at `App.tsx:118`. The Ctrl+Shift+A gate and the
+  sign-in form are cosmetic: the table names, field names and form markup are readable by
+  anyone who opens the bundle. **All real protection is RLS on `site_content` and on the
+  `gallery` bucket.** Audit those the way the radio tables are audited (see the `pg_policies`
+  query in the Subspace Radio section) — anon must have read and nothing else, and a single
+  PERMISSIVE policy with a bare `true` cancels every strict policy beside it.
+- Route-splitting the panel out of the entry chunk is a worthwhile bundle win but is **defence
+  in depth, not a substitute for RLS**. It needs the Ctrl+Shift+A listener lifted out of
+  `AdminPanel` first, since the component currently owns its own trigger.
+- The panel's 22 inputs have no `htmlFor`/`id` association, no `autoComplete` and no
+  `aria-invalid`/`role="alert"` error wiring. **Deliberately not fixed** (2026-08-28): it is
+  private and password-locked, and the IS 5568 accessibility audit scope is the public page,
+  which still has zero forms. Do not "fix" this as drive-by work.
 
 ## Music Player Details
 
@@ -200,7 +233,7 @@ Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` t
 
 ### Known JSON-LD limitations (intentional)
 - **Galaxy 604** has no `url` field — the Spotify track URL was removed because it's a track URL, not a release URL. A Spotify album URL was not available. Restore when confirmed.
-- **`logo` field removed** from MusicGroup — og-image.jpg is 1200x630 landscape. Google Knowledge Panel requires near-square. Do not add back until a square logo asset exists.
+- **`logo` field removed** from MusicGroup — og-image.jpg is 1824x1216 landscape. Google Knowledge Panel requires near-square. Do not add back until a square logo asset exists.
 
 ### Static fallback (index.html)
 `index.html` has a static title, description, and apple-touch-icon for non-JS crawlers (Twitterbot, LinkedIn, Slack). The `apple-touch-icon` points to `/apple-touch-icon.png` (180x180 opaque square PNG, generated from favicon.svg).
@@ -217,11 +250,11 @@ Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` t
 
 | File | Notes |
 |------|-------|
-| `public/og-image.jpg` | 1200x630, used for OG meta tags (crawlers only) |
+| `public/og-image.jpg` | 1824x1216, ~241KB, used for OG meta tags (crawlers only). `og-radio.jpg` is currently a byte-identical copy. Keep both under 250KB: several link scrapers cap the bytes they fetch and render no preview above their limit. The `og:image:width`/`height` tags in `index.html`, `radio.html` and `App.tsx` must match the real pixels. |
 | `public/apple-touch-icon.png` | 180x180 opaque square PNG, #0E0E10 bg, SR monogram — generated from favicon.svg via sharp |
 | `public/favicon.svg` | SVG favicon |
 | `public/robots.txt` | Allow all, sitemap pointer |
-| `public/sitemap.xml` | Single-page sitemap, update lastmod after each deploy |
+| `public/sitemap.xml` | Lists `/`, `/privacy`, `/accessibility`. **`/radio` is deliberately absent and `radio.html` is `noindex, follow`** — the station is invite-only, so it must stay reachable by link but out of search. Never use a robots.txt `Disallow` for this: that would also stop crawlers reading the noindex. |
 | `src/assets/bio-watermark.webp` | Watermark overlay in BioSection + nav logo (converted from JPG) |
 | `src/assets/live-alpha.webp` | Live performance photo in BookingSection + full-page bg (converted from JPG) |
 | `src/assets/art-subspace-theory.webp` | EP artwork, used as MusicPlayer art fallback (converted from JPG) |
