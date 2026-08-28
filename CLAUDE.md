@@ -118,7 +118,8 @@ Two SoundCloud iframes — tracks iframe (always mounted) and playlist iframe (l
 - `/old school night/i`
 - `/al\s*titosh|sukkot\s*2024/i`
 
-**Playlists defined:**
+**Playlists defined:** (first entry is the default tab; `SC_PLAYLIST_URL` derives from `DEFAULT_PLAYLIST_KEY`)
+- The Continuum album playlist (default)
 - 1998-2025 playlist
 - DJ SETS playlist
 - GEOMAGNETIC label playlist

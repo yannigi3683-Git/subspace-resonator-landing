@@ -17,12 +17,13 @@ const SC_USER_URL = "https://soundcloud.com/subspaceresonance/tracks";
 
 type PlaylistDef = { key: string; label: string; url: string };
 const PLAYLIST_DEFS: PlaylistDef[] = [
+  { key: "the-continuum", label: "THE CONTINUUM", url: "https://soundcloud.com/subspaceresonance/sets/the-continuum-album-concept" },
   { key: "1998-2025", label: "1998-2025", url: "https://soundcloud.com/subspaceresonance/sets/subspace-resonator-1998-2025" },
   { key: "dj-sets", label: "DJ SETS", url: "https://soundcloud.com/subspaceresonance/sets/dj-sets" },
   { key: "geomagnetic", label: "GEOMAGNETIC", url: "https://soundcloud.com/subspaceresonance/sets/geomagnetic-label-group" },
 ];
-const DEFAULT_PLAYLIST_KEY = "1998-2025";
-const SC_PLAYLIST_URL = PLAYLIST_DEFS[0].url;
+const DEFAULT_PLAYLIST_KEY = "the-continuum";
+const SC_PLAYLIST_URL = (PLAYLIST_DEFS.find((p) => p.key === DEFAULT_PLAYLIST_KEY) || PLAYLIST_DEFS[0]).url;
 
 const upgradeArt = (url: string | null | undefined) =>
   url ? url.replace("-large", "-t500x500") : artFallback;
