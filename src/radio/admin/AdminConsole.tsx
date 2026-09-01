@@ -1,8 +1,7 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
-import { dedupeByDevice } from '../hooks/usePresence';
-import type { PresenceEntry } from '../types';
+import { usePresenceObserver } from '../hooks/usePresenceObserver';
 
 interface Props {
   supabase: SupabaseClient;
@@ -13,34 +12,11 @@ type Tab = 'broadcast' | 'schedule' | 'moderation';
 
 export default function AdminConsole({ supabase, authToken }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>('broadcast');
-  const [listenerCount, setListenerCount] = useState(0);
   const [broadcastStatus, setBroadcastStatus] = useState<BroadcastStatus>('idle');
 
-  useEffect(() => {
-    // Count presence on the SAME channel listeners join (usePresence -> 'room:main').
-    // The host only observes here (never track()s), so it isn't counted as a listener.
-    const channel = supabase.channel('room:main', { config: { private: true } });
-    const sync = () => {
-      // Dedupe by deviceId the same way listeners do (usePresence -> dedupeByDevice), so the
-      // host count matches the room. Without this, same-device ghosts (anon re-auth mints a new
-      // uid, rename re-subscribe, extra tabs) inflate the host number over long broadcasts.
-      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number } }>();
-      const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
-        uid: p.uid,
-        name: p.name,
-        avatarId: p.avatarId,
-        deviceId: p.deviceId,
-        position: p.position,
-      }));
-      setListenerCount(dedupeByDevice(list).length);
-    };
-    channel
-      .on('presence', { event: 'sync' }, sync)
-      .on('presence', { event: 'join' }, sync)
-      .on('presence', { event: 'leave' }, sync)
-      .subscribe();
-    return () => { supabase.removeChannel(channel); };
-  }, [supabase]);
+  // Presence is read through a rejoining observer on its own client; see usePresenceObserver.
+  // Measured 2026-08-22: this badge read 21 while the server held 12.
+  const listenerCount = usePresenceObserver(authToken).length;
 
   // Truthful live indicator: only 'live' means audio is actually going out.
   // 'starting'/'ending' are transitional; 'idle'/'error' are off the air.
