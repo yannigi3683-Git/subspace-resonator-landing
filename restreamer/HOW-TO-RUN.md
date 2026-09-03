@@ -87,20 +87,41 @@ window and dies.
 7. There is **no install step**. The folder already contains everything else it needs (none of it is
    Windows-specific or machine-specific), so you do not need to run `npm install`.
 8. Open `.env` in the copied folder (right-click, Open with, Notepad). Find the line starting
-   `FFMPEG_PATH=` and replace everything after the `=` with the path from step 5. Use forward
-   slashes and keep it on one line. **Change nothing else in that file.** Every other value is a web
-   address or a key and is already correct. Save and close.
-9. Test it before you rely on it. In the blue window:
+   `FFMPEG_PATH=` and delete everything after the `=`, so the line reads exactly:
+   ```
+   FFMPEG_PATH=
+   ```
+   Leaving it empty tells the restreamer to find ffmpeg by itself, which is what you want on a new
+   machine. (Pasting the path from step 5 also works, but an empty line cannot go stale if you ever
+   reinstall ffmpeg.) **Change nothing else in that file.** Every other value is a web address or a
+   key and is already correct. Save and close.
+9. Check the audio machinery. In the blue window:
    ```
    cd C:\restreamer
    npm run selfcheck
    ```
    It makes a test tone, runs it through the real converter, then fetches it back and checks it plays.
-   It needs no broadcast and no internet. You want the last line to say `SELF-CHECK GREEN`. Anything
-   else means stop and fix it before a show.
-10. Set the new computer to never sleep while plugged in: Settings, System, Power, Screen and sleep,
+   It needs no broadcast and no internet. You want the last line to say `SELF-CHECK GREEN`.
+10. **Check the program actually starts.** This is a different test and you need both. In the same
+    window:
+    ```
+    node --env-file=.env src/index.mjs
+    ```
+    Wait for a line like `restreamer watching station (sink: r2)`, then press **Ctrl+C** to stop it.
+    That line means `.env` loaded, your keys work, and it is connected and waiting. It is safe to run
+    while you are off air: it only watches and does nothing.
+    - `Missing required env` means `.env` did not copy properly.
+    - If it hangs with no line at all, the problem is your internet or the keys, not ffmpeg.
+11. Set the new computer to never sleep while plugged in: Settings, System, Power, Screen and sleep,
     "When plugged in, put my device to sleep after" = Never.
-11. **Close the black window on this PC.** See the warning below.
+12. **Close the black window on this PC.** See the warning below.
+
+> **Why step 10 exists, and do not skip it.** The selfcheck in step 9 deliberately ignores `.env` and
+> finds ffmpeg on its own, because its job is to prove a brand-new machine works *before* `.env` has
+> been touched. The real restreamer does the opposite: it reads `.env`, and whatever `FFMPEG_PATH`
+> says there wins. So `SELF-CHECK GREEN` can sit right next to a restreamer that cannot start, if
+> `.env` still points at the old computer's ffmpeg. When that happens nothing errors on your screen.
+> You Go Live, everything looks normal, and the DEEP BUFFER badge simply never turns green.
 
 After that, every show is the same routine as always: double-click `start-restreamer.bat` on the new
 computer, Go Live from wherever you DJ, wait for the DEEP BUFFER badge to go green, send the link.
