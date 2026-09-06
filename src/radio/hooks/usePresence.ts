@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PresenceEntry, Identity } from '../types';
 import { updateIdentity } from '../identity';
-import { usePresenceObserver } from './usePresenceObserver';
+import { dedupeByDevice } from './usePresenceObserver';
 
 export interface UsePresenceResult {
   presenceList: PresenceEntry[];
@@ -20,16 +20,15 @@ export interface UsePresenceResult {
 export const CHEER_COOLDOWN_MS = 3000;
 
 export function usePresence(supabase: SupabaseClient, identity: Identity, uid: string): UsePresenceResult {
-  // Who is in the room comes from a rejoining observer, NOT from this hook's own channel. This one
-  // track()s, so rebuilding it to re-prune would broadcast leave+join to the whole room every cycle
-  // and teleport this listener's avatar on every other screen. The observer never tracks, so it can
-  // rejoin freely. Measured 2026-08-22: the dance floor showed ~21 while the server held 12.
-  const getToken = useCallback(async () => {
-    const { data } = await supabase.auth.getSession();
-    return data.session?.access_token ?? '';
-  }, [supabase]);
-  const presenceList = usePresenceObserver(getToken);
-
+  // This roster drifts upward on a long session, and that is a DELIBERATE trade, not an oversight.
+  // Only a fresh presence_state prunes a presence map, so staying accurate means rejoining, and
+  // rejoining a channel that track()s is not free: it would either storm the room with leave+join
+  // every cycle, or need a second Realtime client per listener. The second client is what was built
+  // and then rejected — Supabase Free allows **200 concurrent clients** (dashboard, 2026-08-23), so
+  // two per listener halves the room from ~200 people to ~100. Capacity beats a tidy number, and a
+  // listener can always refresh the page, which recounts from scratch. The HOST cannot refresh (that
+  // tab owns the publisher), which is why AdminConsole alone pays for an observer.
+  const [presenceList, setPresenceList] = useState<PresenceEntry[]>([]);
   const [isKicked, setIsKicked] = useState(false);
   const [isBanned, setIsBanned] = useState(false);
   const channelRef = useRef<ReturnType<typeof supabase.channel> | null>(null);
@@ -38,13 +37,23 @@ export function usePresence(supabase: SupabaseClient, identity: Identity, uid: s
     const channel = supabase.channel('room:main', { config: { private: true } });
     channelRef.current = channel;
 
-    // These three bindings are load-bearing even though they do nothing: supabase-js only enables
-    // presence on a channel that has presence bindings, and without them track() has nothing to
-    // write to. The roster itself is read from the observer, not from here.
+    const syncPresence = () => {
+      const state = channel.presenceState<{ uid: string; name: string; avatarId: string; deviceId?: string; position: { x: number; y: number }; cheerAt?: number }>();
+      const list: PresenceEntry[] = Object.values(state).flat().map((p) => ({
+        uid: p.uid,
+        name: p.name,
+        avatarId: p.avatarId,
+        deviceId: p.deviceId,
+        position: p.position,
+        cheerAt: p.cheerAt,
+      }));
+      setPresenceList(dedupeByDevice(list));
+    };
+
     channel
-      .on('presence', { event: 'sync' }, () => {})
-      .on('presence', { event: 'join' }, () => {})
-      .on('presence', { event: 'leave' }, () => {})
+      .on('presence', { event: 'sync' }, syncPresence)
+      .on('presence', { event: 'join' }, syncPresence)
+      .on('presence', { event: 'leave' }, syncPresence)
       .on(
         'postgres_changes',
         { event: 'INSERT', schema: 'public', table: 'kicks' },
