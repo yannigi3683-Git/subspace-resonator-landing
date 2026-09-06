@@ -1,11 +1,8 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { usePresence, CHEER_COOLDOWN_MS } from './usePresence';
-import { usePresenceObserver } from './usePresenceObserver';
-import type { PresenceEntry, Identity } from '../types';
-
-vi.mock('./usePresenceObserver', () => ({ usePresenceObserver: vi.fn() }));
+import type { Identity } from '../types';
 
 describe('usePresence roster', () => {
   const identity: Identity = {
@@ -15,33 +12,53 @@ describe('usePresence roster', () => {
     position: { x: 10, y: 20 },
   };
 
-  it('reports the observer roster, not its own tracking channel', async () => {
-    // The tracking channel track()s, so it can never be rejoined to re-prune; only the observer can.
-    // Measured 2026-08-22: the dance floor showed ~21 while the server held 12.
-    const roster: PresenceEntry[] = [
-      { uid: 'u1', name: 'A', avatarId: 'a', deviceId: 'dev-1', position: { x: 0, y: 0 } },
-      { uid: 'u2', name: 'B', avatarId: 'b', deviceId: 'dev-2', position: { x: 0, y: 0 } },
-    ];
-    vi.mocked(usePresenceObserver).mockReturnValue(roster);
+  it('reads the roster from its own tracking channel, deduped by device', async () => {
+    // Deliberately NOT the rejoining observer that AdminConsole uses. That would need a second
+    // Realtime client per listener, and Supabase Free allows 200 concurrent clients total, so it
+    // would halve the room from ~200 people to ~100. This roster drifts upward on a long session;
+    // a listener can refresh to recount, which the host cannot. See usePresenceObserver.
+    const handlers: Record<string, () => void> = {};
+    const channel = {
+      on: vi.fn((_t: string, filter: { event: string }, cb: () => void) => { handlers[filter.event] = cb; return channel; }),
+      subscribe: vi.fn().mockReturnThis(),
+      track: vi.fn().mockResolvedValue(undefined),
+      untrack: vi.fn().mockResolvedValue(undefined),
+      presenceState: vi.fn(() => ({
+        ref_a: [{ uid: 'u1', name: 'A', avatarId: 'a', deviceId: 'dev-1', position: { x: 0, y: 0 } }],
+        ref_b: [{ uid: 'u2', name: 'A2', avatarId: 'a', deviceId: 'dev-1', position: { x: 0, y: 0 } }],
+        ref_c: [{ uid: 'u3', name: 'B', avatarId: 'b', deviceId: 'dev-2', position: { x: 0, y: 0 } }],
+      })),
+    };
+    const supabase = {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    } as unknown as SupabaseClient;
+
+    const { result } = renderHook(() => usePresence(supabase, identity, 'u1'));
+    act(() => handlers.sync());
+
+    expect(result.current.count).toBe(2); // dev-1's two refs collapse to one
+  });
+
+  it('opens exactly one Realtime channel, so a listener costs one connection', async () => {
+    // The 200-concurrent-client ceiling is per CLIENT, and every listener holds one. Anything that
+    // adds a second here halves how many people fit in the room.
     const channel = {
       on: vi.fn().mockReturnThis(),
       subscribe: vi.fn().mockReturnThis(),
       track: vi.fn().mockResolvedValue(undefined),
       untrack: vi.fn().mockResolvedValue(undefined),
-      // A stale roster this hook must NOT be reading from any more.
-      presenceState: vi.fn(() => ({ ghost: [{ uid: 'gone', name: 'Ghost', avatarId: 'g', deviceId: 'dev-9', position: { x: 0, y: 0 } }] })),
+      presenceState: vi.fn(() => ({})),
     };
     const supabase = {
       channel: vi.fn(() => channel),
       removeChannel: vi.fn(),
-      auth: { getSession: vi.fn().mockResolvedValue({ data: { session: { access_token: 't' } } }) },
     } as unknown as SupabaseClient;
 
-    const { result } = renderHook(() => usePresence(supabase, identity, 'u1'));
+    renderHook(() => usePresence(supabase, identity, 'u1'));
 
-    expect(result.current.presenceList).toEqual(roster);
-    expect(result.current.count).toBe(2);
-    expect(result.current.presenceList.some((e) => e.name === 'Ghost')).toBe(false);
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+    expect(supabase.channel).toHaveBeenCalledWith('room:main', { config: { private: true } });
   });
 });
 
