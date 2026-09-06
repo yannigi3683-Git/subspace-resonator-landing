@@ -367,7 +367,11 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 length and the set total (`FILE DECK (N) · TOTAL h:mm:ss`), read per file by `probeDuration`
 (`src/radio/rtc/trackDuration.ts`) with a detached `preload="metadata"` element - metadata only,
 nothing is decoded or uploaded, and the object URL stays owned by `LocalDeck`. An unreadable
-file shows `--:--` and the total is prefixed `~` while any length is still missing. **REPEAT
+file shows `--:--` (as does one that never loads: `probeDuration` gives up after
+`PROBE_TIMEOUT_MS`) and the total is prefixed `~` while any length is still missing. **The
+probe effect keys on the queue and tracks started ids in a ref, never on the durations map** -
+keyed on the map, every resolved probe restarts the ones still in flight, so a 50-file folder
+costs ~1275 metadata loads on the broadcasting host instead of 50. **REPEAT
 lives in the deck header row beside SHUFFLE, not in the transport strip**, because the transport
 strip only renders while `status === 'live'` and the host arranges the set before GO LIVE - a
 repeat toggle nobody can reach until they are already on air reads as a missing feature.

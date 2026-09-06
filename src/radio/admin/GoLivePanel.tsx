@@ -74,6 +74,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [repeatAll, setRepeatAll] = useState(false);
   const [playlistExpanded, setPlaylistExpanded] = useState(false);
   const [durations, setDurations] = useState<Record<string, number>>({});
+  const probedIdsRef = useRef<Set<string>>(new Set());
   // Host-saved defaults (crossfade / jitter buffer), falling back to the built-ins.
   const [savedPrefs, setSavedPrefs] = useState(loadHostPrefs);
   const [autoMix, setAutoMix] = useState(true);
@@ -207,18 +208,21 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const queueTotalPartial = queue.some((t) => !durations[t.id]);
 
   // Read the length of every newly queued file so the playlist can show per-track and
-  // total set time. Probes run once per track id; a file removed mid-probe just leaves a
-  // stale entry behind, which nothing reads.
+  // total set time. Started ids live in a ref, NOT in the effect deps: keying the effect on
+  // `durations` restarts every still-pending probe each time one resolves, so a 50-file
+  // folder costs ~1275 metadata loads on the broadcasting host instead of 50. Ids come from
+  // a monotonic counter and are never reused, so a stale entry cannot be misattributed.
   useEffect(() => {
     let alive = true;
     for (const t of queue) {
-      if (durations[t.id] !== undefined) continue;
+      if (probedIdsRef.current.has(t.id)) continue;
+      probedIdsRef.current.add(t.id);
       void probeDuration(t.url).then((secs) => {
-        if (alive) setDurations((d) => (d[t.id] !== undefined ? d : { ...d, [t.id]: secs }));
+        if (alive) setDurations((d) => ({ ...d, [t.id]: secs }));
       });
     }
     return () => { alive = false; };
-  }, [queue, durations]);
+  }, [queue]);
 
   // Mirror status up to the parent (AdminConsole) for the cross-tab live indicator.
   const onStatusChangeRef = useRef(onStatusChange);
@@ -1071,7 +1075,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                     <span className="truncate">{t.name}</span>
                   </button>
                   <span className="font-mono text-[10px] tabular-nums text-muted-foreground shrink-0">
-                    {durations[t.id] ? formatClock(durations[t.id]) : '--:--'}
+                    {durations[t.id] ? formatSetClock(durations[t.id]) : '--:--'}
                   </span>
                   <button
                     onClick={() => handleRemoveTrack(t.id)}
