@@ -1,6 +1,7 @@
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import GoLivePanel from './GoLivePanel';
+import { probeDuration } from '../rtc/trackDuration';
 import { HostMixer } from '../rtc/hostMixer';
 import { useStation } from '../hooks/useStation';
 import type { SupabaseClient } from '@supabase/supabase-js';
@@ -53,6 +54,23 @@ vi.mock('../rtc/publisher', () => ({
   Publisher: vi.fn().mockImplementation(function (callbacks: PublisherCallbacks) {
     publisherCallbacksRef.current = callbacks;
     return { connect: mockPublisherConnect, disconnect: vi.fn(), setQualityCeiling: mockSetQualityCeiling };
+  }),
+}));
+
+// The deck probes each queued file's length with a detached <audio>. jsdom never loads
+// media, so the probe is mocked: durationByName maps an object URL to the length it reports.
+// deferredProbes is opt-in (probeMode), so a test can resolve probes one at a time and see
+// whether the effect restarts the ones still pending.
+const durationByName: Record<string, number> = {};
+const probeMode = { deferred: false };
+const deferredProbes: { url: string; settle: () => void }[] = [];
+vi.mock('../rtc/trackDuration', () => ({
+  probeDuration: vi.fn((url: string) => {
+    const secs = durationByName[url] ?? 0;
+    if (!probeMode.deferred) return Promise.resolve(secs);
+    return new Promise<number>((resolve) => {
+      deferredProbes.push({ url, settle: () => resolve(secs) });
+    });
   }),
 }));
 
@@ -114,6 +132,10 @@ beforeEach(() => {
     writable: true,
   });
 
+  for (const k of Object.keys(durationByName)) delete durationByName[k];
+  vi.mocked(probeDuration).mockClear();
+  probeMode.deferred = false;
+  deferredProbes.length = 0;
   audioInstances.length = 0;
   vi.stubGlobal('Audio', FakeAudioEl);
   // handleEnd posts to the server end-broadcast phase.
@@ -442,6 +464,94 @@ describe('GoLivePanel', () => {
     await waitFor(() => {
       expect(screen.getByText('my track')).toBeInTheDocument();
     });
+  });
+
+  it('shows a repeat-all toggle before going live', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    // No queue yet: nothing to repeat.
+    expect(screen.queryByLabelText(/^Repeat all/)).not.toBeInTheDocument();
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'alpha.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    // Still off air (no END BROADCAST button), but the toggle is reachable.
+    await waitFor(() => screen.getByLabelText('Repeat all: off'));
+    expect(screen.queryByTestId('end-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Repeat all: off'));
+    expect(screen.getByLabelText('Repeat all: on')).toBeInTheDocument();
+  });
+
+  it('shows each queued track length and the total loaded time', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    const files = [
+      new File([''], 'alpha.mp3', { type: 'audio/mpeg' }),
+      new File([''], 'beta.mp3', { type: 'audio/mpeg' }),
+    ];
+    // Map each object URL back to its file name so the probe mock can answer per track.
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((f) => (f as File).name);
+    durationByName['alpha.mp3'] = 185;
+    durationByName['beta.mp3'] = 3500;
+    Object.defineProperty(fileInput, 'files', { value: files, configurable: true });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => {
+      expect(within(screen.getByLabelText('Playlist')).getByText('3:05')).toBeInTheDocument();
+    });
+    expect(within(screen.getByLabelText('Playlist')).getByText('58:20')).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL 1:01:25/)).toBeInTheDocument();
+  });
+
+  it('probes each queued file exactly once', async () => {
+    probeMode.deferred = true;
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((f) => (f as File).name);
+    const names = ['a', 'b', 'c', 'd'];
+    names.forEach((n, i) => { durationByName[`${n}.mp3`] = 60 * (i + 1); });
+    Object.defineProperty(fileInput, 'files', {
+      value: names.map((n) => new File([''], `${n}.mp3`, { type: 'audio/mpeg' })),
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => expect(deferredProbes.length).toBe(names.length));
+
+    // Settling one probe re-renders the panel. The effect must not restart the three still
+    // in flight: keyed on the durations map it would, and a folder-sized queue then costs
+    // O(n^2) metadata loads on the broadcasting host.
+    for (const probe of [...deferredProbes]) {
+      await act(async () => { probe.settle(); await Promise.resolve(); });
+    }
+
+    await waitFor(() => expect(screen.getByText(/TOTAL 10:00/)).toBeInTheDocument());
+    expect(vi.mocked(probeDuration)).toHaveBeenCalledTimes(names.length);
+  });
+
+  it('falls back to --:-- for a track whose length cannot be read', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'broken.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => screen.getByText('broken'));
+    expect(within(screen.getByLabelText('Playlist')).getByText('--:--')).toBeInTheDocument();
   });
 });
 

@@ -363,6 +363,19 @@ The transcript is built **unconditionally**, so a chat-less broadcast still save
 - **Console MODERATION tab is still a placeholder** — deliberate. The same hook and props drop into it as a follow-up.
 - **A kick must UNMOUNT the room, not swap its screen.** `LiveRoom` used to render REMOVED FROM ROOM / SIGNAL BLOCKED from an early return, which left every hook above it running: `usePresence` kept tracking (so the kicked listener never left the host's room list) and `useListenerTransport` kept playing. A kick looked like it did nothing. Removal is now escalated to `ListenerApp` via `onRemoved`, which unmounts `LiveRoom` and renders the screen itself. Tests assert the escalation, not the screen — asserting the screen is what hid this for a month.
 
+**Host file deck (the built-in player in `GoLivePanel.tsx`).** The queue shows each track's
+length and the set total (`FILE DECK (N) · TOTAL h:mm:ss`), read per file by `probeDuration`
+(`src/radio/rtc/trackDuration.ts`) with a detached `preload="metadata"` element - metadata only,
+nothing is decoded or uploaded, and the object URL stays owned by `LocalDeck`. An unreadable
+file shows `--:--` (as does one that never loads: `probeDuration` gives up after
+`PROBE_TIMEOUT_MS`) and the total is prefixed `~` while any length is still missing. **The
+probe effect keys on the queue and tracks started ids in a ref, never on the durations map** -
+keyed on the map, every resolved probe restarts the ones still in flight, so a 50-file folder
+costs ~1275 metadata loads on the broadcasting host instead of 50. **REPEAT
+lives in the deck header row beside SHUFFLE, not in the transport strip**, because the transport
+strip only renders while `status === 'live'` and the host arranges the set before GO LIVE - a
+repeat toggle nobody can reach until they are already on air reads as a missing feature.
+
 **RLS: audit the LIVE database, never the schema file (2026-07-26/27).** PERMISSIVE policies are OR'd, so one policy with a `true` qual/with_check silently cancels every strict policy on that table, and a policy added by hand in the dashboard is invisible to this repo — re-running `radio-schema.sql` adds and replaces, it never removes. Four such policies were found by audit: `chat_insert_own` (with_check `true`, cancelled every ban/slow/lock), `chat_read_all` (qual `true`, exposed every past broadcast's chat), `station_admin_write` (for all, `has_role(admin)` only, cancelled the `is_admin_aal2()` requirement on station_write) and a duplicate `station_public_read`. All four are now dropped explicitly in `radio-schema.sql` so applying the schema RESTORES enforcement. `reactions_read` was separately tightened from `using (true)` to the visibility of its parent message — bodies were protected by `chat_visible()`, but reaction rows (`message_id`/`uid`/`device_id`/`emoji`) from past broadcasts were not. Audit before trusting any restriction:
 ```sql
 select tablename, policyname, cmd, permissive, qual, with_check
