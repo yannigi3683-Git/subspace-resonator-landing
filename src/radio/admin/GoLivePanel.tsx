@@ -4,11 +4,12 @@ import { SkipBack, SkipForward, Play, Pause, Rewind, FastForward, Disc3, GripVer
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { HostMixer, type MixerAnalysis } from '../rtc/hostMixer';
 import { LocalDeck, type DeckTrack } from '../rtc/localDeck';
+import { probeDuration } from '../rtc/trackDuration';
 import { Publisher } from '../rtc/publisher';
 import { transition, initialState, shouldResumeOnOnline, type FsmState, type ConnectionEvent } from '../rtc/connectionFsm';
 import { shouldStartCrossfade } from '../rtc/crossfade';
 import { QUALITY_PRESETS, QUALITY_LABELS, isBitrateAdapting, type QualityKey } from '../rtc/audioQuality';
-import { formatClock } from '../format';
+import { formatClock, formatSetClock } from '../format';
 import { loadHostPrefs, saveHostPrefs } from '../hostPrefs';
 import { extractArtwork } from '../artwork';
 import type { NowPlayingMode } from '../nowPlaying';
@@ -72,6 +73,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [filePlaying, setFilePlaying] = useState(false);
   const [repeatAll, setRepeatAll] = useState(false);
   const [playlistExpanded, setPlaylistExpanded] = useState(false);
+  const [durations, setDurations] = useState<Record<string, number>>({});
   // Host-saved defaults (crossfade / jitter buffer), falling back to the built-ins.
   const [savedPrefs, setSavedPrefs] = useState(loadHostPrefs);
   const [autoMix, setAutoMix] = useState(true);
@@ -199,6 +201,24 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     navigator.mediaDevices.addEventListener?.('devicechange', onChange);
     return () => navigator.mediaDevices.removeEventListener?.('devicechange', onChange);
   }, [refreshDevices]);
+
+  // Playlist totals: '~' while any track's length is still unknown or unreadable.
+  const queueTotalSec = queue.reduce((sum, t) => sum + (durations[t.id] ?? 0), 0);
+  const queueTotalPartial = queue.some((t) => !durations[t.id]);
+
+  // Read the length of every newly queued file so the playlist can show per-track and
+  // total set time. Probes run once per track id; a file removed mid-probe just leaves a
+  // stale entry behind, which nothing reads.
+  useEffect(() => {
+    let alive = true;
+    for (const t of queue) {
+      if (durations[t.id] !== undefined) continue;
+      void probeDuration(t.url).then((secs) => {
+        if (alive) setDurations((d) => (d[t.id] !== undefined ? d : { ...d, [t.id]: secs }));
+      });
+    }
+    return () => { alive = false; };
+  }, [queue, durations]);
 
   // Mirror status up to the parent (AdminConsole) for the cross-tab live indicator.
   const onStatusChangeRef = useRef(onStatusChange);
@@ -924,6 +944,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           <div className="flex items-center gap-3">
             <span className="font-mono text-[11px] tracking-widest text-muted-foreground">
               FILE DECK {queue.length > 0 && `(${queue.length})`}
+              {queueTotalSec > 0 && (
+                <span className="tabular-nums"> · TOTAL {queueTotalPartial ? '~' : ''}{formatSetClock(queueTotalSec)}</span>
+              )}
             </span>
             {queue.length > 6 && (
               <button
@@ -941,6 +964,23 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             )}
           </div>
           <div className="flex items-center gap-2">
+            {queue.length > 0 && (
+              <button
+                type="button"
+                onClick={handleToggleRepeat}
+                aria-label={repeatAll ? 'Repeat all: on' : 'Repeat all: off'}
+                aria-pressed={repeatAll}
+                className={[
+                  'flex items-center gap-1 font-mono text-[11px] border px-3 py-2 transition-colors min-h-[44px]',
+                  repeatAll
+                    ? 'border-primary text-primary bg-primary/10'
+                    : 'border-border text-muted-foreground hover:bg-primary/10',
+                ].join(' ')}
+              >
+                <Repeat className="w-3.5 h-3.5" aria-hidden="true" />
+                REPEAT
+              </button>
+            )}
             <button
               type="button"
               onClick={handleShuffle}
@@ -1030,6 +1070,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                     </span>
                     <span className="truncate">{t.name}</span>
                   </button>
+                  <span className="font-mono text-[10px] tabular-nums text-muted-foreground shrink-0">
+                    {durations[t.id] ? formatClock(durations[t.id]) : '--:--'}
+                  </span>
                   <button
                     onClick={() => handleRemoveTrack(t.id)}
                     className="font-mono text-[10px] text-muted-foreground hover:text-destructive min-w-[44px] min-h-[44px]"
@@ -1074,13 +1117,6 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
               <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="text-[10px] ml-0.5">10</span>
-            </TransportBtn>
-            <TransportBtn
-              onClick={handleToggleRepeat}
-              label={repeatAll ? 'Repeat all: on' : 'Repeat all: off'}
-              active={repeatAll}
-            >
-              <Repeat className="w-4 h-4" aria-hidden="true" />
             </TransportBtn>
           </div>
         )}

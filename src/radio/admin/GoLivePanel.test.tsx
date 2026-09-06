@@ -56,6 +56,13 @@ vi.mock('../rtc/publisher', () => ({
   }),
 }));
 
+// The deck probes each queued file's length with a detached <audio>. jsdom never loads
+// media, so the probe is mocked; probeDurations() lets a test resolve real numbers.
+const durationByName: Record<string, number> = {};
+vi.mock('../rtc/trackDuration', () => ({
+  probeDuration: vi.fn((url: string) => Promise.resolve(durationByName[url] ?? 0)),
+}));
+
 // --- Supabase mock ---
 
 function makeSupabase(updateResult: { error: null | { message: string } } = { error: null }) {
@@ -442,6 +449,66 @@ describe('GoLivePanel', () => {
     await waitFor(() => {
       expect(screen.getByText('my track')).toBeInTheDocument();
     });
+  });
+
+  it('shows a repeat-all toggle before going live', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    // No queue yet: nothing to repeat.
+    expect(screen.queryByLabelText(/^Repeat all/)).not.toBeInTheDocument();
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'alpha.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    // Still off air (no END BROADCAST button), but the toggle is reachable.
+    await waitFor(() => screen.getByLabelText('Repeat all: off'));
+    expect(screen.queryByTestId('end-btn')).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText('Repeat all: off'));
+    expect(screen.getByLabelText('Repeat all: on')).toBeInTheDocument();
+  });
+
+  it('shows each queued track length and the total loaded time', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    const files = [
+      new File([''], 'alpha.mp3', { type: 'audio/mpeg' }),
+      new File([''], 'beta.mp3', { type: 'audio/mpeg' }),
+    ];
+    // Map each object URL back to its file name so the probe mock can answer per track.
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((f) => (f as File).name);
+    durationByName['alpha.mp3'] = 185;
+    durationByName['beta.mp3'] = 3500;
+    Object.defineProperty(fileInput, 'files', { value: files, configurable: true });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => {
+      expect(within(screen.getByLabelText('Playlist')).getByText('3:05')).toBeInTheDocument();
+    });
+    expect(within(screen.getByLabelText('Playlist')).getByText('58:20')).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL 1:01:25/)).toBeInTheDocument();
+  });
+
+  it('falls back to --:-- for a track whose length cannot be read', async () => {
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'broken.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+
+    await waitFor(() => screen.getByText('broken'));
+    expect(within(screen.getByLabelText('Playlist')).getByText('--:--')).toBeInTheDocument();
   });
 });
 
