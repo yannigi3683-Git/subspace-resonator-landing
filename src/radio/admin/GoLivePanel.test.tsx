@@ -583,6 +583,41 @@ describe('GoLivePanel', () => {
     expect(screen.queryByText(/~/)).not.toBeInTheDocument();
   });
 
+  it('keeps probe results when SHUFFLE reorders the queue mid-probe', async () => {
+    // The likeliest real trigger: load a folder, hit SHUFFLE straight away. Same ids, only a new
+    // array identity, which is enough to re-run the probe effect. Covered separately from the
+    // add-a-second-batch case so the fix is shown to be about the effect's lifetime rather than
+    // about one particular deck action.
+    probeMode.deferred = true;
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((f) => (f as File).name);
+    durationByName['one.mp3'] = 90;
+    durationByName['two.mp3'] = 30;
+    Object.defineProperty(fileInput, 'files', {
+      value: [
+        new File([''], 'one.mp3', { type: 'audio/mpeg' }),
+        new File([''], 'two.mp3', { type: 'audio/mpeg' }),
+      ],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+    await waitFor(() => expect(deferredProbes.length).toBe(2));
+
+    fireEvent.click(screen.getByText('SHUFFLE'));
+
+    for (const probe of [...deferredProbes]) {
+      await act(async () => { probe.settle(); await Promise.resolve(); });
+    }
+
+    const playlist = () => within(screen.getByLabelText('Playlist'));
+    await waitFor(() => expect(playlist().getByText('1:30')).toBeInTheDocument());
+    expect(playlist().getByText('0:30')).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL 2:00/)).toBeInTheDocument();
+  });
+
   it('falls back to --:-- for a track whose length cannot be read', async () => {
     render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-panel'));
