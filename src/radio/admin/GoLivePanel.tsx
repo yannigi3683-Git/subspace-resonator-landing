@@ -212,16 +212,21 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   // `durations` restarts every still-pending probe each time one resolves, so a 50-file
   // folder costs ~1275 metadata loads on the broadcasting host instead of 50. Ids come from
   // a monotonic counter and are never reused, so a stale entry cannot be misattributed.
+  //
+  // There is deliberately NO per-run `alive` flag. Every deck mutation hands this effect a new
+  // `queue` array (10 setQueue call sites, all spreads), so adding a second batch, SHUFFLE,
+  // remove, jump-to-track or an auto-advance re-runs it. A cleanup that cancelled the previous
+  // run's probes would drop their results while `probedIdsRef` still held their ids, so those
+  // rows read --:-- and the header ~ for the rest of the session. Writing after unmount is a
+  // no-op in React 19, which is the only thing such a flag would have bought.
   useEffect(() => {
-    let alive = true;
     for (const t of queue) {
       if (probedIdsRef.current.has(t.id)) continue;
       probedIdsRef.current.add(t.id);
       void probeDuration(t.url).then((secs) => {
-        if (alive) setDurations((d) => ({ ...d, [t.id]: secs }));
+        setDurations((d) => ({ ...d, [t.id]: secs }));
       });
     }
-    return () => { alive = false; };
   }, [queue]);
 
   // Mirror status up to the parent (AdminConsole) for the cross-tab live indicator.

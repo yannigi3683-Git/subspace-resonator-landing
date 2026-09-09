@@ -539,6 +539,50 @@ describe('GoLivePanel', () => {
     expect(vi.mocked(probeDuration)).toHaveBeenCalledTimes(names.length);
   });
 
+  it('keeps probe results when the queue changes while probes are still in flight', async () => {
+    // The probe effect is keyed on `queue`, and every deck mutation hands it a NEW array
+    // (10 setQueue call sites, all spreads), so adding a second batch, SHUFFLE, remove,
+    // jump-to-track or an auto-advance all re-run it mid-probe. Started ids live in a ref, so
+    // a dropped result is never retried: those rows would read --:-- and the header ~ for the
+    // rest of the session. Probes can take up to PROBE_TIMEOUT_MS, so this is an ordinary
+    // set-up sequence, not a race only a test can hit.
+    probeMode.deferred = true;
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+    await waitFor(() => screen.getByTestId('go-live-panel'));
+
+    const fileInput = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+    vi.spyOn(URL, 'createObjectURL').mockImplementation((f) => (f as File).name);
+    durationByName['first.mp3'] = 120;
+    durationByName['second.mp3'] = 60;
+
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'first.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+    await waitFor(() => expect(deferredProbes.length).toBe(1));
+
+    // Second batch arrives before the first probe settles.
+    Object.defineProperty(fileInput, 'files', {
+      value: [new File([''], 'second.mp3', { type: 'audio/mpeg' })],
+      configurable: true,
+    });
+    fireEvent.change(fileInput);
+    await waitFor(() => expect(deferredProbes.length).toBe(2));
+
+    for (const probe of [...deferredProbes]) {
+      await act(async () => { probe.settle(); await Promise.resolve(); });
+    }
+
+    // Both lengths must land, and the total must be exact rather than the '~' partial marker.
+    await waitFor(() => {
+      expect(within(screen.getByLabelText('Playlist')).getByText('2:00')).toBeInTheDocument();
+    });
+    expect(within(screen.getByLabelText('Playlist')).getByText('1:00')).toBeInTheDocument();
+    expect(screen.getByText(/TOTAL 3:00/)).toBeInTheDocument();
+    expect(screen.queryByText(/~/)).not.toBeInTheDocument();
+  });
+
   it('falls back to --:-- for a track whose length cannot be read', async () => {
     render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
     await waitFor(() => screen.getByTestId('go-live-panel'));

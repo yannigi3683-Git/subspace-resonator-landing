@@ -13,7 +13,11 @@ export function probeDuration(url: string): Promise<number> {
       clearTimeout(timer);
       el.onloadedmetadata = null;
       el.onerror = null;
-      el.src = '';
+      // removeAttribute + load(), NOT `el.src = ''`: an empty src resolves against the document
+      // URL, so the element would go and fetch the page HTML as media. A 50-file folder meant 50
+      // pointless requests for radio.html on the broadcasting host.
+      el.removeAttribute('src');
+      el.load();
       resolve(secs);
     };
     timer = setTimeout(() => settle(0), PROBE_TIMEOUT_MS);
