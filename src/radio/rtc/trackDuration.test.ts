@@ -9,6 +9,10 @@ function stubAudioElement() {
     duration: NaN,
     onloadedmetadata: null as null | (() => void),
     onerror: null as null | (() => void),
+    removeAttribute: vi.fn(function (this: { src: string }, name: string) {
+      if (name === 'src') this.src = '';
+    }),
+    load: vi.fn(),
   };
   vi.spyOn(document, 'createElement').mockReturnValue(el as unknown as HTMLElement);
   return el;
@@ -28,8 +32,13 @@ describe('probeDuration', () => {
     el.onloadedmetadata!();
 
     await expect(p).resolves.toBe(185);
-    expect(el.src).toBe('');
     expect(el.onloadedmetadata).toBeNull();
+    // Detached with removeAttribute + load(). Assigning `el.src = ''` instead would resolve the
+    // empty string against the document URL and send the element off to fetch the page HTML as
+    // media, once per probed file.
+    expect(el.removeAttribute).toHaveBeenCalledWith('src');
+    expect(el.load).toHaveBeenCalled();
+    expect(el.src).toBe('');
   });
 
   it('resolves 0 when the file cannot be read', async () => {
