@@ -44,7 +44,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
     rename(name, avatarId);
     onIdentityChange({ ...identity, name, avatarId });
   };
-  const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo } =
+  const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo, tapDiag } =
     useListenerTransport(supabase, station);
   // Had the deep buffer, lost it, still not back on it. WebRTC does not survive a screen lock,
   // so this listener loses audio the moment their phone sleeps. Only a reload is guaranteed to fix
@@ -194,6 +194,15 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
                 {transportInfo.hlsAvailable && (
                   <>&nbsp;&nbsp;<span className="text-white/50">HLS-BUF:</span> {transportInfo.hlsBufferedAhead.toFixed(1)}s {transportInfo.hlsReady ? '✓' : '…'}</>
                 )}
+                {/* OBSERVATION ONLY, debug view: what the last resume tap actually did. */}
+                <br />
+                <span className="text-white/50">TAP: </span>
+                <span className={tapDiag.result === 'REFUSED' ? 'text-red-400' : 'text-yellow-300'}>
+                  {tapDiag.action}/{tapDiag.result}
+                </span>
+                &nbsp;&nbsp;<span className="text-white/50">REBUILDS:</span> {tapDiag.rebuilds}
+                &nbsp;&nbsp;<span className="text-white/50">PLAYING:</span> {playing ? 'yes' : 'NO'}
+                &nbsp;&nbsp;<span className="text-white/50">ERR:</span> {tapDiag.err}
               </div>
               <div>
                 {rtcStats ? (
