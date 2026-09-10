@@ -61,7 +61,7 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   }, [streamUrl, cfSessionId]);
 
   const { setVolume: setWebrtcVolume, audioElement: webrtcEl } = webrtc;
-  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession, stalledMs: hlsStalledMs } = hls;
+  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession, stalledMs: hlsStalledMs, reload: hlsReload } = hls;
 
   // A guest already listening on WebRTC when streamUrl is published never tapped the HLS element into
   // life, and a late muted-autoplay can be flaky. Once HLS exists AND WebRTC is audible, kick HLS
@@ -143,10 +143,15 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
       setPhase('webrtc');
       setHlsVolume(0);
       setWebrtcVolume(userVolume);
+      // Rebuild hls.js too. It registers no ERROR handler, so after the outage it has given up for
+      // good, and its own effect only re-runs on a streamUrl change - which never comes, because
+      // the host never dropped. Without this the listener sits on WEBRTC -> HLS with an empty
+      // buffer for the rest of the show.
+      hlsReload();
     }
     webrtc.resume();
     void hlsPlay();
-  }, [phase, hlsPlaying, webrtc, hlsPlay, setHlsVolume, setWebrtcVolume, userVolume]);
+  }, [phase, hlsPlaying, webrtc, hlsPlay, hlsReload, setHlsVolume, setWebrtcVolume, userVolume]);
 
   const setVolume = useCallback((v: number) => {
     setUserVolume(v);

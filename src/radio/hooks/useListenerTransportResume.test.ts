@@ -50,6 +50,7 @@ function mockHls(over: Partial<Record<string, unknown>> = {}) {
     setVolume: vi.fn(),
     claimMediaSession: vi.fn(),
     destroy: vi.fn(),
+    reload: vi.fn(),
     ...over,
   };
 }
@@ -121,6 +122,22 @@ describe('useListenerTransport resume after a listener-side outage', () => {
     expect(h.webrtc.setVolume).toHaveBeenCalledWith(1);
   });
 
+  it('rebuilds the dead hls.js instance on that tap', async () => {
+    // attachHls registers NO error handler, so once hls.js exhausts its retries during the outage
+    // it is dead for good, and its effect only rebuilds when streamUrl changes - which it does not,
+    // because the HOST is fine. Without a reload the listener sits on WEBRTC -> HLS with
+    // HLS-BUF: -0.0s forever and never regains the deep buffer (or background playback).
+    // Seen on a real phone 2026-09-10.
+    const h = harness();
+    await settleCrossfade(h.view);
+    h.setHls({ playing: false, ready: false });
+    await act(async () => { h.view.rerender(); });
+
+    act(() => { h.view.result.current.resume(); });
+
+    expect(h.hls.reload).toHaveBeenCalled();
+  });
+
   it('leaves a healthy HLS alone', async () => {
     // A tap while HLS is genuinely playing must not knock the listener off the deep buffer.
     const h = harness();
@@ -131,5 +148,7 @@ describe('useListenerTransport resume after a listener-side outage', () => {
     await act(async () => { h.view.rerender(); });
 
     expect(h.view.result.current.transportInfo.phase).toBe(before);
+    // and must NOT tear down a working hls.js instance
+    expect(h.hls.reload).not.toHaveBeenCalled();
   });
 });
