@@ -137,7 +137,11 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   // Deliberately gesture-driven, never automatic: a background reconnect loop is what caused the
   // June 2026 listener audio cuts.
   const resume = useCallback(() => {
-    if (phase === 'hls' && !hlsPlaying) {
+    // Keyed on "was healthy, now is not" rather than on the phase. Keying it on phase==='hls' was
+    // wrong and shipped briefly: once the first tap had stepped back to 'webrtc', a second tap could
+    // never revive HLS, so the listener stayed on WEBRTC -> HLS with an empty buffer. hlsReady only
+    // turns true after a healthy buffer, so a first-ever tap during startup never reloads.
+    if (hlsReady && !hlsPlaying) {
       if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id);
       crossfadeRef.current = { started: false, id: null };
       setPhase('webrtc');

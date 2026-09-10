@@ -97,7 +97,7 @@ describe('useListenerTransport resume after a listener-side outage', () => {
     expect(h.view.result.current.transportInfo.phase).toBe('hls');
 
     // The listener's own connection dies: HLS stops. The host is untouched.
-    h.setHls({ playing: false, ready: false });
+    h.setHls({ playing: false });
     await act(async () => { h.view.rerender(); });
 
     act(() => { h.view.result.current.resume(); });
@@ -113,7 +113,7 @@ describe('useListenerTransport resume after a listener-side outage', () => {
     // user's volume would hand over to a transport that is muted, which reads as "tap did nothing".
     const h = harness();
     await settleCrossfade(h.view);
-    h.setHls({ playing: false, ready: false });
+    h.setHls({ playing: false });
     await act(async () => { h.view.rerender(); });
 
     h.webrtc.setVolume.mockClear();
@@ -130,12 +130,26 @@ describe('useListenerTransport resume after a listener-side outage', () => {
     // Seen on a real phone 2026-09-10.
     const h = harness();
     await settleCrossfade(h.view);
-    h.setHls({ playing: false, ready: false });
+    h.setHls({ playing: false });
     await act(async () => { h.view.rerender(); });
 
     act(() => { h.view.result.current.resume(); });
 
     expect(h.hls.reload).toHaveBeenCalled();
+  });
+
+  it('does not reload on a first-ever tap, before HLS has ever been healthy', async () => {
+    // hlsReady is the "has been healthy" signal. During initial startup it is false, and reloading
+    // there would tear down the instance that is still filling its first buffer.
+    let webrtc = mockWebrtc({ playing: false });
+    let hls = mockHls({ ready: false, playing: false });
+    vi.mocked(useListenerAudio).mockImplementation(() => webrtc as never);
+    vi.mocked(useHlsListener).mockImplementation(() => hls as never);
+    const view = renderHook(() => useListenerTransport(supabase, station()));
+
+    act(() => { view.result.current.resume(); });
+
+    expect(hls.reload).not.toHaveBeenCalled();
   });
 
   it('leaves a healthy HLS alone', async () => {

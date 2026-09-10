@@ -86,9 +86,18 @@ export function useListenerAudio(
   }, []);
 
   const resume = useCallback(() => {
-    // Returning from a phone lock / background: the stream is likely dead, so a full reconnect
-    // (rebuild the Subscriber, same as a page refresh) is the only thing that restores audio.
-    if (wasBackgroundedRef.current) {
+    // Rebuild the Subscriber (same as a page refresh) whenever the stream is KNOWN dead. Two ways
+    // to know: the tab was backgrounded (phone lock), or audio had played and has since stopped.
+    //
+    // The second condition is not redundant. A listener whose OWN network dropped while the page
+    // stayed in the foreground - airplane mode, wifi dying, walking out of range - never triggers a
+    // visibilitychange, so wasBackgrounded stays false and the old code fell through to play() on a
+    // dead element. The tap looked completely ignored and only a page refresh recovered. Confirmed
+    // on a real phone 2026-09-10.
+    //
+    // hasPlayedRef keeps the FIRST tap out of this branch: on initial join nothing has played yet,
+    // so it must go to play() and not rebuild the connection the effect has only just made.
+    if (wasBackgroundedRef.current || (hasPlayedRef.current && !playing)) {
       wasBackgroundedRef.current = false;
       setConnectionError(false);
       setRetryKey((k) => k + 1);
@@ -103,7 +112,7 @@ export function useListenerAudio(
       // iOS Safari can still refuse to start WebRTC audio even from a tap — surface a hint.
       setPlaybackBlocked(true);
     });
-  }, [acquireWakeLock]);
+  }, [acquireWakeLock, playing]);
 
   const retry = useCallback(() => {
     setConnectionError(false);
