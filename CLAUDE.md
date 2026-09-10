@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 67 files, 569 tests)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests)
 
 ---
 
@@ -408,7 +408,21 @@ scope**, see Known Future Tasks.
 **LISTENER-SIDE RECOVERY: the deep buffer used to be lost for the whole broadcast (fixed 2026-09-10, PR #39).** When the LISTENER's own connection dropped (airplane mode, wifi gone, walking out of range) audio came back but the deep buffer did not, so they were pinned to WebRTC and lost audio the moment their screen locked. Only a page reload recovered it. Two independent bugs, both now fixed and both device-verified on production:
 - **`attachHls` registered NO error handler.** hls.js exhausts its own retries, emits a FATAL error and stops. Nothing was listening, so the instance stayed dead, and its effect only rebuilds when `streamUrl` changes - which never comes, because the HOST never dropped. Now wired to the library's documented recovery (`startLoad()` for a fatal network error, `recoverMediaError()` for a fatal decode error), registered **before `loadSource`** so a failure during the first load is not missed, and throttled to one attempt per 3s so a genuinely dead stream is not retried in a tight loop by every listener at once. The policy is a pure function (`recoveryAction`) so it is testable without hls.js or a network.
 - **The crossfade onto HLS fired ONCE PER SESSION.** `crossfadeRef.current.started` was set on the first fade and never cleared, so a listener who fell back to WebRTC could never return even with a healthy buffer sitting ready. **The evidence was a before/after pair on a real phone:** `WEBRTC -> HLS  HLS-BUF 9.9s` before a refresh, `HLS (deep buffer)  HLS-BUF 8.2s` after. The buffer was already there; the refresh fetched nothing and only reset that flag. It is now cleared when the fade **completes**, with re-entry blocked by a `phase === 'hls'` guard instead. That flag exists to stop the fade restarting itself mid-fade, NOT to make the handover once-per-session.
-- **Safety net:** `useStuckOffDeepBuffer` shows a small DEEP BUFFER LOST / RELOAD panel if the deep buffer was had, lost, and has not returned after 30s. It is keyed on **which transport is carrying playback**, never on "can the listener hear audio". Silent for anyone who never had it, when no `streamUrl` is on offer, and while `navigator.onLine` is false (reloading with no connection hands them a blank page). With the two fixes above it should almost never appear.
+- **A DEEP BUFFER LOST / RELOAD prompt was built and then REMOVED (PR #44, 2026-09-10). Do not rebuild it.** Its record across all device testing was **two firings, both wrong, zero correct**: once while `HLS-BUF` was at 18.8s and climbing, and once during a normal HOST reconnect, warning the listener audio would stop while recovery was underway. **Tuning the threshold cannot fix it**: the server republished `streamUrl` 12s after that reconnect, well inside the 30s window, but the LISTENER then has to notice the new address, rebuild the player, refill a buffer and cross over, and that chain ran far longer. Measuring the server half and assuming the phone half is the exact mistake that produced three wrong explanations the same day. It is also unnecessary: since the hls.js retry and the crossfade re-arm, the deep buffer recovered by itself in every measured run. If a genuine strand ever appears, a refresh recovers it and `/radio?debug` identifies it.
+
+**HOST-DROP RECOVERY: verified end to end 2026-09-10, with a real listener on a phone.** Host wifi cut for 40s+ mid-broadcast:
+
+| | Result |
+|---|---|
+| Console after the ~31s retry budget | "Connection lost", the documented terminal `lost` state |
+| GO LIVE pressed from `lost` | resumed the SAME broadcast, no new one |
+| `startedAt` | **unchanged** through the outage AND the GO LIVE |
+| Deep buffer back | **10s** after the new session appeared |
+| Listener audio | returned; `?debug` showed `PLAY / accepted` |
+| Listener transport | back to `HLS (deep buffer)` |
+| **Chat** | **intact** |
+
+So a 40-second host outage costs listeners a short silence and nothing else. Two further reconnects were measured the same day: `streamUrl` republished **12s** and **10s** after the new session. **The browser `online` auto-resume was NOT observed firing** on this test - GO LIVE was pressed quickly, so it may not have had a chance. Unverified either way; do not claim it is broken.
 
 **The hard-won rule from that fix: never infer whether a listener can hear audio.** Four attempts were built and thrown away, each keyed on a different proxy, and every one lied. `playing` is `phase === 'hls' ? hlsPlaying : webrtc.playing`, so it reports **false while WebRTC is plainly audible** whenever the phase is stuck on `hls`; an overlay keyed on it announced CONNECTION LOST while `HLS-BUF` was at 18.8s and climbing. `hlsReady` stays true after it has stopped being true. `wasBackgrounded` is set by a **visibilitychange** and so never fires when the network dies with the page in the foreground, which is why `resume()` used to fall through to `play()` on a dead element and the tap looked completely ignored. Ask a question the app knows for certain (which transport is active, has the buffer been healthy) or let the library report its own failure. Do not ask what the user hears.
 
