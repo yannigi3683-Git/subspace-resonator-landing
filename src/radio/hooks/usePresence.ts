@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { PresenceEntry, Identity } from '../types';
 import { updateIdentity } from '../identity';
+import { dedupeByDevice } from './usePresenceObserver';
 
 export interface UsePresenceResult {
   presenceList: PresenceEntry[];
@@ -18,19 +19,15 @@ export interface UsePresenceResult {
 // second trigger cannot bypass it.
 export const CHEER_COOLDOWN_MS = 3000;
 
-/**
- * Collapse presence entries from the same browser down to one (keeping the most recent).
- * Supabase presence is keyed per connection, and anonymous re-auth mints a new uid, so a stale
- * ghost (old uid) can sit beside the current entry (new uid) — both from the same device. Keying
- * on the stable deviceId (falling back to uid for legacy/ghost entries) collapses that duplicate.
- */
-export function dedupeByDevice(list: PresenceEntry[]): PresenceEntry[] {
-  const byDevice = new Map<string, PresenceEntry>();
-  for (const entry of list) byDevice.set(entry.deviceId || entry.uid, entry);
-  return [...byDevice.values()];
-}
-
 export function usePresence(supabase: SupabaseClient, identity: Identity, uid: string): UsePresenceResult {
+  // This roster drifts upward on a long session, and that is a DELIBERATE trade, not an oversight.
+  // Only a fresh presence_state prunes a presence map, so staying accurate means rejoining, and
+  // rejoining a channel that track()s is not free: it would either storm the room with leave+join
+  // every cycle, or need a second Realtime client per listener. The second client is what was built
+  // and then rejected — Supabase Free allows **200 concurrent clients** (dashboard, 2026-08-23), so
+  // two per listener halves the room from ~200 people to ~100. Capacity beats a tidy number, and a
+  // listener can always refresh the page, which recounts from scratch. The HOST cannot refresh (that
+  // tab owns the publisher), which is why AdminConsole alone pays for an observer.
   const [presenceList, setPresenceList] = useState<PresenceEntry[]>([]);
   const [isKicked, setIsKicked] = useState(false);
   const [isBanned, setIsBanned] = useState(false);

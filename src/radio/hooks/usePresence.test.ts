@@ -1,46 +1,67 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { renderHook } from '@testing-library/react';
+import { renderHook, act } from '@testing-library/react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { dedupeByDevice, usePresence, CHEER_COOLDOWN_MS } from './usePresence';
-import type { PresenceEntry, Identity } from '../types';
+import { usePresence, CHEER_COOLDOWN_MS } from './usePresence';
+import type { Identity } from '../types';
 
-const entry = (uid: string, name: string, deviceId: string): PresenceEntry => ({
-  uid,
-  name,
-  avatarId: 'nebula',
-  deviceId,
-  position: { x: 10, y: 20 },
+describe('usePresence roster', () => {
+  const identity: Identity = {
+    name: 'Yanni',
+    avatarId: 'nebula',
+    deviceId: 'dev-1',
+    position: { x: 10, y: 20 },
+  };
+
+  it('reads the roster from its own tracking channel, deduped by device', async () => {
+    // Deliberately NOT the rejoining observer that AdminConsole uses. That would need a second
+    // Realtime client per listener, and Supabase Free allows 200 concurrent clients total, so it
+    // would halve the room from ~200 people to ~100. This roster drifts upward on a long session;
+    // a listener can refresh to recount, which the host cannot. See usePresenceObserver.
+    const handlers: Record<string, () => void> = {};
+    const channel = {
+      on: vi.fn((_t: string, filter: { event: string }, cb: () => void) => { handlers[filter.event] = cb; return channel; }),
+      subscribe: vi.fn().mockReturnThis(),
+      track: vi.fn().mockResolvedValue(undefined),
+      untrack: vi.fn().mockResolvedValue(undefined),
+      presenceState: vi.fn(() => ({
+        ref_a: [{ uid: 'u1', name: 'A', avatarId: 'a', deviceId: 'dev-1', position: { x: 0, y: 0 } }],
+        ref_b: [{ uid: 'u2', name: 'A2', avatarId: 'a', deviceId: 'dev-1', position: { x: 0, y: 0 } }],
+        ref_c: [{ uid: 'u3', name: 'B', avatarId: 'b', deviceId: 'dev-2', position: { x: 0, y: 0 } }],
+      })),
+    };
+    const supabase = {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    } as unknown as SupabaseClient;
+
+    const { result } = renderHook(() => usePresence(supabase, identity, 'u1'));
+    act(() => handlers.sync());
+
+    expect(result.current.count).toBe(2); // dev-1's two refs collapse to one
+  });
+
+  it('opens exactly one Realtime channel, so a listener costs one connection', async () => {
+    // The 200-concurrent-client ceiling is per CLIENT, and every listener holds one. Anything that
+    // adds a second here halves how many people fit in the room.
+    const channel = {
+      on: vi.fn().mockReturnThis(),
+      subscribe: vi.fn().mockReturnThis(),
+      track: vi.fn().mockResolvedValue(undefined),
+      untrack: vi.fn().mockResolvedValue(undefined),
+      presenceState: vi.fn(() => ({})),
+    };
+    const supabase = {
+      channel: vi.fn(() => channel),
+      removeChannel: vi.fn(),
+    } as unknown as SupabaseClient;
+
+    renderHook(() => usePresence(supabase, identity, 'u1'));
+
+    expect(supabase.channel).toHaveBeenCalledTimes(1);
+    expect(supabase.channel).toHaveBeenCalledWith('room:main', { config: { private: true } });
+  });
 });
 
-describe('dedupeByDevice', () => {
-  it('collapses a stale ghost and the current entry from the same device (different uid/name) to one (the latest)', () => {
-    // The "yanni + yanni test" bug: one browser, two presence metas with different
-    // anonymous uids from re-auth, same stable deviceId.
-    const list = [entry('uid-old', 'yanni test', 'dev-1'), entry('uid-new', 'yanni', 'dev-1')];
-    const out = dedupeByDevice(list);
-    expect(out).toHaveLength(1);
-    expect(out[0].name).toBe('yanni');
-  });
-
-  it('keeps genuinely different devices separate', () => {
-    const list = [entry('a', 'A', 'dev-1'), entry('b', 'B', 'dev-2'), entry('c', 'C', 'dev-3')];
-    expect(dedupeByDevice(list)).toHaveLength(3);
-  });
-
-  it('falls back to uid when deviceId is absent (legacy/ghost entries)', () => {
-    const legacy = { uid: 'g', name: 'ghost', avatarId: 'nebula', position: { x: 1, y: 2 } } as PresenceEntry;
-    expect(dedupeByDevice([legacy, legacy])).toHaveLength(1);
-  });
-
-  it('returns empty for empty input', () => {
-    expect(dedupeByDevice([])).toEqual([]);
-  });
-});
-
-// The cheer rides the presence payload, so its throttle has to live in the hook: a second
-// trigger (another button, a key repeat, an impatient tap) must not be able to route around it.
-// track() rebroadcasts to every subscriber, and at 120 listeners an unthrottled pulse is a
-// presence storm competing with the audio stream.
 describe('usePresence cheer', () => {
   const identity: Identity = {
     name: 'Yanni',
