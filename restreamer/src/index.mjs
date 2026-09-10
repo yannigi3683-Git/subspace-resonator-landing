@@ -11,9 +11,10 @@ import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
 import { startHls, rtpInputArgs } from './hls.mjs';
-import { makeCleanup, sweepStaleTempDirs } from './cleanup.mjs';
+import { makeCleanup, sweepStaleTempDirs, bringUp } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
+import { sweepOldObjects, HLS_RETENTION_DAYS } from './sink/r2sweep.mjs';
 import { makeLog } from './log.mjs';
 
 const RTP_PORT = 5004; // single broadcast, fixed local port
@@ -83,15 +84,13 @@ async function startFor(cfSessionId) {
 
   const cleanupResources = makeCleanup({ ff, pull, sink, outDir, log });
 
-  // If the stream never comes up, tear down THIS attempt's resources before bubbling the error —
-  // otherwise ffmpeg keeps holding the RTP port and the next attempt fails to bind.
-  try {
+  // Both steps run under one guard. If the stream never comes up, or the streamUrl write fails,
+  // tear down THIS attempt's resources before bubbling the error - otherwise ffmpeg keeps holding
+  // the RTP port and the sink keeps uploading, unreachable because `running` is still unset.
+  await bringUp(cleanupResources, async () => {
     await waitForSegments(outDir);
-  } catch (e) {
-    cleanupResources();
-    throw e;
-  }
-  await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
+    await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
+  });
   log('streamUrl published:', sink.publicUrl, '(rtp packets so far', pull.rtpCount() + ')');
 
   running = {
@@ -124,6 +123,15 @@ try {
   if (swept) log('swept', swept, 'stale temp dir(s) from a previous run');
 } catch (e) {
   log('temp dir sweep failed', e.message);
+}
+
+// On boot, reclaim HLS objects older than the retention window. Nothing else deletes them, and a
+// bucket lifecycle rule needs a token this service does not have (see r2sweep.mjs). Boot is the
+// right moment: it happens before every show, and never while one is on air.
+if (cfg.sink === 'r2') {
+  const { deleted, bytes, error } = await sweepOldObjects({ r2: cfg.r2 });
+  if (error) log('r2 sweep failed (harmless, storage just keeps growing):', error);
+  else if (deleted) log('r2 sweep: removed', deleted, 'objects older than', HLS_RETENTION_DAYS, 'days,', (bytes / 1048576).toFixed(0), 'MB');
 }
 
 // On boot, clear a streamUrl left over from a crashed/killed run (station is off but still points

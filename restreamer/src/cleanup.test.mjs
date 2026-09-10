@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { basename } from 'node:path';
-import { makeCleanup, sweepStaleTempDirs, STALE_DIR_MS } from './cleanup.mjs';
+import { makeCleanup, sweepStaleTempDirs, bringUp, STALE_DIR_MS } from './cleanup.mjs';
 
 test('releases every resource: kills ffmpeg, closes pull, stops sink, removes dir', () => {
   const calls = [];
@@ -140,4 +140,29 @@ test('sweep survives an unreadable tmpdir and a dir that vanishes mid-scan', asy
   fs.stat = async (dir) => (dir.includes('gone') ? Promise.reject(new Error('ENOENT')) : realStat(dir));
   assert.equal(await sweepStaleTempDirs(fs), 1);
   assert.deepEqual(fs.removed, ['restreamer-old']);
+});
+
+test('bringUp tears the attempt down when a LATE step fails, not just the first', async () => {
+  let cleaned = 0;
+  const steps = [];
+  await assert.rejects(
+    bringUp(() => cleaned++, async () => {
+      steps.push('waitForSegments');
+      steps.push('setStreamUrl');
+      throw new Error('setStreamUrl: fetch failed');
+    }),
+    /setStreamUrl: fetch failed/,
+  );
+  // The realistic failure is the streamUrl write, which lands AFTER the segments are flowing:
+  // ffmpeg is up, holding the RTP port, and the sink is uploading. Leaving those running strands
+  // the broadcast with no handle to stop it (END BROADCAST can't reach an attempt that never
+  // became `running`), so the guard has to cover the whole bring-up, not only the first step.
+  assert.deepEqual(steps, ['waitForSegments', 'setStreamUrl']);
+  assert.equal(cleaned, 1);
+});
+
+test('bringUp leaves the attempt running when every step succeeds', async () => {
+  let cleaned = 0;
+  await bringUp(() => cleaned++, async () => 'ok');
+  assert.equal(cleaned, 0);
 });

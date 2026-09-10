@@ -53,3 +53,17 @@ export function makeCleanup({ ff, pull, sink, outDir, existsSync = fsExistsSync,
     }
   };
 }
+
+// Run every step that brings one broadcast up, tearing that attempt down if ANY of them throws.
+// The guard has to span the whole sequence, not just the first step: by the time the streamUrl
+// write happens, ffmpeg holds the RTP port and the sink is already uploading, but the attempt has
+// not yet been recorded as `running` — so a throw there leaves both alive with nothing able to
+// stop them, END BROADCAST included. Rethrow so the caller's poll can start a fresh attempt.
+export async function bringUp(cleanup, steps) {
+  try {
+    return await steps();
+  } catch (e) {
+    cleanup();
+    throw e;
+  }
+}

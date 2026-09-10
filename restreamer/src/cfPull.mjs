@@ -25,6 +25,10 @@ export async function negotiatePull({ brokerUrl, token, rtpPort, host = '127.0.0
   log('subscribe-pull OK', cfSessionId, 'opusPt', opusPt);
 
   const udp = dgram.createSocket('udp4');
+  // A send that lands after close() - a packet still in flight while the pull is torn down -
+  // emits 'error' here, and an unhandled 'error' on a dgram socket takes the whole process down
+  // mid-teardown. Log and carry on; the socket is going away anyway.
+  udp.on('error', (e) => log('rtp socket', e.message));
   const pc = new RTCPeerConnection({
     codecs: {
       audio: [new RTCRtpCodecParameters({ mimeType: 'audio/opus', clockRate: 48000, channels: 2, payloadType: opusPt })],

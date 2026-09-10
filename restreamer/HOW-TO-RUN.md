@@ -209,6 +209,19 @@ secrets. Do not paste it anywhere.
 
 ---
 
+## Storage looks after itself
+
+Each broadcast uploads its audio to Cloudflare R2, and until 2026-09-10 nothing ever deleted it.
+It had built up to 7.15 GB, about 71% of the free 10 GB, going back to July. That was cleared, and
+the program now deletes anything older than **7 days** every time it starts. You do not have to do
+anything.
+
+Two things worth knowing. It only tidies up when it starts, so if you never launch it, nothing is
+deleted. And if the tidy-up ever fails it just says so in the window and carries on, because
+housekeeping must never stop a show from going on air.
+
+To check how full the bucket is, open the Cloudflare dashboard, R2, bucket `radio-hls`.
+
 ## Optional: run it without a window
 
 **Not set up. Follow this only if you want it.** Today the restreamer needs you to be logged in and
