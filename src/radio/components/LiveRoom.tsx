@@ -8,6 +8,7 @@ import { useReactions } from '../hooks/useReactions';
 import { usePresence } from '../hooks/usePresence';
 import { useModeration } from '../hooks/useModeration';
 import { useListenerTransport } from '../hooks/useListenerTransport';
+import { useStuckOffDeepBuffer } from '../hooks/useStuckOffDeepBuffer';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
 import { Chat } from './Chat';
@@ -45,6 +46,10 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
   };
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo } =
     useListenerTransport(supabase, station);
+  // Had the deep buffer, lost it, still not back on it. WebRTC does not survive a screen lock,
+  // so this listener loses audio the moment their phone sleeps. Only a reload is guaranteed to fix
+  // it, so say so rather than leaving them on a transport that will die.
+  const offDeepBuffer = useStuckOffDeepBuffer(transportInfo.phase === 'hls', transportInfo.hlsAvailable);
   const nowPlaying = useNowPlaying(supabase);
 
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -96,6 +101,26 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
             uid={uid}
             nowPlaying={{ name: nowPlaying.name, visible: nowPlaying.visible && playing }}
           />
+
+          {/* Lost the deep buffer and it has not come back: a reload is the only certain fix, and
+              staying on WebRTC means silence as soon as the screen locks. Shown alongside normal
+              playback, NOT as a blocking overlay, because audio is usually still audible here. */}
+          {offDeepBuffer && playing && (
+            <div className="absolute top-2 left-1/2 -translate-x-1/2 z-20 flex flex-col items-center gap-2 px-4 py-3 bg-black/80 border border-[#ffcc66]/40">
+              <span className="font-mono text-[11px] text-[#ffcc66] tracking-[0.2em]">DEEP BUFFER LOST</span>
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                data-testid="reload-deep-buffer"
+                className="font-mono text-[11px] tracking-[0.25em] text-white border border-white/40 px-4 min-h-[44px]"
+              >
+                ↻  RELOAD
+              </button>
+              <p className="font-mono text-[10px] leading-relaxed text-white/50 max-w-[220px] text-center">
+                Reload to restore it, or audio will stop when your screen locks.
+              </p>
+            </div>
+          )}
 
           {/* Audio overlay: connecting / ready / error states */}
           {!playing && (
