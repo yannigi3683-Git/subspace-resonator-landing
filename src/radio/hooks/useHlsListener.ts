@@ -14,7 +14,6 @@ export interface HlsListener {
   /** Claim OS media-session so audio keeps playing when the phone locks / backgrounds. */
   claimMediaSession: () => void;
   destroy: () => void;
-  reload: () => void;
 }
 
 // Crossfade onto HLS only once this many seconds are buffered ahead.
@@ -28,11 +27,6 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
   const [playing, setPlaying] = useState(false);
   const [bufferedAhead, setBufferedAhead] = useState(0);
   const [stalledMs, setStalledMs] = useState(0);
-  // Bumped by reload(): re-runs the setup effect so the element and the hls.js instance are
-  // rebuilt from scratch. attachHls registers no ERROR handler, so once hls.js gives up after a
-  // network outage it stays dead, and streamUrl does not change when it is the LISTENER's
-  // connection that failed rather than the host's.
-  const [reloadKey, setReloadKey] = useState(0);
   const elRef = useRef<HTMLVideoElement | null>(null);
   const handleRef = useRef<HlsHandle | null>(null);
 
@@ -108,7 +102,7 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
       setBufferedAhead(0);
       setStalledMs(0);
     };
-  }, [streamUrl, reloadKey]);
+  }, [streamUrl]);
 
   const play = useCallback(async () => {
     try { await elRef.current?.play(); } catch { /* gesture/autoplay refusal — non-fatal */ }
@@ -138,12 +132,10 @@ export function useHlsListener(streamUrl: string | undefined): HlsListener {
     } catch { /* MediaSession unsupported — non-fatal */ }
   }, []);
 
-  const reload = useCallback(() => { setReloadKey((k) => k + 1); }, []);
-
   const destroy = useCallback(() => {
     handleRef.current?.destroy();
     handleRef.current = null;
   }, []);
 
-  return { ready, playing, bufferedAhead, stalledMs, play, setVolume, claimMediaSession, destroy, reload };
+  return { ready, playing, bufferedAhead, stalledMs, play, setVolume, claimMediaSession, destroy };
 }

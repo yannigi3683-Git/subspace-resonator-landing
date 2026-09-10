@@ -61,7 +61,7 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   }, [streamUrl, cfSessionId]);
 
   const { setVolume: setWebrtcVolume, audioElement: webrtcEl } = webrtc;
-  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession, stalledMs: hlsStalledMs, reload: hlsReload } = hls;
+  const { ready: hlsReady, playing: hlsPlaying, setVolume: setHlsVolume, play: hlsPlay, claimMediaSession, stalledMs: hlsStalledMs } = hls;
 
   // A guest already listening on WebRTC when streamUrl is published never tapped the HLS element into
   // life, and a late muted-autoplay can be flaky. Once HLS exists AND WebRTC is audible, kick HLS
@@ -120,42 +120,10 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   useEffect(() => () => { if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id); }, []);
 
   // Start HLS (muted) inside the same user gesture that starts WebRTC, so iOS allows it later.
-  //
-  // A LISTENER-side outage (airplane mode, dead wifi, a phone that slept too long) stops HLS while
-  // `phase` stays 'hls', and the host is untouched so neither streamUrl nor cfSessionId changes to
-  // reset it. In that state the tap was self-defeating: `playing` is read from `hlsPlaying` so the
-  // overlay never cleared, and the phase==='hls' effect kept calling `webrtcEl.pause()`, undoing
-  // the very reconnect the tap had just performed. Only a page refresh recovered, and most people
-  // do not know to try that. Observed live 2026-09-10.
-  //
-  // So a tap onto a dead HLS hands playback back to live WebRTC and clears the once-per-session
-  // crossfade guard, which also re-arms the deep buffer: without that the listener is pinned to
-  // WebRTC for the rest of the show and loses background playback on a locked phone, because HLS
-  // is the transport that survives a screen lock. Restoring the WebRTC volume matters too, since
-  // the crossfade ended by fading it to zero.
-  //
-  // Deliberately gesture-driven, never automatic: a background reconnect loop is what caused the
-  // June 2026 listener audio cuts.
   const resume = useCallback(() => {
-    // Keyed on "was healthy, now is not" rather than on the phase. Keying it on phase==='hls' was
-    // wrong and shipped briefly: once the first tap had stepped back to 'webrtc', a second tap could
-    // never revive HLS, so the listener stayed on WEBRTC -> HLS with an empty buffer. hlsReady only
-    // turns true after a healthy buffer, so a first-ever tap during startup never reloads.
-    if (hlsReady && !hlsPlaying) {
-      if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id);
-      crossfadeRef.current = { started: false, id: null };
-      setPhase('webrtc');
-      setHlsVolume(0);
-      setWebrtcVolume(userVolume);
-      // Rebuild hls.js too. It registers no ERROR handler, so after the outage it has given up for
-      // good, and its own effect only re-runs on a streamUrl change - which never comes, because
-      // the host never dropped. Without this the listener sits on WEBRTC -> HLS with an empty
-      // buffer for the rest of the show.
-      hlsReload();
-    }
     webrtc.resume();
     void hlsPlay();
-  }, [phase, hlsPlaying, webrtc, hlsPlay, hlsReload, setHlsVolume, setWebrtcVolume, userVolume]);
+  }, [webrtc, hlsPlay]);
 
   const setVolume = useCallback((v: number) => {
     setUserVolume(v);
