@@ -11,7 +11,7 @@ import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
 import { startHls, rtpInputArgs } from './hls.mjs';
-import { makeCleanup, sweepStaleTempDirs } from './cleanup.mjs';
+import { makeCleanup, sweepStaleTempDirs, bringUp } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
 import { makeLog } from './log.mjs';
@@ -83,15 +83,13 @@ async function startFor(cfSessionId) {
 
   const cleanupResources = makeCleanup({ ff, pull, sink, outDir, log });
 
-  // If the stream never comes up, tear down THIS attempt's resources before bubbling the error —
-  // otherwise ffmpeg keeps holding the RTP port and the next attempt fails to bind.
-  try {
+  // Both steps run under one guard. If the stream never comes up, or the streamUrl write fails,
+  // tear down THIS attempt's resources before bubbling the error - otherwise ffmpeg keeps holding
+  // the RTP port and the sink keeps uploading, unreachable because `running` is still unset.
+  await bringUp(cleanupResources, async () => {
     await waitForSegments(outDir);
-  } catch (e) {
-    cleanupResources();
-    throw e;
-  }
-  await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
+    await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
+  });
   log('streamUrl published:', sink.publicUrl, '(rtp packets so far', pull.rtpCount() + ')');
 
   running = {
