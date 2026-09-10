@@ -23,6 +23,33 @@ export interface HlsHandle {
   destroy(): void;
 }
 
+// hls.js gives up after its own retries and emits a FATAL error, then sits there dead. Nothing was
+// listening for that, so a listener whose connection dropped lost the deep buffer for the rest of
+// the broadcast and only a page reload brought it back (confirmed on a real phone 2026-09-10).
+// The library's documented recovery is startLoad() for a network failure and recoverMediaError()
+// for a decode failure.
+//
+// Throttled, because a stream that is genuinely gone (restreamer off) would otherwise have every
+// listener retrying in a tight loop against R2. One attempt per cooldown, and if recovery never
+// takes, the transport's existing stall detection still drops them to WebRTC.
+export const RECOVER_COOLDOWN_MS = 3000;
+
+export type HlsRecovery = 'startLoad' | 'recoverMedia' | 'none';
+
+/** Pure decision so the policy is testable without hls.js or a network. */
+export function recoveryAction(
+  fatal: boolean,
+  kind: 'network' | 'media' | 'other',
+  msSinceLastAttempt: number,
+  cooldownMs: number = RECOVER_COOLDOWN_MS,
+): HlsRecovery {
+  if (!fatal) return 'none';
+  if (msSinceLastAttempt < cooldownMs) return 'none';
+  if (kind === 'network') return 'startLoad';
+  if (kind === 'media') return 'recoverMedia';
+  return 'none';
+}
+
 function clearSrc(el: HTMLMediaElement): HlsHandle {
   return {
     destroy() {
@@ -43,6 +70,19 @@ export async function attachHls(el: HTMLMediaElement, streamUrl: string): Promis
   const { default: Hls } = await import('hls.js');
   if (Hls.isSupported()) {
     const hls = new Hls(HLS_CONFIG);
+
+    let lastAttempt = 0;
+    hls.on(Hls.Events.ERROR, (_event, data) => {
+      const kind = data.type === Hls.ErrorTypes.NETWORK_ERROR ? 'network'
+        : data.type === Hls.ErrorTypes.MEDIA_ERROR ? 'media'
+          : 'other';
+      const action = recoveryAction(!!data.fatal, kind, Date.now() - lastAttempt);
+      if (action === 'none') return;
+      lastAttempt = Date.now();
+      if (action === 'startLoad') hls.startLoad();
+      else hls.recoverMediaError();
+    });
+
     hls.loadSource(streamUrl);
     hls.attachMedia(el);
     return {
