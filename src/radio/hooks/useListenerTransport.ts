@@ -16,6 +16,7 @@ export interface TransportInfo {
 }
 
 export interface ListenerTransportResult extends UseListenerAudioResult {
+  tapDiag: { action: string; result: string; rebuilds: number; err: string };
   transportInfo: TransportInfo;
 }
 

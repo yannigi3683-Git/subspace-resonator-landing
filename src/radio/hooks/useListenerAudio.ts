@@ -4,6 +4,8 @@ import type { Station } from '../types';
 import type { SubscriberStats } from '../rtc/subscriber';
 
 export interface UseListenerAudioResult {
+  /** OBSERVATION ONLY, rendered on /radio?debug. What the last resume tap did. */
+  tapDiag: { action: string; result: string; rebuilds: number; err: string };
   playing: boolean;
   /** True once the host's stream is attached, even if autoplay was blocked. */
   ready: boolean;
@@ -31,6 +33,11 @@ export function useListenerAudio(
   const [ready, setReady] = useState(false);
   const [connectionError, setConnectionError] = useState(false);
   const [retryKey, setRetryKey] = useState(0);
+  // OBSERVATION ONLY (surfaced on /radio?debug). Records what the resume tap actually did, so a
+  // failing tap can be READ off the screen instead of guessed at. Changes no behaviour.
+  const [tapDiag, setTapDiag] = useState<{ action: string; result: string; rebuilds: number; err: string }>(
+    { action: '-', result: '-', rebuilds: 0, err: '-' },
+  );
   const [volume, setVolumeState] = useState(1);
   const [stalls, setStalls] = useState(0);
   const [playbackBlocked, setPlaybackBlocked] = useState(false);
@@ -91,17 +98,24 @@ export function useListenerAudio(
     if (wasBackgroundedRef.current) {
       wasBackgroundedRef.current = false;
       setConnectionError(false);
+      setTapDiag((d) => ({ ...d, action: 'REBUILD', result: 'pending', rebuilds: d.rebuilds + 1 }));
       setRetryKey((k) => k + 1);
       return;
     }
     const audio = audioRef.current;
-    if (!audio) return;
+    if (!audio) {
+      setTapDiag((d) => ({ ...d, action: 'PLAY', result: 'no-element' }));
+      return;
+    }
+    setTapDiag((d) => ({ ...d, action: 'PLAY', result: 'pending' }));
     audio.play().then(() => {
       setPlaybackBlocked(false);
+      setTapDiag((d) => ({ ...d, result: 'accepted' }));
       void acquireWakeLock();
-    }).catch(() => {
+    }).catch((e) => {
       // iOS Safari can still refuse to start WebRTC audio even from a tap — surface a hint.
       setPlaybackBlocked(true);
+      setTapDiag((d) => ({ ...d, result: 'REFUSED', err: String(e?.name ?? e).slice(0, 24) }));
     });
   }, [acquireWakeLock]);
 
@@ -276,5 +290,6 @@ export function useListenerAudio(
     audioElement: audioRef.current,
     getStats,
     stalls,
+    tapDiag,
   };
 }
