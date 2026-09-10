@@ -8,7 +8,6 @@ import { useReactions } from '../hooks/useReactions';
 import { usePresence } from '../hooks/usePresence';
 import { useModeration } from '../hooks/useModeration';
 import { useListenerTransport } from '../hooks/useListenerTransport';
-import { useStuckWithoutAudio } from '../hooks/useStuckWithoutAudio';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
 import { Chat } from './Chat';
@@ -46,10 +45,6 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
   };
   const { playing, ready, connectionError, playbackBlocked, resume, retry, volume, setVolume, getStats, stalls, transportInfo } =
     useListenerTransport(supabase, station);
-  // Audio played, then stopped, and stayed stopped: the listener's OWN connection went, which a
-  // tap cannot repair. A host drop recovers by itself well inside the window, so those listeners
-  // never see this.
-  const stuck = useStuckWithoutAudio(playing);
   const nowPlaying = useNowPlaying(supabase);
 
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -119,22 +114,6 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
                 </div>
               ) : (
                 <div className="flex flex-col items-center gap-3 px-6 text-center">
-                  {stuck ? (
-                    <>
-                      <span className="font-mono text-sm text-[#ffcc66] tracking-[0.2em]">CONNECTION LOST</span>
-                      <button
-                        type="button"
-                        onClick={() => window.location.reload()}
-                        data-testid="reload-listen"
-                        className="font-mono text-sm tracking-[0.3em] text-white border border-white/40 px-6 py-3"
-                      >
-                        ↻  RELOAD
-                      </button>
-                      <p className="font-mono text-[11px] leading-relaxed text-white/50 max-w-[240px]">
-                        Your connection dropped. Reloading reconnects you to the broadcast.
-                      </p>
-                    </>
-                  ) : (
                   <button
                     type="button"
                     onClick={resume}
@@ -144,7 +123,6 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
                   >
                     {ready ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
                   </button>
-                  )}
                   {playbackBlocked && (
                     <p className="font-mono text-[11px] leading-relaxed text-[#ffcc66] max-w-[240px]">
                       Playback was blocked. Tap again, and check your phone's silent switch.
