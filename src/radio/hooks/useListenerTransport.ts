@@ -95,7 +95,7 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
   // Crossfade once HLS is healthy and WebRTC is already audible. Fires exactly once per session
   // (guarded by the ref), and the interval is never cancelled by a re-render.
   useEffect(() => {
-    if (!streamUrl || crossfadeRef.current.started) return;
+    if (!streamUrl || crossfadeRef.current.started || phase === 'hls') return;
     if (!(hlsReady && hlsPlaying && webrtc.playing)) return;
     crossfadeRef.current.started = true;
     setPhase('crossfading');
@@ -111,10 +111,18 @@ export function useListenerTransport(supabase: SupabaseClient, station: Station)
         setWebrtcVolume(0);
         setHlsVolume(userVolume);
         setPhase('hls');
+        // Re-arm. `started` exists to stop the fade restarting itself mid-fade, not to make the
+        // handover once-per-session. Left set, a listener who fell back to WebRTC was pinned there
+        // for the whole broadcast even with a healthy buffer sitting ready, and WebRTC does not
+        // survive a screen lock. Measured on a real phone 2026-09-10: WEBRTC -> HLS with
+        // HLS-BUF 9.9s, and a page refresh flipped it to HLS (deep buffer) 8.2s without fetching
+        // anything new. The refresh was only clearing this flag. Re-entry stays blocked by the
+        // phase === 'hls' guard below.
+        crossfadeRef.current.started = false;
       }
     }, CROSSFADE_MS / CROSSFADE_STEPS);
     crossfadeRef.current.id = id;
-  }, [streamUrl, hlsReady, hlsPlaying, webrtc.playing, userVolume, setWebrtcVolume, setHlsVolume]);
+  }, [streamUrl, phase, hlsReady, hlsPlaying, webrtc.playing, userVolume, setWebrtcVolume, setHlsVolume]);
 
   // Clear any in-flight crossfade on unmount.
   useEffect(() => () => { if (crossfadeRef.current.id) clearInterval(crossfadeRef.current.id); }, []);
