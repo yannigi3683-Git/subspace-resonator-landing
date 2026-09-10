@@ -9,6 +9,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useModeration } from '../hooks/useModeration';
 import { useListenerTransport } from '../hooks/useListenerTransport';
 import { useStuckOffDeepBuffer } from '../hooks/useStuckOffDeepBuffer';
+import { useConnectingAfterTap } from '../hooks/useConnectingAfterTap';
 import { useNowPlaying } from '../hooks/useNowPlaying';
 import { DanceFloor } from './DanceFloor';
 import { Chat } from './Chat';
@@ -50,6 +51,9 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
   // so this listener loses audio the moment their phone sleeps. Only a reload is guaranteed to fix
   // it, so say so rather than leaving them on a transport that will die.
   const offDeepBuffer = useStuckOffDeepBuffer(transportInfo.phase === 'hls', transportInfo.hlsAvailable);
+  // The tap starts a real reconnection, so sound does not return instantly. Without feedback the
+  // button reads as ignored and listeners jab at it.
+  const [connecting, markConnecting] = useConnectingAfterTap(playing);
   const nowPlaying = useNowPlaying(supabase);
 
   const [replyTo, setReplyTo] = useState<ChatMessage | null>(null);
@@ -141,12 +145,12 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
                 <div className="flex flex-col items-center gap-3 px-6 text-center">
                   <button
                     type="button"
-                    onClick={resume}
-                    disabled={!ready}
+                    onClick={() => { markConnecting(); resume(); }}
+                    disabled={!ready || connecting}
                     data-testid="tap-to-listen"
                     className="font-mono text-sm tracking-[0.3em] text-white border border-white/40 px-6 py-3 disabled:opacity-50"
                   >
-                    {ready ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
+                    {ready && !connecting ? '▶  TAP TO LISTEN' : 'CONNECTING AUDIO…'}
                   </button>
                   {playbackBlocked && (
                     <p className="font-mono text-[11px] leading-relaxed text-[#ffcc66] max-w-[240px]">
