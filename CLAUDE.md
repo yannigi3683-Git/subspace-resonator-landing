@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line)
 
 ---
 
@@ -134,6 +134,17 @@ first paint**) and edited in-browser through `AdminPanel.tsx`.
   `gallery` bucket.** Audit those the way the radio tables are audited (see the `pg_policies`
   query in the Subspace Radio section) — anon must have read and nothing else, and a single
   PERMISSIVE policy with a bare `true` cancels every strict policy beside it.
+- **A client-side write needs a GRANT as well as an RLS policy, and the grant is the silent
+  one.** Supabase stopped auto-granting Data API access to newly created `public` tables on
+  2026-10-30; existing tables kept what they had, so the live project is unaffected and nothing
+  about that date breaks a running site. But both `supabase/schema.sql` and
+  `supabase/radio-schema.sql` are fresh-project scripts, and a table created without grants is
+  unreachable from the browser while its policy still reads perfectly correct. Both files now
+  carry explicit grants (`schema.sql` had none at all; `radio-schema.sql` was missing `insert` on
+  `chat_messages`, which would have shipped a read-only chat on any new project). Guarded by
+  `supabase/grants.test.ts`, which scans `src/` for `.from('x').insert/.upsert/.delete` and fails
+  if a matching grant is absent. It lives under `supabase/` because it reads files with `node:fs`
+  and `tsconfig.app.json` carries no Node types; `tsconfig.node.json` now includes that folder.
 - Route-splitting the panel out of the entry chunk is a worthwhile bundle win but is **defence
   in depth, not a substitute for RLS**. It needs the Ctrl+Shift+A listener lifted out of
   `AdminPanel` first, since the component currently owns its own trigger.
@@ -383,7 +394,7 @@ from pg_policies
 where tablename in ('chat_messages','chat_reactions','bans','kicks','station')
 order by tablename, policyname;
 ```
-Anything PERMISSIVE with a bare `true` is a hole. Reading the policy proves it is written; only a denied attempt (ban a test device mid-broadcast, confirm the send fails) proves it is enforced.
+Anything PERMISSIVE with a bare `true` is a hole. **A policy is only half of the gate:** the matching table-level GRANT is the other half, and its absence is silent rather than loud. See the grants note in the Site Content Admin section. Reading the policy proves it is written; only a denied attempt (ban a test device mid-broadcast, confirm the send fails) proves it is enforced.
 
 **Known constraint (unfixable in-browser), and what solves it:** listener audio (a WebRTC MediaStream) **stops on phone screen-lock / background**. Wake Lock + MediaSession cannot keep it alive. **Confirmed on Android Chrome too, 2026-09-10** - this is not iOS-only, so do not treat WebRTC as a background-safe transport on any phone. HLS is: once a listener is on the deep buffer, playback survives a locked screen, which is the whole reason the restreamer exists. The resume tap reconnects on reopen as the in-browser mitigation. The actual fix is **built and in routine use**: the deep-buffer HLS restreamer (`restreamer/`, see below). It only applies while that program is running on a PC; with it off, the constraint above is exactly as stated.
 

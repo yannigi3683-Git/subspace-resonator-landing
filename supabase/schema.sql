@@ -38,6 +38,18 @@ create policy admin_write
   using (has_role(auth.uid(), 'admin'))
   with check (has_role(auth.uid(), 'admin'));
 
+-- Table-level grants. Supabase stopped auto-granting Data API access to NEW public tables on
+-- 2026-10-30, so a fresh project created after that date needs these spelled out or the table
+-- is unreachable from the browser. Existing projects kept the grants they already had, which
+-- is why this file was able to go this long without them. Grants are NOT a substitute for
+-- RLS: the admin_write policy above is what actually restricts writes, and a grant without a
+-- policy still denies. See section 10 of radio-schema.sql for the same block.
+grant select on site_content to anon, authenticated;       -- every visitor reads before first paint
+grant insert, update on site_content to authenticated;     -- admin panel upserts (siteContent.ts saveContent)
+grant all on site_content to service_role;
+-- user_roles deliberately gets NO grant: it is only ever read through has_role(), which is
+-- SECURITY DEFINER and so needs no privilege on the caller's behalf.
+
 insert into storage.buckets (id, name, public)
 values ('gallery', 'gallery', true)
 on conflict (id) do nothing;
