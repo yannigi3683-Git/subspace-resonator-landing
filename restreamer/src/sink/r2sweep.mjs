@@ -2,8 +2,9 @@
 // <cfSessionId>/ prefix and they accumulate forever (98,460 objects / 7.15 GB by 2026-09-09, 71%
 // of the 10 GB free tier, purged by hand that day). A bucket lifecycle rule is the tidier answer
 // but needs a Cloudflare Admin Read/Write token, and the object-scoped token this service holds is
-// refused (AccessDenied) - so the sweep rides the boot that already happens before every show,
-// alongside sweepStaleTempDirs. If a lifecycle rule is ever set in the dashboard, delete this.
+// refused (AccessDenied) - so index.mjs runs the sweep after every END BROADCAST (it used to run
+// on boot, where it delayed GO LIVE pickup by ~90s after a gap between shows). If a lifecycle
+// rule is ever set in the dashboard, delete this.
 const DAY_MS = 24 * 60 * 60 * 1000;
 const BATCH = 1000; // S3 DeleteObjects ceiling
 
@@ -11,8 +12,8 @@ export const HLS_RETENTION_DAYS = 7;
 
 // Objects from the broadcast currently on air are minutes old, so the retention window is what
 // protects them - there is deliberately no "is this session live?" check to get out of step with.
-// Never throws: this runs on the boot that precedes a broadcast, and housekeeping must not be able
-// to stop a show from starting. Returns { deleted, bytes, error? } for the caller to log.
+// Never throws: it runs unawaited inside the station watcher, where a rejection would be unhandled
+// and kill the process mid-show. Returns { deleted, bytes, error? } for the caller to log.
 export async function sweepOldObjects({
   r2, olderThanDays = HLS_RETENTION_DAYS, now = Date.now(), _s3, _cmds,
 }) {

@@ -400,17 +400,24 @@ Anything PERMISSIVE with a bare `true` is a hole. **A policy is only half of the
 
 **Deep-buffer restreamer (`restreamer/`) — the host's view of it.** A standalone Node service that pulls the show off the SFU as an anonymous listener, transcodes to HLS, uploads to R2, and writes `station.live_session.streamUrl`. It touches no audio device and no local capture, so **it does not care which device the host DJs from** — `decideAction` (`restreamer/src/station.mjs`) polls the `station` row every 3s and starts/stops itself when the server flips `mode`. GO LIVE *is* its trigger; there is nothing to press. Its one manual step is a double-click of `start-restreamer.bat` on one Windows PC. Operating instructions: `restreamer/HOW-TO-RUN.md`.
 
-**It reclaims its own storage on boot (`fix/restreamer-startup-guard`, 2026-09-10).** Nothing else
-ever deleted HLS objects, so the `radio-hls` R2 bucket reached **98,460 objects / 7.15 GB, 71% of
-the 10 GB free tier**, across 126 dead `<cfSessionId>/` prefixes going back to 2026-07-04. It was
-purged by hand that day (88,344 objects / 6.13 GB, down to 0.85 GB) and `sweepOldObjects`
-(`src/sink/r2sweep.mjs`) now deletes anything past `HLS_RETENTION_DAYS = 7` on every boot, beside
-the existing `sweepStaleTempDirs`. **Boot is the safe moment and the retention window is the only
-thing protecting a live show** - a restreamer restarted mid-broadcast sweeps too, and the current
-prefix survives because it is minutes old, not because anything checks whether it is live. The
-sweep never throws (housekeeping must not stop a show starting); a failure is logged and storage
-just keeps growing. A dashboard lifecycle rule is the tidier answer and is **blocked on token
-scope**, see Known Future Tasks.
+**It reclaims its own storage after every END BROADCAST (`fix/restreamer-startup-guard`, 2026-09-10;
+moved off boot by `fix/restreamer-sweep-after-end`, 2026-09-25).** Nothing else ever deleted HLS
+objects, so the `radio-hls` R2 bucket reached **98,460 objects / 7.15 GB, 71% of the 10 GB free
+tier**, across 126 dead `<cfSessionId>/` prefixes going back to 2026-07-04. It was purged by hand
+that day (88,344 objects / 6.13 GB, down to 0.85 GB) and `sweepOldObjects` (`src/sink/r2sweep.mjs`)
+now deletes anything past `HLS_RETENTION_DAYS = 7`. **It used to run awaited on boot, and that
+delayed the deep buffer:** a show's own files are always under 7 days old at its own boot, so the
+NEXT boot deletes them, and after a gap between shows that took ~80-90s (8,902 objects on
+2026-09-13, 9,752 on 2026-09-25) before `watchStation` even started. A host who pressed GO LIVE
+first waited ~3 minutes for the deep buffer. It now fires on the `stop` action (END), **not
+awaited**, so `busy` is not held and an immediate re-GO LIVE is picked up at once; not on
+`restart` (a mid-show host reconnect). Every run logs a `r2 sweep:` line, including "nothing
+older than 7 days". **The retention window is the only thing protecting a live show** if a GO LIVE
+lands mid-sweep: the new prefix survives because it is minutes old, not because anything checks
+whether it is live. Known ceiling: a show whose END the restreamer never sees (window closed
+mid-show) is swept at the following show's END instead. The sweep never throws; a failure is
+logged and storage just keeps growing. A dashboard lifecycle rule is the tidier answer and is
+**blocked on token scope**, see Known Future Tasks.
 
 **It keeps a log file now (`feat/restreamer-logfile`, 2026-08-21).** Every `log()` line is teed to `restreamer/logs/YYYY-MM-DD.log` by `restreamer/src/log.mjs`, one file per day, appended across restarts. The console window is invisible to a host who is not at that PC (the normal case, since GO LIVE is triggered from wherever they are DJing) and it dies with the process, so an unattended event used to leave no record at all: reconstructing a single host reconnect on 2026-08-21 took an R2 bucket listing plus a `Get-Process` start time. Grep for `GO LIVE`, `streamUrl published`, `ffmpeg exited`, `action error`. A log dir that cannot be written is abandoned permanently instead of retried, because a full disk must never take a live broadcast down, and a per-line retry would bury the console exactly when the host needs to read it. `logs/` is gitignored; the files hold no chat, no listener names and no keys, so they are safe to hand to someone helping.
 
@@ -481,7 +488,7 @@ So a 40-second host outage costs listeners a short silence and nothing else. Two
 - **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
 - **Debut album JSON-LD** — add structured data once the album is released.
 - **Restreamer remote start** — starting it is a physical double-click on one Windows PC. There is no way to start it while away, and no single-instance guard if two copies are ever launched. The documented (not set up) workaround is a Task Scheduler background task, see the appendix in `restreamer/HOW-TO-RUN.md`.
-- **R2 bucket lifecycle rule (optional now)** — the accumulation is handled: `sweepOldObjects` runs on every restreamer boot (see the restreamer section). A dashboard lifecycle rule would still be tidier, because it runs whether or not the restreamer ever starts, but it needs a Cloudflare **Admin Read & Write** token: the object-scoped token in `.env` is refused with `AccessDenied` on `PutBucketLifecycleConfiguration` (confirmed 2026-09-10). If one is ever set, delete `src/sink/r2sweep.mjs` and its boot call.
+- **R2 bucket lifecycle rule (optional now)** — the accumulation is handled: `sweepOldObjects` runs after every END BROADCAST (see the restreamer section). A dashboard lifecycle rule would still be tidier, because it runs whether or not the restreamer ever starts, but it needs a Cloudflare **Admin Read & Write** token: the object-scoped token in `.env` is refused with `AccessDenied` on `PutBucketLifecycleConfiguration` (confirmed 2026-09-10). If one is ever set, delete `src/sink/r2sweep.mjs` and `sweepR2` in `src/index.mjs`.
 
 ---
 

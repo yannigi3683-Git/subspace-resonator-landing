@@ -125,13 +125,15 @@ try {
   log('temp dir sweep failed', e.message);
 }
 
-// On boot, reclaim HLS objects older than the retention window. Nothing else deletes them, and a
-// bucket lifecycle rule needs a token this service does not have (see r2sweep.mjs). Boot is the
-// right moment: it happens before every show, and never while one is on air.
-if (cfg.sink === 'r2') {
+// Reclaim HLS objects older than the retention window. Nothing else deletes them, and a bucket
+// lifecycle rule needs a token this service does not have (see r2sweep.mjs). Runs after END, not
+// on boot: awaited at boot it held off GO LIVE pickup for ~90s after a gap between shows
+// (2026-09-25, 9,752 objects), because it deletes the previous show's files.
+async function sweepR2() {
   const { deleted, bytes, error } = await sweepOldObjects({ r2: cfg.r2 });
   if (error) log('r2 sweep failed (harmless, storage just keeps growing):', error);
   else if (deleted) log('r2 sweep: removed', deleted, 'objects older than', HLS_RETENTION_DAYS, 'days,', (bytes / 1048576).toFixed(0), 'MB');
+  else log('r2 sweep: nothing older than', HLS_RETENTION_DAYS, 'days');
 }
 
 // On boot, clear a streamUrl left over from a crashed/killed run (station is off but still points
@@ -153,6 +155,9 @@ watchStation(supabase, async (station) => {
   busy = true;
   try {
     if (action === 'stop' || action === 'restart') await teardown();
+    // Not awaited, so `busy` is not held and an immediate GO LIVE is picked up. sweepOldObjects
+    // never throws, and the retention window protects a new show's minutes-old prefix.
+    if (action === 'stop' && cfg.sink === 'r2') sweepR2();
     if (action === 'start' || action === 'restart') await startFor(cfSessionId);
   } catch (e) {
     log('action error', action, e.message);
