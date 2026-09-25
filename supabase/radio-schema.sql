@@ -285,6 +285,11 @@ create policy room_presence_write on realtime.messages for insert to authenticat
 
 -- 10. Table-level grants (newer Supabase does not auto-grant on new tables)
 grant select on station, scheduled_shows, chat_messages to anon, authenticated;
+-- Listeners POST from the browser (useChat.ts) on an anonymous sign-in, which carries the
+-- `authenticated` role; `anon` only ever reads. Without this grant the chat_insert policy is
+-- moot: on a fresh project chat is readable and nobody can send, host included. A policy and
+-- a grant are two separate gates, and the missing grant is the silent one.
+grant insert on chat_messages to authenticated;
 grant select on chat_reactions to anon, authenticated;
 grant insert, delete on chat_reactions to authenticated;
 grant select on bans, kicks to authenticated;
