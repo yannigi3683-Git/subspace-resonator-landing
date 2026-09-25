@@ -34,7 +34,7 @@ test('deletes objects past the retention window and keeps the rest', async () =>
 });
 
 test('never touches the broadcast that is on air right now', async () => {
-  // A restreamer restarted mid-show boots into this sweep. The live prefix is minutes old, so the
+  // A GO LIVE right after END lands mid-sweep. The live prefix is minutes old, so the
   // retention window has to be the only thing protecting it - there is no "is this live?" check.
   const s3 = fakeS3([{ Contents: [
     { Key: 'live/seg99.ts', Size: 90000, LastModified: new Date(now - 60 * 1000) },
@@ -54,8 +54,8 @@ test('follows pagination so a big backlog is fully reclaimed', async () => {
 });
 
 test('a sweep failure is reported, never thrown at the caller', async () => {
-  // This runs on the boot that precedes a broadcast. Housekeeping must never be able to stop a
-  // show from starting.
+  // This runs unawaited after END. A throw would be an unhandled rejection that kills the
+  // restreamer, taking the next show's deep buffer with it.
   const s3 = { send: async () => { throw new Error('AccessDenied'); } };
   const res = await sweepOldObjects({ r2: { bucket: 'radio-hls' }, now, _s3: s3, _cmds: cmds });
   assert.equal(res.deleted, 0);
