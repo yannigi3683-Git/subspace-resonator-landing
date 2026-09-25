@@ -28,7 +28,7 @@ export default function App() {
       '@type': 'MusicAlbum',
       'albumProductionType': (r.kind === 'EP' || r.kind === 'LP') ? 'StudioAlbum' : 'SingleAlbum',
       'name': r.title,
-      ...(r.kind === 'EP' && r.trackCount ? { 'numTracks': r.trackCount } : {}),
+      ...((r.kind === 'EP' || r.kind === 'LP') && r.trackCount ? { 'numTracks': r.trackCount } : {}),
       'datePublished': r.date,
       'recordLabel': { '@type': 'Organization', 'name': r.label },
       'byArtist': ARTIST_REF,

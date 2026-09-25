@@ -21,6 +21,7 @@ describe('SignalLog', () => {
 
   it('lists all six confirmed releases', () => {
     render(<SignalLog />);
+    expect(screen.getByText(/the continuum/i)).toBeInTheDocument();
     expect(screen.getByText(/the subspace theory/i)).toBeInTheDocument();
     expect(screen.getByText(/nightmare in heaven/i)).toBeInTheDocument();
     expect(screen.getAllByText(/galaxy 604/i).length).toBeGreaterThan(0);
@@ -32,6 +33,8 @@ describe('SignalLog', () => {
   it('links each release to its release page in a new tab', () => {
     render(<SignalLog />);
     const expected: Record<string, string> = {
+      'The Continuum':
+        'https://timewarprecords.bandcamp.com/album/subspace-resonator-the-continuum-timewarp340',
       'The Subspace Theory': 'https://yannig.bandcamp.com/album/the-subspace-theory-ep',
       'Nightmare In Heaven': 'https://yannig.bandcamp.com/track/nightmare-in-heaven',
       'Psychedelic Goa Trance 2026 100 Aliens':
@@ -50,14 +53,13 @@ describe('SignalLog', () => {
     }
   });
 
-  it('renders Galaxy 604 as non-interactive (no URL)', () => {
-    // isolate the url-less solo single so comp tracks named "Galaxy 604" don't interfere
-    render(<SignalLog rows={{
-      solo: [{ id: 'g604', date: '2025', title: 'Galaxy 604', kind: 'Single', label: 'Goa Records' }],
-      comps: [],
-    }} />);
-    expect(screen.getByText(/galaxy 604/i)).toBeInTheDocument();
-    expect(screen.queryByRole('link', { name: /galaxy 604/i })).not.toBeInTheDocument();
+  it('shows Galaxy 604 only as a compilation track, never as its own release', () => {
+    // It is track 9 of The Continuum and was never released on its own, which is why no
+    // release URL for it exists. It was wrongly listed as a Goa Records single until
+    // 2026-09-25; this guards against it coming back.
+    render(<SignalLog />);
+    expect(screen.getAllByText(/galaxy 604/i).length).toBeGreaterThan(0);
+    expect(screen.queryByRole('link', { name: /^galaxy 604/i })).not.toBeInTheDocument();
   });
 
   it('renders a row without a url as non-interactive (no anchor)', () => {

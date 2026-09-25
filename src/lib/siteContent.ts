@@ -155,7 +155,7 @@ export const DEFAULT_RELEASES: ReleasesContent = {
   solo: [
     { id: 'subspace-theory',    date: '2025-12-26', title: 'The Subspace Theory',  kind: 'EP',     label: 'Goa Records',      trackCount: 4, url: 'https://yannig.bandcamp.com/album/the-subspace-theory-ep' },
     { id: 'nightmare-in-heaven',date: '2025-10-31', title: 'Nightmare In Heaven',  kind: 'Single', label: 'Timewarp Records',  url: 'https://yannig.bandcamp.com/track/nightmare-in-heaven' },
-    { id: 'galaxy-604',          date: '2025',       title: 'Galaxy 604',           kind: 'Single', label: 'Goa Records' },
+    { id: 'the-continuum',      date: '2026-08-07', title: 'The Continuum',        kind: 'LP',     label: 'Timewarp Records', trackCount: 9, url: 'https://timewarprecords.bandcamp.com/album/subspace-resonator-the-continuum-timewarp340' },
   ],
   compilations: [
     { id: 'call-of-goa-5',       date: '2026',       title: 'The Call Of Goa, Vol. 5',                kind: 'Compilation', label: 'Timewarp Records',   trackName: 'Subspace Disturbance', url: 'https://timewarprecords.bandcamp.com/album/the-call-of-goa-vol-5' },
