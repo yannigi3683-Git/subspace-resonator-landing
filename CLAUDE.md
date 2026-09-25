@@ -125,6 +125,21 @@ first paint**) and edited in-browser through `AdminPanel.tsx`.
 
 - **Storage:** one row, `site_content` table, `id = 'singleton'`, whole config as a JSON `data`
   column. Gallery images live in the Supabase Storage bucket `gallery`.
+- **Editing a `DEFAULT_*` constant in code does NOTHING to the live site once the stored row
+  carries that key.** `mergeWithDefaults` (`siteContent.ts:297`) picks per TOP-LEVEL key and
+  takes the stored value whole: `releases: data.releases ? validateReleases(data.releases) :
+  DEFAULT_RELEASES`. There is no field-level merge, so a code edit to one release inside
+  `DEFAULT_RELEASES` is invisible if the row has a `releases` key at all. And **every panel save
+  writes every key**, because `saveContent` persists `{ ...store, ...patch }` — so one save of
+  any single field, ever, permanently shadows the code defaults for `events`, `gallery`, `bio`,
+  `socials`, `releases` and `booking` alike. The code constants are the fallback for a fresh
+  database, not the source of truth for a site that has ever been edited. This nearly shipped as
+  a silent no-op on 2026-09-25 when The Continuum was added to `DEFAULT_RELEASES` in code; the
+  content itself was entered through the panel instead. **Content changes go through the panel.
+  Code changes are for the fallback, for validation, and for anything the panel cannot express**
+  (the `numTracks` JSON-LD fix in that same commit was exactly the third case). It also means a
+  "why is my change not showing" hunt here has a second suspect beyond a stale deploy: the row
+  may simply be winning.
 - **Opening it:** Ctrl+Shift+A anywhere on the landing page, then e-mail/password sign-in;
   authorisation is `supabase.rpc('has_role', ...)`, the same RPC the radio console uses.
 - **The panel ships in the entry chunk to every visitor.** It is statically imported at
