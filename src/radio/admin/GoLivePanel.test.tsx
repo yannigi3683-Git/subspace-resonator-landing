@@ -785,6 +785,232 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     }
   });
 
+  // ── Deck / element desync (the 2026-10-10 incident) ───────────────────────
+  // The audio element's loaded resource is a source of truth the queue model cannot see:
+  // revoking a blob URL does not unload it, so a removed track stayed audible and PLAY
+  // resumed it. Each case below reproduces one step of that broadcast.
+  describe('removed tracks must not stay audible', () => {
+    function addFiles(names: string[]) {
+      const input = screen.getByTestId('go-live-panel').querySelector('input[type=file]')!;
+      Object.defineProperty(input, 'files', {
+        value: names.map((n) => new File([''], `${n}.mp3`, { type: 'audio/mpeg' })),
+        configurable: true,
+      });
+      fireEvent.change(input);
+    }
+
+    const liveMixer = () => {
+      const results = vi.mocked(HostMixer).mock.results;
+      return results[results.length - 1].value;
+    };
+
+    // Drives the active deck into its crossfade window and returns both elements.
+    function startFade() {
+      const outEl = lastAudio();
+      outEl.duration = 100;
+      outEl.currentTime = 96; // 4s left, default fade 12s
+      act(() => { outEl.ontimeupdate?.(); });
+      return { outEl, inEl: lastAudio() };
+    }
+
+    beforeEach(() => {
+      vi.stubGlobal('confirm', vi.fn(() => true)); // jsdom's confirm() is not implemented
+    });
+
+    it('PLAY after REMOVE ALL and re-add loads the new file, never resumes the removed one', async () => {
+      await goLiveWithFiles(['alpha']);
+      const el = lastAudio();
+      const removedSrc = el.src;
+      expect(removedSrc).toBeTruthy();
+
+      fireEvent.click(screen.getByText('REMOVE ALL'));
+      expect(el.pause).toHaveBeenCalled();
+
+      addFiles(['bravo']);
+      await waitFor(() => screen.getByText('bravo'));
+      el.play.mockClear();
+      fireEvent.click(screen.getByLabelText('Play'));
+
+      expect(el.src).not.toBe(removedSrc);
+      expect(el.play).toHaveBeenCalled();
+    });
+
+    it('REMOVE of the playing track stops it instead of leaving it audible', async () => {
+      await goLiveWithFiles(['alpha', 'beta']);
+      const el = lastAudio();
+      el.pause.mockClear();
+
+      fireEvent.click(screen.getByLabelText('Remove alpha'));
+
+      expect(el.pause).toHaveBeenCalled();
+      await waitFor(() => expect(screen.getByLabelText('Play')).toBeInTheDocument());
+    });
+
+    it('REMOVE ALL during a crossfade pauses BOTH decks', async () => {
+      await goLiveWithFiles(['alpha', 'beta']);
+      const { outEl, inEl } = startFade();
+      expect(inEl).not.toBe(outEl);
+      outEl.pause.mockClear();
+
+      fireEvent.click(screen.getByText('REMOVE ALL'));
+
+      expect(outEl.pause).toHaveBeenCalled();
+      expect(inEl.pause).toHaveBeenCalled();
+    });
+
+    it('removing the incoming track mid-fade aborts the fade and keeps the outgoing track playing', async () => {
+      await goLiveWithFiles(['alpha', 'beta']);
+      const mixer = liveMixer();
+      const { outEl, inEl } = startFade();
+      mixer.setGain.mockClear();
+
+      vi.useFakeTimers();
+      try {
+        fireEvent.click(screen.getByLabelText('Remove beta'));
+
+        expect(inEl.pause).toHaveBeenCalled();
+        expect(mixer.setGain).toHaveBeenCalledWith('file-2', 0); // incoming muted
+        expect(mixer.setGain).toHaveBeenCalledWith('file-1', 1); // outgoing restored
+
+        const srcBefore = outEl.src;
+        act(() => { vi.advanceTimersByTime(12_000); }); // the cancelled fade must not finalize
+        expect(outEl.src).toBe(srcBefore);
+        expect(playlistJumpRows()[0]).toHaveAttribute('aria-current', 'true');
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+
+    it('an outgoing track that ended mid-fade still advances when the fade is cancelled', async () => {
+      await goLiveWithFiles(['alpha', 'beta', 'gamma']);
+      const { outEl, inEl } = startFade();
+
+      act(() => { outEl.onended?.(); }); // alpha finished while the fade owned the transition
+      fireEvent.click(screen.getByLabelText('Remove beta')); // ...and then beta left the queue
+
+      expect(inEl.pause).toHaveBeenCalled();
+      // The deck must move on to gamma rather than sit on a track that has stopped.
+      await waitFor(() => {
+        expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
+      });
+    });
+
+    it('NEXT during a fade performs exactly one track change instead of nothing', async () => {
+      await goLiveWithFiles(['alpha', 'beta', 'gamma']);
+      const { outEl, inEl } = startFade();
+      const srcBefore = outEl.src;
+
+      fireEvent.click(screen.getByLabelText('Next track'));
+
+      expect(inEl.pause).toHaveBeenCalled();
+      expect(outEl.src).not.toBe(srcBefore);
+      await waitFor(() => {
+        expect(playlistJumpRows()[1]).toHaveAttribute('aria-current', 'true');
+      });
+    });
+
+    it('jumping to a row mid-fade plays on the audible deck', async () => {
+      await goLiveWithFiles(['alpha', 'beta', 'gamma']);
+      const { outEl, inEl } = startFade();
+      outEl.play.mockClear();
+
+      fireEvent.click(playlistJumpRows()[2]); // gamma
+
+      expect(inEl.pause).toHaveBeenCalled();
+      expect(outEl.play).toHaveBeenCalled();
+      await waitFor(() => {
+        expect(playlistJumpRows()[2]).toHaveAttribute('aria-current', 'true');
+      });
+    });
+
+    it('the FILE fader reaches both decks, so a crossfade cannot step the level', async () => {
+      await goLiveWithFiles(['alpha', 'beta']);
+      const mixer = liveMixer();
+      startFade();
+      mixer.setGain.mockClear();
+      mixer.rampGain.mockClear();
+
+      // Mid-fade: the outgoing deck must stay on its ramp to zero (setting it would un-mute it),
+      // and the incoming deck is re-targeted so the new level survives the swap.
+      fireEvent.change(screen.getByLabelText('FILE GAIN'), { target: { value: '0.5' } });
+      expect(mixer.rampGain).toHaveBeenCalledWith('file-2', 0.5, expect.any(Number));
+      expect(mixer.setGain).not.toHaveBeenCalledWith('file-1', 0.5);
+
+      // Fade cancelled: now both decks take the level directly, so the idle deck cannot come back
+      // in on a stale gain at the next crossfade.
+      fireEvent.click(screen.getByLabelText('Next track'));
+      mixer.setGain.mockClear();
+      fireEvent.change(screen.getByLabelText('FILE GAIN'), { target: { value: '0.75' } });
+      expect(mixer.setGain).toHaveBeenCalledWith('file-1', 0.75);
+      expect(mixer.setGain).toHaveBeenCalledWith('file-2', 0.75);
+    });
+
+    it('files added after going live with an empty deck still reach the mixer', async () => {
+      mockPublisherConnect.mockImplementation(async () => {
+        await Promise.resolve();
+        publisherCallbacksRef.current?.onSessionReady('cf-empty');
+      });
+      render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 't'} />);
+      await waitFor(() => screen.getByTestId('go-live-panel'));
+      fireEvent.click(screen.getByTestId('go-live-btn'));
+      await waitFor(() => screen.getByTestId('end-btn'));
+
+      const mixer = liveMixer();
+      expect(mixer.addFileElement).not.toHaveBeenCalled();
+
+      addFiles(['late']);
+      await waitFor(() => screen.getByText('late'));
+      fireEvent.click(playlistJumpRows()[0]);
+
+      expect(mixer.addFileElement).toHaveBeenCalledTimes(1);
+      expect(mixer.setGain).toHaveBeenCalledWith('file-1', 1);
+      expect(lastAudio().play).toHaveBeenCalled();
+    });
+
+    it('keeps the playback controls on screen while live with an empty queue', async () => {
+      await goLiveWithFiles(['alpha']);
+      fireEvent.click(screen.getByText('REMOVE ALL'));
+      expect(screen.getByRole('group', { name: 'Playback controls' })).toBeInTheDocument();
+    });
+
+    it('a second GO LIVE stops the previous mixer before building a new one', async () => {
+      // HostMixer's recorded results accumulate across the whole file, so index from here.
+      const builtBefore = vi.mocked(HostMixer).mock.results.length;
+      vi.useFakeTimers();
+      try {
+        render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} />);
+        await act(async () => { await Promise.resolve(); });
+        await act(async () => {
+          fireEvent.click(screen.getByTestId('go-live-btn'));
+          await Promise.resolve();
+        });
+
+        const firstMixer = vi.mocked(HostMixer).mock.results[builtBefore].value;
+
+        // Burn the retry budget so the FSM parks in `lost` (status 'error'). That path does NOT
+        // tear down, so the old mixer and its source ids survive into the next GO LIVE — and
+        // HostMixer's id counter restarts at 1, so a stale alt id would collide with a live source.
+        for (let i = 0; i < 7; i++) {
+          await act(async () => {
+            publisherCallbacksRef.current?.onDispatch({ type: 'ERROR' });
+            await vi.advanceTimersByTimeAsync(31_000);
+          });
+        }
+        expect(firstMixer.stop).not.toHaveBeenCalled();
+
+        await act(async () => {
+          fireEvent.click(screen.getByTestId('go-live-btn'));
+          await Promise.resolve();
+        });
+
+        expect(firstMixer.stop).toHaveBeenCalled();
+        expect(vi.mocked(HostMixer).mock.results.length).toBe(builtBefore + 2);
+      } finally {
+        vi.useRealTimers();
+      }
+    });
+  });
+
   // The automatic save on END BROADCAST depends on that request succeeding and on the server
   // being able to read the chat. This path depends on neither: the host's own admin session
   // reads the rows, so the log stays recoverable after the fact.

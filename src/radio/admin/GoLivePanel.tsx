@@ -22,6 +22,25 @@ import { buildChatTranscript, transcriptFilename, type TranscriptRow } from '../
 
 export type BroadcastStatus = 'idle' | 'starting' | 'live' | 'ending' | 'error';
 
+// What an element has LOADED is a source of truth the queue model cannot see. Revoking a blob URL
+// does not unload a resource the element already fetched, so `el.src` being non-empty never meant
+// "still a queued track" — that is what let a removed track keep playing and PLAY resume it
+// (2026-10-10). Keyed by the element itself, so there is nothing to keep in sync.
+const loadedTrackIds = new WeakMap<HTMLAudioElement, string>();
+
+// Smoothing for a FILE fader move made while a crossfade is running: short enough to feel
+// immediate, long enough not to click.
+const FADER_RETARGET_SEC = 0.3;
+
+function loadInto(el: HTMLAudioElement, track: DeckTrack) {
+  el.src = track.url;
+  loadedTrackIds.set(el, track.id);
+}
+
+function holdsTrack(el: HTMLAudioElement | null, trackId: string | undefined): boolean {
+  return !!el && !!trackId && loadedTrackIds.get(el) === trackId;
+}
+
 // Deep-buffer badge. Colour follows the ON AIR badge convention below: 400 for text, 500 for the dot.
 const DEEP_BUFFER_UI: Record<DeepBufferState, { label: string; text: string; dot: string; glow: string }> = {
   off: { label: 'DEEP BUFFER: OFF', text: 'text-muted-foreground', dot: 'bg-muted-foreground', glow: 'none' },
@@ -111,6 +130,15 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const altIdRef = useRef<string | null>(null);
   const crossfadingRef = useRef(false);
   const crossfadeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // The outgoing track reached its own end while a fade owned the transition; the abort finishes
+  // the move instead of leaving the deck parked on a track that has stopped.
+  const pendingEndRef = useRef(false);
+  // Which track the incoming deck is actually playing, so finalize can refuse to promote it when
+  // the queue moved under the fade.
+  const fadingInIdRef = useRef<string | null>(null);
+  // Every deck element ever created. Teardown silences all of them, so an element orphaned by a
+  // path we have not found yet still cannot outlive the broadcast.
+  const deckElsRef = useRef<HTMLAudioElement[]>([]);
   // Mirror gain/auto-mix state into refs so the audio element's persistent event handlers
   // (set once at GO LIVE) always read the latest values.
   // Control channel to listeners (jitter buffer setting; now-playing later). Re-broadcast on
@@ -193,7 +221,9 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   useEffect(() => {
-    audioElRef.current = new Audio();
+    // No element is created here on purpose. One created outside the mixer plays to the OS default
+    // output (Voicemeeter on the host rig, i.e. back into the broadcast) with FILE GAIN dead and
+    // no crossfade. The deck element is created by ensureFileElement(), always attached.
     // navigator.mediaDevices is undefined in non-secure contexts / some embedded views;
     // guard so a missing API doesn't crash the whole console.
     if (!navigator.mediaDevices?.enumerateDevices) return;
@@ -273,7 +303,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       if (document.visibilityState !== 'visible') return;
       void mixerRef.current?.resume();
       const el = audioElRef.current;
-      if (el && el.paused && filePlayingRef.current) el.play().catch(() => {});
+      // Only resume what the deck still points at: after a queue edit the element can hold a
+      // track that no longer exists, and resuming that is the bug this fix exists for.
+      if (el && el.paused && filePlayingRef.current && holdsTrack(el, deckRef.current.current?.id)) {
+        el.play().catch(() => {});
+      }
       void acquire(); // the lock auto-released while hidden; take it again
     };
 
@@ -348,9 +382,20 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     deviceSourceIdRef.current = null;
     fileSourceIdRef.current = null;
     micSourceIdRef.current = null;
-    audioElRef.current?.pause();
     resetCrossfade();
+    silenceAllDeckElements();
     closeControlChannel();
+  }
+
+  // Pause every element the panel ever built, not just the one audioElRef happens to point at.
+  function silenceAllDeckElements() {
+    for (const el of deckElsRef.current) {
+      el.pause();
+      loadedTrackIds.delete(el);
+    }
+    deckElsRef.current = [];
+    audioElRef.current = null;
+    pendingEndRef.current = false;
   }
 
   function closeControlChannel() {
@@ -388,7 +433,60 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     altIdRef.current = null;
   }
 
+  // Cancel a fade in flight and leave the OUTGOING deck as the one that is audible: once the host
+  // edits the queue, the track being faded in may not be the next one any more. A no-op when no
+  // fade is running, so an ordinary queue edit never touches audio. Returns true when the outgoing
+  // track already ended, i.e. the caller owes the queue an advance.
+  function abortCrossfade(): boolean {
+    if (!crossfadingRef.current) return false;
+    if (crossfadeTimerRef.current !== null) {
+      clearTimeout(crossfadeTimerRef.current);
+      crossfadeTimerRef.current = null;
+    }
+    crossfadingRef.current = false;
+    const mixer = mixerRef.current;
+    altElRef.current?.pause();
+    if (altElRef.current) loadedTrackIds.delete(altElRef.current);
+    if (mixer && altIdRef.current) mixer.setGain(altIdRef.current, 0);
+    if (mixer && fileSourceIdRef.current) mixer.setGain(fileSourceIdRef.current, fileGainRef.current);
+    fadingInIdRef.current = null;
+    const owedAdvance = pendingEndRef.current;
+    pendingEndRef.current = false;
+    return owedAdvance;
+  }
+
+  // Abort any fade, apply a queue mutation, then finish a transition the fade owed.
+  function withFadeAborted(mutate: () => void) {
+    const owedAdvance = abortCrossfade();
+    mutate();
+    setQueue([...deckRef.current.state.queue]);
+    if (owedAdvance) handleDeckNext();
+  }
+
+  // Stop any deck still holding a track that has just left the queue. The element keeps playing a
+  // revoked blob URL otherwise, which is how a removed track stayed on the air.
+  function dropOrphanedPlayback() {
+    const queued = new Set(deckRef.current.state.queue.map((t) => t.id));
+    let silenced = false;
+    for (const el of [audioElRef.current, altElRef.current]) {
+      if (!el) continue;
+      const loaded = loadedTrackIds.get(el);
+      if (loaded && !queued.has(loaded)) {
+        el.pause();
+        loadedTrackIds.delete(el);
+        silenced = true;
+      }
+    }
+    if (silenced) setFilePlaying(false);
+  }
+
   async function handleGoLive() {
+    // GO LIVE must be idempotent. The `lost` state does not tear down (connectionFsm emits only
+    // CANCEL_RETRY), so pressing GO LIVE from the error banner used to build a second mixer while
+    // the first one's elements were still playing — and HostMixer's source-id counter restarts at
+    // 1, so a surviving altIdRef would then ramp a DIFFERENT source in the new mixer.
+    publisherRef.current?.disconnect(); // idempotent; connect() calls it too
+    teardownMixer();
     setStatus('starting');
     setErrorMsg('');
     titleRef.current = title || 'Subspace Radio Live';
@@ -462,22 +560,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
         setDeviceConnected(false);
       }
 
-      // Add local file deck source if there are files queued.
-      // A fresh <audio> element is created each session: an HTMLMediaElement can back
-      // only ONE MediaElementSourceNode for its lifetime, so reusing it across GO LIVE
-      // attempts throws "already connected to a different MediaElementSourceNode".
-      // One <audio> element per session backs the file deck. We swap its .src to change
-      // tracks (createMediaElementSource may run only once per element), so prev/next/jump
-      // never create a second source node.
-      const deck = deckRef.current;
-      if (!deck.isEmpty) {
-        const audioEl = new Audio();
-        audioEl.onended = handleDeckNext; // auto-advance (no-op while a crossfade is running)
-        audioEl.ontimeupdate = () => handleTimeUpdate(audioEl); // drives auto-mix
-        audioElRef.current = audioEl;
-        const id = mixer.addFileElement(audioEl);
-        fileSourceIdRef.current = id;
-        mixer.setGain(id, fileGain);
+      // Add the local file deck source if there are files queued. If there are none, the element
+      // is built later by ensureFileElement() the first time a track is played, so files added
+      // mid-broadcast still reach the mixer instead of the OS default output.
+      if (!deckRef.current.isEmpty) {
+        ensureFileElement(mixer);
         loadAndPlayCurrent(true);
       }
 
@@ -546,8 +633,8 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     mixerRef.current = null;
     publisherRef.current = null;
     streamRef.current = null;
-    audioElRef.current?.pause();
     resetCrossfade();
+    silenceAllDeckElements();
     closeControlChannel();
     setStatus('idle');
     if (!endOk) {
@@ -627,24 +714,66 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     publisherRef.current?.setQualityCeiling(on ? QUALITY_PRESETS.hq : QUALITY_PRESETS[quality]);
   }
 
+  // A new <audio> element per session, created once and then reused by swapping .src: an
+  // HTMLMediaElement can back only ONE MediaElementSourceNode for its lifetime, so reusing it
+  // across GO LIVE attempts throws "already connected to a different MediaElementSourceNode",
+  // and creating one per track would leak a source node per track.
+  function ensureFileElement(mixer: HostMixer): HTMLAudioElement {
+    const existing = audioElRef.current;
+    if (existing && fileSourceIdRef.current) return existing;
+    const audioEl = new Audio();
+    audioEl.onended = () => handleDeckEnded(audioEl);
+    audioEl.ontimeupdate = () => handleTimeUpdate(audioEl); // drives auto-mix
+    audioEl.onerror = () => handleDeckError(audioEl);
+    audioElRef.current = audioEl;
+    deckElsRef.current.push(audioEl);
+    const id = mixer.addFileElement(audioEl);
+    fileSourceIdRef.current = id;
+    mixer.setGain(id, fileGainRef.current);
+    return audioEl;
+  }
+
   function loadAndPlayCurrent(autoplay: boolean) {
     const cur = deckRef.current.current;
-    const el = audioElRef.current;
-    if (!cur || !el) return;
-    el.src = cur.url;
+    if (!cur) return;
+    // The UI state is written before the element check so clicking a row off air still marks it
+    // current, with no element in existence yet.
     setCurrentTrackName(cur.name);
     setCurrentTrackId(cur.id);
     currentNameRef.current = cur.name;
     currentIdRef.current = cur.id;
     void refreshArtwork(cur.file, cur.id); // sets art-less now-playing first, then art
+    const mixer = mixerRef.current;
+    const el = mixer ? ensureFileElement(mixer) : audioElRef.current;
+    if (!el) return;
+    loadInto(el, cur);
     if (autoplay) {
       el.play().catch(() => {});
       setFilePlaying(true);
     }
   }
 
+  // A corrupt or unreadable file used to fail silently with the disc still spinning, because every
+  // play() rejection is swallowed (an AbortError is normal when .src is replaced mid-load).
+  function handleDeckError(el: HTMLAudioElement) {
+    if (el !== audioElRef.current) return;
+    setFilePlaying(false);
+    setErrorMsg(`Could not play ${currentNameRef.current || 'the selected file'}. Skip it or pick another track.`);
+  }
+
+  // Only the ACTIVE element's end drives the queue. The idle deck can fire `ended` too (it keeps
+  // playing to its natural end through a fade), and letting that advance the queue skips a track.
+  function handleDeckEnded(el: HTMLAudioElement) {
+    if (el !== audioElRef.current) return;
+    if (crossfadingRef.current) {
+      pendingEndRef.current = true; // the fade owns the transition; abort/finalize completes it
+      return;
+    }
+    handleDeckNext();
+  }
+
   function handleDeckNext() {
-    if (crossfadingRef.current) return; // a crossfade already owns the transition
+    abortCrossfade(); // the host asked for this transition; the fade no longer owns it
     const deck = deckRef.current;
     if (deck.advance()) {
       setQueue([...deck.state.queue]);
@@ -657,7 +786,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleDeckPrev() {
-    if (crossfadingRef.current) return;
+    abortCrossfade();
     if (deckRef.current.previous()) {
       setQueue([...deckRef.current.state.queue]);
       loadAndPlayCurrent(true);
@@ -671,21 +800,22 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleShuffle() {
-    deckRef.current.shuffle();
-    setQueue([...deckRef.current.state.queue]);
+    withFadeAborted(() => deckRef.current.shuffle());
   }
 
   function handleClearAll() {
     if (deckRef.current.isEmpty) return;
     if (!window.confirm('Remove all tracks from the file deck?')) return;
-    audioElRef.current?.pause();
+    abortCrossfade();
     deckRef.current.clear();
     setQueue([]);
+    dropOrphanedPlayback(); // every track just left the queue, so this silences both decks
     setFilePlaying(false);
     setCurrentTrackId('');
     setCurrentTrackName('');
     currentIdRef.current = '';
     currentNameRef.current = '';
+    clearArtwork(); // otherwise the deleted track's art keeps going out on the 4s heartbeat
   }
 
   // ── Auto-mix crossfade ────────────────────────────────────────────────
@@ -716,17 +846,20 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     if (!altElRef.current) {
       const el = new Audio();
       el.ontimeupdate = () => handleTimeUpdate(el);
-      el.onended = () => handleDeckNext();
+      el.onended = () => handleDeckEnded(el);
+      el.onerror = () => handleDeckError(el);
       altElRef.current = el;
       altIdRef.current = mixer.addFileElement(el);
+      deckElsRef.current.push(el);
     }
     const inEl = altElRef.current;
     const inId = altIdRef.current;
     if (!inEl || !inId) return;
 
     crossfadingRef.current = true;
+    fadingInIdRef.current = nextTrack.id;
     const sec = crossfadeRef.current;
-    inEl.src = nextTrack.url;
+    loadInto(inEl, nextTrack);
     inEl.currentTime = 0;
     inEl.play().catch(() => {});
     mixer.rampGain(outId, 0, sec);
@@ -737,6 +870,15 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
 
   function finalizeCrossfade() {
     const deck = deckRef.current;
+    // The queue can have changed during the fade (remove, shuffle, drag, jump). Only promote the
+    // incoming deck if what it is actually playing is still the track the queue says comes next;
+    // otherwise cancel, which leaves the outgoing deck audible and the index untouched.
+    if (deck.next?.id !== fadingInIdRef.current) {
+      // If the outgoing track had already ended, the abort owes the queue its advance; otherwise
+      // the deck would sit on a finished track in silence.
+      if (abortCrossfade()) handleDeckNext();
+      return;
+    }
     deck.advance();
     setQueue([...deck.state.queue]);
 
@@ -761,23 +903,31 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     }
     setFilePlaying(true);
     crossfadingRef.current = false;
+    pendingEndRef.current = false;
   }
 
   function handleDeckPlayPause() {
-    const el = audioElRef.current;
-    if (!el) return;
     if (filePlaying) {
-      el.pause();
+      abortCrossfade();
+      audioElRef.current?.pause();
+      altElRef.current?.pause();
       setFilePlaying(false);
-    } else if (!el.src) {
-      loadAndPlayCurrent(true);
-    } else {
-      el.play().catch(() => {});
-      setFilePlaying(true);
+      return;
     }
+    const el = audioElRef.current;
+    // Resume only what the deck still points at. The old guard was `!el.src`, which catches "never
+    // loaded" but not "loaded a track that has since been deleted" — so PLAY resumed the removed
+    // track, which is the fault reported on 2026-10-10.
+    if (!el || !holdsTrack(el, deckRef.current.current?.id)) {
+      loadAndPlayCurrent(true);
+      return;
+    }
+    el.play().catch(() => {});
+    setFilePlaying(true);
   }
 
   function handleSeek(deltaSeconds: number) {
+    if (abortCrossfade()) { handleDeckNext(); return; } // outgoing track had already ended
     const el = audioElRef.current;
     if (!el) return;
     const dur = Number.isFinite(el.duration) ? el.duration : Infinity;
@@ -785,6 +935,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleJumpTo(id: string) {
+    abortCrossfade(); // without this the jump loads onto the deck whose gain is ramping to zero
     if (deckRef.current.jumpTo(id)) {
       setQueue([...deckRef.current.state.queue]);
       loadAndPlayCurrent(statusRef.current === 'live');
@@ -838,13 +989,12 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   }
 
   function handleRemoveTrack(id: string) {
-    deckRef.current.remove(id);
-    setQueue([...deckRef.current.state.queue]);
+    withFadeAborted(() => deckRef.current.remove(id));
+    dropOrphanedPlayback();
   }
 
   function handleMoveTrack(fromIdx: number, toIdx: number) {
-    deckRef.current.move(fromIdx, toIdx);
-    setQueue([...deckRef.current.state.queue]);
+    withFadeAborted(() => deckRef.current.move(fromIdx, toIdx));
   }
 
   function handleTrackGainChange(source: 'device' | 'file' | 'mic', value: number) {
@@ -853,7 +1003,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
       if (deviceSourceIdRef.current) mixerRef.current?.setGain(deviceSourceIdRef.current, value);
     } else if (source === 'file') {
       setFileGain(value);
-      if (fileSourceIdRef.current) mixerRef.current?.setGain(fileSourceIdRef.current, value);
+      const mixer = mixerRef.current;
+      if (!mixer) return;
+      if (crossfadingRef.current) {
+        // Mid-fade the outgoing deck is ramping to zero and must stay on that ramp (setting it
+        // here un-muted it, so both tracks went out loud). Re-target the INCOMING deck instead,
+        // so the level the host just chose is the one that survives the swap.
+        if (altIdRef.current) mixer.rampGain(altIdRef.current, value, FADER_RETARGET_SEC);
+      } else {
+        // Both decks: the idle one is the next fade's incoming, and it kept a stale gain.
+        if (fileSourceIdRef.current) mixer.setGain(fileSourceIdRef.current, value);
+        if (altIdRef.current) mixer.setGain(altIdRef.current, value);
+      }
     } else {
       if (micSourceIdRef.current) mixerRef.current?.setGain(micSourceIdRef.current, value);
     }
@@ -1103,27 +1264,33 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
           nothing is uploaded to any server.
         </p>
 
-        {/* Transport: live deck control */}
-        {status === 'live' && queue.length > 0 && (
+        {/* Transport: live deck control. Rendered for the whole broadcast, NOT only while the
+            queue has tracks — REMOVE ALL used to delete the only PAUSE button from the page, which
+            left the host with no way to stop the deck short of ending the show. */}
+        {status === 'live' && (
           <div className="flex items-center gap-2 pt-1" role="group" aria-label="Playback controls">
-            <TransportBtn onClick={handleDeckPrev} label="Previous track">
+            <TransportBtn onClick={handleDeckPrev} label="Previous track" disabled={queue.length === 0}>
               <SkipBack className="w-4 h-4" aria-hidden="true" />
             </TransportBtn>
-            <TransportBtn onClick={handleDeckPlayPause} label={filePlaying ? 'Pause' : 'Play'}>
+            <TransportBtn
+              onClick={handleDeckPlayPause}
+              label={filePlaying ? 'Pause' : 'Play'}
+              disabled={queue.length === 0 && !filePlaying}
+            >
               {filePlaying ? (
                 <Pause className="w-4 h-4" aria-hidden="true" />
               ) : (
                 <Play className="w-4 h-4" aria-hidden="true" />
               )}
             </TransportBtn>
-            <TransportBtn onClick={handleDeckNext} label="Next track">
+            <TransportBtn onClick={handleDeckNext} label="Next track" disabled={queue.length === 0}>
               <SkipForward className="w-4 h-4" aria-hidden="true" />
             </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds">
+            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds" disabled={queue.length === 0}>
               <Rewind className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="text-[10px] ml-0.5">10</span>
             </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds">
+            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds" disabled={queue.length === 0}>
               <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
               <span className="text-[10px] ml-0.5">10</span>
             </TransportBtn>
@@ -1668,11 +1835,13 @@ function TransportBtn({
   onClick,
   label,
   active = false,
+  disabled = false,
   children,
 }: {
   onClick: () => void;
   label: string;
   active?: boolean;
+  disabled?: boolean;
   children: ReactNode;
 }) {
   return (
@@ -1681,8 +1850,10 @@ function TransportBtn({
       onClick={onClick}
       aria-label={label}
       aria-pressed={active}
+      disabled={disabled}
       className={[
         'inline-flex items-center justify-center min-w-[44px] min-h-[44px] px-2 border rounded active:scale-95 transition-all',
+        'disabled:opacity-40 disabled:cursor-not-allowed disabled:active:scale-100',
         active
           ? 'border-primary bg-primary/20 text-primary'
           : 'border-border text-foreground hover:bg-primary/10',
