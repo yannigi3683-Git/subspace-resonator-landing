@@ -687,20 +687,20 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     });
   });
 
-  it('seeks +/-10 seconds and clamps at zero', async () => {
+  it('seeks +/-30 seconds and clamps at zero', async () => {
     await goLiveWithFiles(['alpha']);
     const fileEl = lastAudio();
     fileEl.currentTime = 30;
     fileEl.duration = 100;
 
-    fireEvent.click(screen.getByLabelText('Forward 10 seconds'));
-    expect(fileEl.currentTime).toBe(40);
+    fireEvent.click(screen.getByLabelText('Forward 30 seconds'));
+    expect(fileEl.currentTime).toBe(60);
 
-    fireEvent.click(screen.getByLabelText('Back 10 seconds'));
+    fireEvent.click(screen.getByLabelText('Back 30 seconds'));
     expect(fileEl.currentTime).toBe(30);
 
     fileEl.currentTime = 5;
-    fireEvent.click(screen.getByLabelText('Back 10 seconds'));
+    fireEvent.click(screen.getByLabelText('Back 30 seconds'));
     expect(fileEl.currentTime).toBe(0);
   });
 

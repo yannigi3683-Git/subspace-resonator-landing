@@ -1286,13 +1286,13 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             <TransportBtn onClick={handleDeckNext} label="Next track" disabled={queue.length === 0}>
               <SkipForward className="w-4 h-4" aria-hidden="true" />
             </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(-10)} label="Back 10 seconds" disabled={queue.length === 0}>
+            <TransportBtn onClick={() => handleSeek(-30)} label="Back 30 seconds" disabled={queue.length === 0}>
               <Rewind className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="text-[10px] ml-0.5">10</span>
+              <span className="text-[10px] ml-0.5">30</span>
             </TransportBtn>
-            <TransportBtn onClick={() => handleSeek(10)} label="Forward 10 seconds" disabled={queue.length === 0}>
+            <TransportBtn onClick={() => handleSeek(30)} label="Forward 30 seconds" disabled={queue.length === 0}>
               <FastForward className="w-3.5 h-3.5" aria-hidden="true" />
-              <span className="text-[10px] ml-0.5">10</span>
+              <span className="text-[10px] ml-0.5">30</span>
             </TransportBtn>
           </div>
         )}
