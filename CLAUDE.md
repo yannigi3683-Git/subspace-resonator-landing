@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix)
 
 ---
 
@@ -385,7 +385,56 @@ keyed on the map, every resolved probe restarts the ones still in flight, so a 5
 costs ~1275 metadata loads on the broadcasting host instead of 50. **REPEAT
 lives in the deck header row beside SHUFFLE, not in the transport strip**, because the transport
 strip only renders while `status === 'live'` and the host arranges the set before GO LIVE - a
-repeat toggle nobody can reach until they are already on air reads as a missing feature.
+repeat toggle nobody can reach until they are already on air reads as a missing feature. The strip
+renders for the **whole** broadcast, not only while the queue has tracks: gating it on
+`queue.length > 0` meant REMOVE ALL deleted the only PAUSE button from the page, leaving the host
+with no way to stop the deck short of ending the show.
+
+**THE DECK'S ONE INVARIANT: what an `<audio>` element has LOADED is a source of truth the queue
+model cannot see, and it must never be trusted from `el.src` (`fix/host-deck-desync`, 2026-10-11).**
+Revoking a blob URL does **not** unload a resource the element already fetched, so
+`LocalDeck.remove`/`clear` dropped a track while the element happily played on. On 2026-10-10 that
+put a removed track on the air mid-broadcast, and `handleDeckPlayPause`'s only guard being `!el.src`
+meant PLAY **resumed the deleted track** after the host had emptied the queue and re-added the file
+he wanted; nothing but END BROADCAST + GO LIVE could clear it, because only that path mints a new
+element. The rules now:
+- `el.src` is written in exactly one place, `loadInto()`, which records the track id in a
+  `loadedTrackIds` WeakMap. Every play path asks `holdsTrack(el, deck.current?.id)` instead of
+  looking at `src` - `handleDeckPlayPause`, the visibility resume, and `finalizeCrossfade` (which
+  refuses to promote the incoming deck unless `fadingInIdRef` is still `deck.next`).
+- **Any queue edit during a fade aborts it.** `abortCrossfade()` cancels the timer, pauses + mutes
+  the incoming deck, restores the outgoing gain and clears the latch; it is a **no-op when no fade
+  is running**, so an ordinary queue edit never touches audio. It is wired into remove, REMOVE ALL,
+  shuffle, drag-reorder, jump **and NEXT / PREV / seek** - those three used to `return` early for
+  the whole 12s fade, which is most of the "my controls do nothing" report. It returns whether the
+  outgoing track had already ended so the caller can finish the move instead of parking on a
+  finished track in silence.
+- **AUTO-MIX defaults ON and the fade defaults to 12s**, so the window for all of this is wide and
+  two tracks really are audible at once for 12 seconds. That is the feature, not the bug.
+- The FILE fader reaches **both** decks off-fade, and mid-fade it **re-targets the incoming deck**
+  over 0.3s rather than setting both: setting the outgoing un-muted it and sent both tracks out
+  loud, and leaving the incoming alone let a stale gain get swapped in as a step change.
+- **No deck element may exist outside the mixer.** One created at mount used to stay
+  `audioElRef.current` for any show that went live with an empty queue, and with no
+  `MediaElementSource` it played to the **OS default output** - Voicemeeter on the host rig, i.e.
+  back into the broadcast through the device source, with FILE GAIN dead and no crossfade.
+  `ensureFileElement()` now builds it lazily on first play, always attached.
+- **GO LIVE is idempotent**: it disconnects the old publisher and calls `teardownMixer()` first.
+  The `lost` state does **not** tear down (`connectionFsm` emits only `CANCEL_RETRY`), so GO LIVE
+  from the error banner built a second mixer beside the first - and `HostMixer`'s source-id counter
+  restarts at 1, so a surviving `altIdRef` of `"2"` would ramp a **different source** in the new
+  mixer, plausibly the device input. Teardown also silences every element the panel ever created
+  (`deckElsRef`), so an orphan from a path not yet found cannot outlive the broadcast.
+- Do **not** add `DISCONNECT_RTC` to the FSM's `lost` state: `shouldResumeOnOnline` deliberately
+  depends on `streamRef`/`publisherRef` surviving it.
+Full diagnosis, the five approaches and the red-team rounds:
+`docs/superpowers/specs/2026-10-11-host-deck-desync-design.md`.
+
+**Reading the restreamer log: `GO LIVE <id>` is the HOST's `cfSessionId` (from the station row),
+`subscribe-pull OK <id>` is the restreamer's OWN subscriber session.** Confusing the two reads a
+host reconnect into every log where the restreamer merely restarted its own pull, which is exactly
+what happened on the first pass of the 2026-10-10 investigation. The host id changing is the only
+proof of a re-publish; the pull id changes on every `negotiatePull` and means nothing about the host.
 
 **RLS: audit the LIVE database, never the schema file (2026-07-26/27).** PERMISSIVE policies are OR'd, so one policy with a `true` qual/with_check silently cancels every strict policy on that table, and a policy added by hand in the dashboard is invisible to this repo — re-running `radio-schema.sql` adds and replaces, it never removes. Four such policies were found by audit: `chat_insert_own` (with_check `true`, cancelled every ban/slow/lock), `chat_read_all` (qual `true`, exposed every past broadcast's chat), `station_admin_write` (for all, `has_role(admin)` only, cancelled the `is_admin_aal2()` requirement on station_write) and a duplicate `station_public_read`. All four are now dropped explicitly in `radio-schema.sql` so applying the schema RESTORES enforcement. `reactions_read` was separately tightened from `using (true)` to the visibility of its parent message — bodies were protected by `chat_visible()`, but reaction rows (`message_id`/`uid`/`device_id`/`emoji`) from past broadcasts were not. Audit before trusting any restriction:
 ```sql
@@ -504,6 +553,7 @@ Key specs on record:
 - `2026-07-18-guest-chat-upgrades-design.md` — radio chat emoji picker, reply, reactions, GIFs (implemented on `feat/chat-upgrades`)
 - `2026-08-02-crowd-dance-glow-design.md` — dance-floor wander + the happy glow reaction (implemented on `feat/crowd-dance-glow`)
 - `2026-08-02-crowd-roam-design.md` — replacing the crowd grid with a roaming region (implemented on `feat/crowd-roam`)
+- `2026-10-11-host-deck-desync-design.md` — host file deck played a removed track and ignored every control; root cause, the five candidate fixes and the red-team rounds (implemented on `fix/host-deck-desync`)
 
 Owner manuals / recaps:
 - `docs/RADIO-CAPACITY.md` — how many listeners the radio holds + how to raise it (Supabase anon sign-in cap). The answer to the "how many can I host" question.
