@@ -105,6 +105,11 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   const [currentBitrate, setCurrentBitrate] = useState(0);
   const [broadcastLoss, setBroadcastLoss] = useState(0);
   const [position, setPosition] = useState<{ cur: number; dur: number }>({ cur: 0, dur: 0 });
+  // Non-null while the seek bar is being dragged. It overrides the displayed position so
+  // `handleTimeUpdate` cannot yank the thumb back out from under the host's finger, and it
+  // is what defers the actual seek to release - a drag writing `currentTime` on every event
+  // would send a burst of jumps out to listeners.
+  const [scrub, setScrub] = useState<number | null>(null);
   const [deviceConnected, setDeviceConnected] = useState(false);
   const [errorMsg, setErrorMsg] = useState('');
   const [chatLogMsg, setChatLogMsg] = useState('');
@@ -934,6 +939,22 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     el.currentTime = Math.max(0, Math.min(el.currentTime + deltaSeconds, dur));
   }
 
+  function seekToSeconds(seconds: number) {
+    if (abortCrossfade()) { handleDeckNext(); return; } // outgoing track had already ended
+    const el = audioElRef.current;
+    if (!el) return;
+    const dur = Number.isFinite(el.duration) ? el.duration : 0;
+    if (!dur) return;
+    el.currentTime = Math.max(0, Math.min(seconds, dur));
+    setPosition({ cur: el.currentTime, dur }); // a paused deck fires no timeupdate
+  }
+
+  function commitScrub() {
+    if (scrub === null) return;
+    seekToSeconds(scrub);
+    setScrub(null);
+  }
+
   function handleJumpTo(id: string) {
     abortCrossfade(); // without this the jump loads onto the deck whose gain is ramping to zero
     if (deckRef.current.jumpTo(id)) {
@@ -1363,18 +1384,28 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
                   </p>
                   {position.dur > 0 && (
                     <p className="font-mono text-[11px] text-muted-foreground tabular-nums shrink-0">
-                      {formatClock(position.cur)} / -{formatClock(position.dur - position.cur)}
+                      {formatClock(scrub ?? position.cur)} / -{formatClock(position.dur - (scrub ?? position.cur))}
                     </p>
                   )}
                 </div>
               </div>
+              {/* Scrub bar. Native range input, so drag / touch / arrows / Home / End and the
+                  slider role all come for free. The seek commits on release (see `scrub`). */}
               {position.dur > 0 && (
-                <div className="h-px w-full bg-muted/30 relative overflow-hidden rounded-full">
-                  <div
-                    className="absolute inset-y-0 left-0 bg-primary origin-left"
-                    style={{ transform: `scaleX(${Math.min(1, position.cur / position.dur)})`, transition: 'transform 0.5s linear' }}
-                  />
-                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={Math.floor(position.dur)}
+                  step={1}
+                  value={Math.floor(scrub ?? position.cur)}
+                  onChange={(e) => setScrub(Number(e.target.value))}
+                  onPointerUp={commitScrub}
+                  onKeyUp={commitScrub}
+                  onBlur={commitScrub}
+                  className="w-full min-h-[44px] console-slider"
+                  aria-label="Seek within track"
+                  aria-valuetext={formatClock(scrub ?? position.cur)}
+                />
               )}
             </>
           ) : (

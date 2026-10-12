@@ -704,6 +704,52 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     expect(fileEl.currentTime).toBe(0);
   });
 
+  it('scrubs to an absolute position, committing the seek on release', async () => {
+    await goLiveWithFiles(['alpha']);
+    const fileEl = lastAudio();
+    fileEl.duration = 600;
+    fileEl.currentTime = 10;
+    act(() => { fileEl.ontimeupdate?.(); }); // publishes duration, which renders the bar
+
+    const bar = screen.getByLabelText('Seek within track');
+    fireEvent.change(bar, { target: { value: '300' } });
+    // Still playing the old position: a drag must not write currentTime on every event,
+    // or every intermediate position goes out to listeners.
+    expect(fileEl.currentTime).toBe(10);
+    expect(bar).toHaveValue('300');
+
+    fireEvent.pointerUp(bar);
+    expect(fileEl.currentTime).toBe(300);
+  });
+
+  it('clamps a scrub past the end of the track', async () => {
+    await goLiveWithFiles(['alpha']);
+    const fileEl = lastAudio();
+    fileEl.duration = 600;
+    fileEl.currentTime = 10;
+    act(() => { fileEl.ontimeupdate?.(); });
+
+    const bar = screen.getByLabelText('Seek within track');
+    fireEvent.change(bar, { target: { value: '9999' } });
+    fireEvent.pointerUp(bar);
+
+    expect(fileEl.currentTime).toBe(600);
+  });
+
+  it('renders no scrub bar on a live-input-only broadcast', async () => {
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-no-deck');
+    });
+
+    render(<GoLivePanel supabase={makeSupabase()} authToken={async () => 't'} />);
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+
+    expect(screen.queryByLabelText('Seek within track')).toBeNull();
+  });
+
   it('auto-advances when a track ends and stops at the end of the queue', async () => {
     await goLiveWithFiles(['alpha', 'beta']);
     const fileEl = lastAudio();
