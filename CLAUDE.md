@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar)
 
 ---
 
@@ -388,7 +388,20 @@ strip only renders while `status === 'live'` and the host arranges the set befor
 repeat toggle nobody can reach until they are already on air reads as a missing feature. The strip
 renders for the **whole** broadcast, not only while the queue has tracks: gating it on
 `queue.length > 0` meant REMOVE ALL deleted the only PAUSE button from the page, leaving the host
-with no way to stop the deck short of ending the show.
+with no way to stop the deck short of ending the show. The jump buttons step **30s**, not 10s,
+because a long set needs coarse moves.
+
+**The scrub bar under WHAT'S GOING OUT commits its seek on RELEASE, not during the drag, and
+that is a broadcast decision rather than a UI nicety.** It is a native `<input type="range">`
+(so drag, touch, arrows, Home/End and the slider role are the platform's, not ours), but a
+controlled range fires `change` on every pixel of a drag, and writing `el.currentTime` on each
+one would send every intermediate position out to listeners as a burst of jumps. The `scrub`
+state in `GoLivePanel.tsx` holds the pending value: while it is non-null it also **overrides
+the displayed position**, so the 4Hz `timeupdate` cannot yank the thumb out from under the
+host's finger, and `commitScrub` (on pointerup / keyup / blur - blur catches a pointer released
+off the element) performs the one real seek. It routes through `seekToSeconds`, which carries
+the same `abortCrossfade()` guard as every other transport control, so scrubbing mid-fade
+cancels the fade instead of seeking the deck whose gain is ramping to zero.
 
 **THE DECK'S ONE INVARIANT: what an `<audio>` element has LOADED is a source of truth the queue
 model cannot see, and it must never be trusted from `el.src` (`fix/host-deck-desync`, 2026-10-11).**
