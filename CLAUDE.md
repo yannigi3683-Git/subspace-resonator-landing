@@ -125,6 +125,21 @@ first paint**) and edited in-browser through `AdminPanel.tsx`.
 
 - **Storage:** one row, `site_content` table, `id = 'singleton'`, whole config as a JSON `data`
   column. Gallery images live in the Supabase Storage bucket `gallery`.
+- **Editing a `DEFAULT_*` constant in code does NOTHING to the live site once the stored row
+  carries that key.** `mergeWithDefaults` (`siteContent.ts:297`) picks per TOP-LEVEL key and
+  takes the stored value whole: `releases: data.releases ? validateReleases(data.releases) :
+  DEFAULT_RELEASES`. There is no field-level merge, so a code edit to one release inside
+  `DEFAULT_RELEASES` is invisible if the row has a `releases` key at all. And **every panel save
+  writes every key**, because `saveContent` persists `{ ...store, ...patch }` — so one save of
+  any single field, ever, permanently shadows the code defaults for `events`, `gallery`, `bio`,
+  `socials`, `releases` and `booking` alike. The code constants are the fallback for a fresh
+  database, not the source of truth for a site that has ever been edited. This nearly shipped as
+  a silent no-op on 2026-09-25 when The Continuum was added to `DEFAULT_RELEASES` in code; the
+  content itself was entered through the panel instead. **Content changes go through the panel.
+  Code changes are for the fallback, for validation, and for anything the panel cannot express**
+  (the `numTracks` JSON-LD fix in that same commit was exactly the third case). It also means a
+  "why is my change not showing" hunt here has a second suspect beyond a stale deploy: the row
+  may simply be winning.
 - **Opening it:** Ctrl+Shift+A anywhere on the landing page, then e-mail/password sign-in;
   authorisation is `supabase.rpc('has_role', ...)`, the same RPC the radio console uses.
 - **The panel ships in the entry chunk to every visitor.** It is statically imported at
@@ -194,9 +209,15 @@ All structured data must match this list exactly. Do not add unreleased tracks.
 **Solo releases:**
 | Title | Type | Label | Date |
 |-------|------|-------|------|
+| The Continuum | LP (9 tracks) | Timewarp Records | 2026-08-07 |
 | The Subspace Theory | EP (4 tracks) | Goa Records | 2025-12-26 |
-| Galaxy 604 | Single | Goa Records | 2025 |
 | Nightmare In Heaven | Single | Timewarp Records | 2025-10-31 |
+
+**Galaxy 604 is NOT a standalone release.** It is track 9 of The Continuum, and it also appears
+on two compilations. It was listed as its own Goa Records single until 2026-09-25, which is why
+no release URL for it could ever be found: there was nothing to link to. Its row therefore sat
+non-interactive in the Music Archive and its JSON-LD entry carried no `url`. Do not re-add it as
+a single.
 
 **Compilation appearances:**
 | Compilation | Label | Track | Date |
@@ -205,10 +226,14 @@ All structured data must match this list exactly. Do not add unreleased tracks.
 | Psychedelic Goa Trance 2026 100 Aliens | Fresh Frequencies | Galaxy 604 | 2026-01-09 |
 | Psy Trance 2026 Space DJ | Fresh Frequencies | Galaxy 604 | 2026 |
 
-**Unreleased (debut album in production) — DO NOT add to structured data:**
-- Defying Gravity
-- Quantum Mechanics
-- Interstellar Future
+**The debut album is OUT and is The Continuum** (Timewarp Records, TIMEWARP340, released
+2026-08-07). Defying Gravity, Quantum Mechanics and Interstellar Future were the three tracks
+tracked here as unreleased; they are tracks 8, 7 and 1. The album also collects Nightmare In
+Heaven, Subspace Theory and Subspace Disturbance, so several titles appear both as their own
+earlier release and as an album track. That overlap is correct and deliberate: each single was
+genuinely released on its own, with its own label, date and link, so all of them stay listed.
+**It was live for seven weeks before the site listed it** (added 2026-09-25). A release that
+exists only on Bandcamp is invisible to the Music Archive and to Google until it is added here.
 
 ---
 
@@ -244,7 +269,6 @@ All `byArtist` fields in the releases block use `{ "@id": "https://subspacereson
 Six MusicAlbum entries in a single `@graph` array. schema.org has no `EPAlbum` type — The Subspace Theory EP uses `StudioAlbum` (closest available). Compilation appearances use `byArtist` on the `track` (MusicRecording), not on the album.
 
 ### Known JSON-LD limitations (intentional)
-- **Galaxy 604** has no `url` field — the Spotify track URL was removed because it's a track URL, not a release URL. A Spotify album URL was not available. Restore when confirmed.
 - **`logo` field removed** from MusicGroup — og-image.jpg is 1824x1216 landscape. Google Knowledge Panel requires near-square. Do not add back until a square logo asset exists.
 
 ### Static fallback (index.html)
@@ -547,8 +571,6 @@ So a 40-second host outage costs listeners a short silence and nothing else. Two
 
 ## Known Future Tasks (not yet built)
 
-- **Galaxy 604 Spotify album URL** — find the album-level URL (not track URL) and add back to the Galaxy 604 MusicAlbum JSON-LD entry.
-- **Debut album JSON-LD** — add structured data once the album is released.
 - **Restreamer remote start** — starting it is a physical double-click on one Windows PC. There is no way to start it while away, and no single-instance guard if two copies are ever launched. The documented (not set up) workaround is a Task Scheduler background task, see the appendix in `restreamer/HOW-TO-RUN.md`.
 - **R2 bucket lifecycle rule (optional now)** — the accumulation is handled: `sweepOldObjects` runs after every END BROADCAST (see the restreamer section). A dashboard lifecycle rule would still be tidier, because it runs whether or not the restreamer ever starts, but it needs a Cloudflare **Admin Read & Write** token: the object-scoped token in `.env` is refused with `AccessDenied` on `PutBucketLifecycleConfiguration` (confirmed 2026-09-10). If one is ever set, delete `src/sink/r2sweep.mjs` and `sweepR2` in `src/index.mjs`.
 
