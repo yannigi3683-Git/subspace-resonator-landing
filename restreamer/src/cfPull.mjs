@@ -8,6 +8,27 @@ import dgram from 'node:dgram';
 
 const noop = () => {};
 
+// Returns { seq, ts } for a packet to forward, or null to drop it. A packet carrying the SAME
+// timestamp as the one before is not new audio: since Chrome 157 (2026-11-12) the host sends a
+// burst of 3-4 of them every 5s, and stamping each as a fresh 20ms frame spliced ~80ms of junk
+// into the stream, heard by every deep-buffer listener as a bump.
+export function makeRestamper() {
+  let seq = 0;
+  let outTs = 0;
+  let prevTs = null;
+  return (timestamp) => {
+    const orig = timestamp >>> 0;
+    if (prevTs !== null) {
+      let delta = (orig - prevTs) >>> 0; // unsigned 32-bit diff
+      if (delta === 0) return null;
+      if (delta > 48000 * 5) delta = 960; // reorder/garbage -> assume 20ms
+      outTs = (outTs + delta) >>> 0;
+    }
+    prevTs = orig;
+    return { seq: seq++ & 0xffff, ts: outTs };
+  };
+}
+
 export async function negotiatePull({ brokerUrl, token, rtpPort, host = '127.0.0.1', log = noop }) {
   const post = (body) =>
     fetch(brokerUrl, {
@@ -47,24 +68,16 @@ export async function negotiatePull({ brokerUrl, token, rtpPort, host = '127.0.0
     // the timestamp by the original inter-packet delta (so variable Opus frame sizes are honored),
     // falling back to one 20ms frame (960 @ 48kHz) when a delta looks like a reorder/garbage.
     // ffmpeg then sees a pristine, monotonic Opus stream.
-    let seq = 0;
-    let outTs = 0;
-    let prevTs = null;
+    const restamp = makeRestamper();
     track.onReceiveRtp.subscribe((rtp) => {
       // Skip empty (0-byte) DTX/padding packets — forwarding them adds nothing but noise and
       // trips ffmpeg's timestamp checks.
       if (!rtp.payload || rtp.payload.length === 0) return;
       rtpCount++;
-      const orig = rtp.header.timestamp >>> 0;
-      if (prevTs !== null) {
-        let delta = (orig - prevTs) >>> 0; // unsigned 32-bit diff
-        if (delta === 0 || delta > 48000 * 5) delta = 960; // reorder/garbage -> assume 20ms
-        outTs = (outTs + delta) >>> 0;
-      }
-      prevTs = orig;
-      rtp.header.sequenceNumber = seq & 0xffff;
-      seq++;
-      rtp.header.timestamp = outTs;
+      const out = restamp(rtp.header.timestamp);
+      if (!out) return;
+      rtp.header.sequenceNumber = out.seq;
+      rtp.header.timestamp = out.ts;
       udp.send(rtp.serialize(), rtpPort, host);
     });
   });

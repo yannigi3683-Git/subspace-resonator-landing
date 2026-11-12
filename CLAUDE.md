@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 40 tests as of 2026-11-12.
 
 ---
 
@@ -480,6 +480,19 @@ whether it is live. Known ceiling: a show whose END the restreamer never sees (w
 mid-show) is swept at the following show's END instead. The sweep never throws; a failure is
 logged and storage just keeps growing. A dashboard lifecycle rule is the tidier answer and is
 **blocked on token scope**, see Known Future Tasks.
+
+**It drops same-timestamp RTP packets (`fix/restreamer-drop-probe-packets`, 2026-11-12).** Since
+Chrome 157 (auto-updated that morning) the host sends a burst of 3-4 small packets (50-74 bytes)
+every 5.0s that carry the SAME RTP timestamp as the frame before, with valid consecutive sequence
+numbers. Measured by pulling the live track and logging raw RTP; the host's webrtc-internals showed
+the matching `headerBytesSent` spike every 5s. `makeRestamper` in `cfPull.mjs` used to treat
+`delta === 0` as one 20ms frame, which spliced ~80ms of junk into the HLS every 5 seconds: a
+~30ms dip every 5.04s, heard as a "bump" by every deep-buffer listener, on any PC, any source.
+It now returns `null` and the packet is not forwarded. Verified live: 32s through the new code had
+zero holes while the HLS from the old code had one every 5.04s. **This fixes the deep buffer only.**
+WebRTC listeners receive the same packets straight from the SFU, and whether their browsers glitch on
+them was not measured; the sender-side fix (stop Chrome emitting them) would touch the FROZEN
+publisher path and needs a device test.
 
 **It keeps a log file now (`feat/restreamer-logfile`, 2026-08-21).** Every `log()` line is teed to `restreamer/logs/YYYY-MM-DD.log` by `restreamer/src/log.mjs`, one file per day, appended across restarts. The console window is invisible to a host who is not at that PC (the normal case, since GO LIVE is triggered from wherever they are DJing) and it dies with the process, so an unattended event used to leave no record at all: reconstructing a single host reconnect on 2026-08-21 took an R2 bucket listing plus a `Get-Process` start time. Grep for `GO LIVE`, `streamUrl published`, `ffmpeg exited`, `action error`. A log dir that cannot be written is abandoned permanently instead of retried, because a full disk must never take a live broadcast down, and a per-line retry would bury the console exactly when the host needs to read it. `logs/` is gitignored; the files hold no chat, no listener names and no keys, so they are safe to hand to someone helping.
 
