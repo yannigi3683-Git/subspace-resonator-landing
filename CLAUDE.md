@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 40 tests as of 2026-11-12.
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 43 tests as of 2026-11-13.
 
 ---
 
@@ -488,7 +488,25 @@ numbers. Measured by pulling the live track and logging raw RTP; the host's webr
 the matching `headerBytesSent` spike every 5s. `makeRestamper` in `cfPull.mjs` used to treat
 `delta === 0` as one 20ms frame, which spliced ~80ms of junk into the HLS every 5 seconds: a
 ~30ms dip every 5.04s, heard as a "bump" by every deep-buffer listener, on any PC, any source.
-It now returns `null` and the packet is not forwarded. Verified live: 32s through the new code had
+It now returns `null` and the packet is not forwarded. The delta is **signed** (`| 0`), so a packet
+whose timestamp is not ahead of the last forwarded one (a burst packet arriving late, or a late real
+frame) is dropped too, instead of reading as a ~2^32 jump that fell back to 960 and rewound `prevTs`.
+Every 100th drop is logged (`dropped same-or-older-timestamp rtp packets: N`), so a future Chrome
+change shows up in `logs/` as drops stopping, or as bumps with no drops.
+
+**NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
+`cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and
+`.ts` objects are `immutable` for a year: phones that already fetched those names replay OLD audio
+(listeners jumped ~20 min back in the set). `start-restreamer.bat` auto-restarts a crashed process
+after 3s, so a crash triggers it too. Only END BROADCAST + GO LIVE (new `cfSessionId`, new prefix)
+clears it. The obvious fix, a per-run prefix, is NOT safe on its own: an independent review found
+that a `streamUrl` change with an unchanged `cfSessionId` leaves deep-buffer listeners **silent**
+(`useListenerTransport.ts` resets the phase to `webrtc` but WebRTC is still paused at volume 0, and
+the crossfade waits for `webrtc.playing`, which never comes). The same silence already happens today when
+`streamUrl` is cleared (Ctrl+C, ffmpeg exit). Both are one follow-up branch: per-run prefix +
+listener recovery on URL change/clear, tested on a Vercel preview with a screen-locked phone.
+**Closing the restreamer window does NOT clear `streamUrl`** (only Ctrl+C does, `index.mjs` SIGINT);
+listeners drop back to WebRTC through the 10s stall fallback instead. Verified live: 32s through the new code had
 zero holes while the HLS from the old code had one every 5.04s. **This fixes the deep buffer only.**
 WebRTC listeners receive the same packets straight from the SFU, and whether their browsers glitch on
 them was not measured; the sender-side fix (stop Chrome emitting them) would touch the FROZEN

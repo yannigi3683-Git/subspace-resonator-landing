@@ -8,10 +8,12 @@ import dgram from 'node:dgram';
 
 const noop = () => {};
 
-// Returns { seq, ts } for a packet to forward, or null to drop it. A packet carrying the SAME
-// timestamp as the one before is not new audio: since Chrome 157 (2026-11-12) the host sends a
-// burst of 3-4 of them every 5s, and stamping each as a fresh 20ms frame spliced ~80ms of junk
-// into the stream, heard by every deep-buffer listener as a bump.
+// Returns { seq, ts } for a packet to forward, or null to drop it. A packet whose timestamp is not
+// AHEAD of the last forwarded one is not new audio: since Chrome 157 (2026-11-12) the host sends a
+// burst of 3-4 same-timestamp packets every 5s, and stamping each as a fresh 20ms frame spliced
+// ~80ms of junk into the stream, heard by every deep-buffer listener as a bump. The delta is SIGNED
+// so a burst packet (or a late real frame) arriving after the next frame is dropped too, instead of
+// looking like a 2^32 jump and rewinding prevTs. `| 0` keeps a 32-bit timestamp wrap a small step.
 export function makeRestamper() {
   let seq = 0;
   let outTs = 0;
@@ -19,9 +21,9 @@ export function makeRestamper() {
   return (timestamp) => {
     const orig = timestamp >>> 0;
     if (prevTs !== null) {
-      let delta = (orig - prevTs) >>> 0; // unsigned 32-bit diff
-      if (delta === 0) return null;
-      if (delta > 48000 * 5) delta = 960; // reorder/garbage -> assume 20ms
+      let delta = (orig - prevTs) | 0;
+      if (delta <= 0) return null;
+      if (delta > 48000 * 5) delta = 960; // garbage forward jump -> assume one 20ms frame
       outTs = (outTs + delta) >>> 0;
     }
     prevTs = orig;
@@ -66,16 +68,21 @@ export async function negotiatePull({ brokerUrl, token, rtpPort, host = '127.0.0
     // timestamps go non-monotonic -> the HLS segmenter stretches audio ~2x slow. Fix: re-stamp
     // each packet in arrival order with our OWN monotonic sequence number and timestamp, advancing
     // the timestamp by the original inter-packet delta (so variable Opus frame sizes are honored),
-    // falling back to one 20ms frame (960 @ 48kHz) when a delta looks like a reorder/garbage.
+    // dropping a packet that is not ahead of the last one (see makeRestamper).
     // ffmpeg then sees a pristine, monotonic Opus stream.
     const restamp = makeRestamper();
+    let dropped = 0;
     track.onReceiveRtp.subscribe((rtp) => {
       // Skip empty (0-byte) DTX/padding packets — forwarding them adds nothing but noise and
       // trips ffmpeg's timestamp checks.
       if (!rtp.payload || rtp.payload.length === 0) return;
       rtpCount++;
       const out = restamp(rtp.header.timestamp);
-      if (!out) return;
+      if (!out) {
+        // Visible in logs/ so a future Chrome change shows up as "drops stopped" or "bumps with 0 drops".
+        if (++dropped % 100 === 1) log('dropped same-or-older-timestamp rtp packets:', dropped);
+        return;
+      }
       rtp.header.sequenceNumber = out.seq;
       rtp.header.timestamp = out.ts;
       udp.send(rtp.serialize(), rtpPort, host);

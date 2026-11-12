@@ -27,7 +27,28 @@ test('a same-timestamp burst is dropped and the timeline stays continuous', () =
   ]);
 });
 
-test('a backwards or garbage jump still falls back to one 20ms frame', () => {
-  const out = feed([100000, 99040, 100000 + 48000 * 6]);
+test('a burst packet arriving AFTER the next frame is dropped without rewinding the timeline', () => {
+  const out = feed([1000, 1960, 2920, 1960, 3880]);
+  assert.deepEqual(out, [
+    { seq: 0, ts: 0 },
+    { seq: 1, ts: 960 },
+    { seq: 2, ts: 1920 },
+    null,
+    { seq: 3, ts: 2880 },
+  ]);
+});
+
+test('a late real frame is dropped, the next frame lands where it belongs', () => {
+  const out = feed([0, 1920, 960, 2880]);
+  assert.deepEqual(out, [{ seq: 0, ts: 0 }, { seq: 1, ts: 1920 }, null, { seq: 2, ts: 2880 }]);
+});
+
+test('a 32-bit timestamp wrap is a normal 20ms step, not a drop', () => {
+  const out = feed([0xfffffc40, 0, 960]);
+  assert.deepEqual(out.map((o) => o.ts), [0, 960, 1920]);
+});
+
+test('a garbage forward jump still falls back to one 20ms frame', () => {
+  const out = feed([1000, 1000 + 48000 * 6, 1000 + 48000 * 6 + 960]);
   assert.deepEqual(out.map((o) => o.ts), [0, 960, 1920]);
 });
