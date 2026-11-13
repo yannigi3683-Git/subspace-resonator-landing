@@ -518,10 +518,11 @@ the crossfade waits for `webrtc.playing`, which never comes). The same silence a
 listener recovery on URL change/clear, tested on a Vercel preview with a screen-locked phone.
 **Closing the restreamer window does NOT clear `streamUrl`** (only Ctrl+C does, `index.mjs` SIGINT);
 listeners drop back to WebRTC through the 10s stall fallback instead. Verified live: 32s through the new code had
-zero holes while the HLS from the old code had one every 5.04s. **This fixes the deep buffer only.**
-WebRTC listeners receive the same packets straight from the SFU, and whether their browsers glitch on
-them was not measured; the sender-side fix (stop Chrome emitting them) would touch the FROZEN
-publisher path and needs a device test.
+zero holes while the HLS from the old code had one every 5.04s. **WebRTC listeners do not need a fix (measured 2026-11-13):**
+they get the same packets straight from the SFU, but a 15.5 min restreamer-OFF test on a phone heard
+no 5s cadence; the browser's jitter buffer discards same-timestamp duplicates. The only bumps heard
+tracked the phone's own `LOST` count on mobile data (22 -> 38) while the raw-RTP tap upstream lost
+0 of 46,961 packets. So the sender-side fix (stop Chrome emitting them, FROZEN publisher path) is not needed.
 
 **It keeps a log file now (`feat/restreamer-logfile`, 2026-08-21).** Every `log()` line is teed to `restreamer/logs/YYYY-MM-DD.log` by `restreamer/src/log.mjs`, one file per day, appended across restarts. The console window is invisible to a host who is not at that PC (the normal case, since GO LIVE is triggered from wherever they are DJing) and it dies with the process, so an unattended event used to leave no record at all: reconstructing a single host reconnect on 2026-08-21 took an R2 bucket listing plus a `Get-Process` start time. Grep for `GO LIVE`, `streamUrl published`, `ffmpeg exited`, `action error`. A log dir that cannot be written is abandoned permanently instead of retried, because a full disk must never take a live broadcast down, and a per-line retry would bury the console exactly when the host needs to read it. `logs/` is gitignored; the files hold no chat, no listener names and no keys, so they are safe to hand to someone helping.
 
