@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar)
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 44 tests as of 2026-11-13.
 
 ---
 
@@ -480,6 +480,49 @@ whether it is live. Known ceiling: a show whose END the restreamer never sees (w
 mid-show) is swept at the following show's END instead. The sweep never throws; a failure is
 logged and storage just keeps growing. A dashboard lifecycle rule is the tidier answer and is
 **blocked on token scope**, see Known Future Tasks.
+
+**It drops same-timestamp RTP packets (`fix/restreamer-drop-probe-packets`, 2026-11-12).** Since
+Chrome 157 (auto-updated that morning) the host sends a burst of 3-4 small packets (50-74 bytes)
+every 5.0s that carry the SAME RTP timestamp as the frame before, with valid consecutive sequence
+numbers. Measured by pulling the live track and logging raw RTP; the host's webrtc-internals showed
+the matching `headerBytesSent` spike every 5s. `makeRestamper` in `cfPull.mjs` used to treat
+`delta === 0` as one 20ms frame, which spliced ~80ms of junk into the HLS every 5 seconds: a
+~30ms dip every 5.04s, heard as a "bump" by every deep-buffer listener, on any PC, any source.
+It now returns `null` and the packet is not forwarded. The delta is **signed** (`| 0`), so a packet
+whose timestamp is not ahead of the last forwarded one (a burst packet arriving late, or a late real
+frame) is dropped too, instead of reading as a ~2^32 jump that fell back to 960 and rewound `prevTs`.
+The drop only covers up to **1s back**: further back is a sender clock reset and resyncs as one 20ms
+frame, because dropping it would make every packet "older" until the clock caught up, silencing the
+deep buffer for as long as the jump. Never observed (zero backward jumps in the 2026-11-13 tap); it is
+insurance for long shows.
+Every 100th drop is logged (`dropped same-or-older-timestamp rtp packets: N`), so a future Chrome
+change shows up in `logs/` as drops stopping, or as bumps with no drops.
+**Verified on a 16.5 min private broadcast 2026-11-13:** zero 5s cadence in the HLS (energy dips AND
+packet timestamps), drift <0.2%. The glitches that remained were all **host Wi-Fi upload loss before
+Cloudflare** (a 2.24s gap, a ~100ms cluster, 18 single 20ms losses): an independent raw-RTP tap saw
+identical gaps and the host dump's `remote-inbound` `packetsLost` jumped by 111 at the same second.
+No buffer downstream can repair that; the cure is the host's connection. Note the HLS carries such
+loss as PTS gaps (no concealment), so an energy-dip scan of decoded PCM cannot see it: check
+`ffprobe -show_entries packet=pts_time` on the concatenated `.ts`.
+
+**NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
+`cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and
+`.ts` objects are `immutable` for a year: phones that already fetched those names replay OLD audio
+(listeners jumped ~20 min back in the set). `start-restreamer.bat` auto-restarts a crashed process
+after 3s, so a crash triggers it too. Only END BROADCAST + GO LIVE (new `cfSessionId`, new prefix)
+clears it. The obvious fix, a per-run prefix, is NOT safe on its own: an independent review found
+that a `streamUrl` change with an unchanged `cfSessionId` leaves deep-buffer listeners **silent**
+(`useListenerTransport.ts` resets the phase to `webrtc` but WebRTC is still paused at volume 0, and
+the crossfade waits for `webrtc.playing`, which never comes). The same silence already happens today when
+`streamUrl` is cleared (Ctrl+C, ffmpeg exit). Both are one follow-up branch: per-run prefix +
+listener recovery on URL change/clear, tested on a Vercel preview with a screen-locked phone.
+**Closing the restreamer window does NOT clear `streamUrl`** (only Ctrl+C does, `index.mjs` SIGINT);
+listeners drop back to WebRTC through the 10s stall fallback instead. Verified live: 32s through the new code had
+zero holes while the HLS from the old code had one every 5.04s. **WebRTC listeners do not need a fix (measured 2026-11-13):**
+they get the same packets straight from the SFU, but a 15.5 min restreamer-OFF test on a phone heard
+no 5s cadence; the browser's jitter buffer discards same-timestamp duplicates. The only bumps heard
+tracked the phone's own `LOST` count on mobile data (22 -> 38) while the raw-RTP tap upstream lost
+0 of 46,961 packets. So the sender-side fix (stop Chrome emitting them, FROZEN publisher path) is not needed.
 
 **It keeps a log file now (`feat/restreamer-logfile`, 2026-08-21).** Every `log()` line is teed to `restreamer/logs/YYYY-MM-DD.log` by `restreamer/src/log.mjs`, one file per day, appended across restarts. The console window is invisible to a host who is not at that PC (the normal case, since GO LIVE is triggered from wherever they are DJing) and it dies with the process, so an unattended event used to leave no record at all: reconstructing a single host reconnect on 2026-08-21 took an R2 bucket listing plus a `Get-Process` start time. Grep for `GO LIVE`, `streamUrl published`, `ffmpeg exited`, `action error`. A log dir that cannot be written is abandoned permanently instead of retried, because a full disk must never take a live broadcast down, and a per-line retry would bury the console exactly when the host needs to read it. `logs/` is gitignored; the files hold no chat, no listener names and no keys, so they are safe to hand to someone helping.
 
