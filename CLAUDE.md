@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 43 tests as of 2026-11-13.
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 44 tests as of 2026-11-13.
 
 ---
 
@@ -491,8 +491,19 @@ the matching `headerBytesSent` spike every 5s. `makeRestamper` in `cfPull.mjs` u
 It now returns `null` and the packet is not forwarded. The delta is **signed** (`| 0`), so a packet
 whose timestamp is not ahead of the last forwarded one (a burst packet arriving late, or a late real
 frame) is dropped too, instead of reading as a ~2^32 jump that fell back to 960 and rewound `prevTs`.
+The drop only covers up to **1s back**: further back is a sender clock reset and resyncs as one 20ms
+frame, because dropping it would make every packet "older" until the clock caught up, silencing the
+deep buffer for as long as the jump. Never observed (zero backward jumps in the 2026-11-13 tap); it is
+insurance for long shows.
 Every 100th drop is logged (`dropped same-or-older-timestamp rtp packets: N`), so a future Chrome
 change shows up in `logs/` as drops stopping, or as bumps with no drops.
+**Verified on a 16.5 min private broadcast 2026-11-13:** zero 5s cadence in the HLS (energy dips AND
+packet timestamps), drift <0.2%. The glitches that remained were all **host Wi-Fi upload loss before
+Cloudflare** (a 2.24s gap, a ~100ms cluster, 18 single 20ms losses): an independent raw-RTP tap saw
+identical gaps and the host dump's `remote-inbound` `packetsLost` jumped by 111 at the same second.
+No buffer downstream can repair that; the cure is the host's connection. Note the HLS carries such
+loss as PTS gaps (no concealment), so an energy-dip scan of decoded PCM cannot see it: check
+`ffprobe -show_entries packet=pts_time` on the concatenated `.ts`.
 
 **NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
 `cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and

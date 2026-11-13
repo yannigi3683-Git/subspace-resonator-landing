@@ -52,3 +52,11 @@ test('a garbage forward jump still falls back to one 20ms frame', () => {
   const out = feed([1000, 1000 + 48000 * 6, 1000 + 48000 * 6 + 960]);
   assert.deepEqual(out.map((o) => o.ts), [0, 960, 1920]);
 });
+
+// Without this, a sender clock that steps back by N seconds would make every packet "older" for N
+// seconds, and the deep buffer would go silent for that long. More than 1s back is a reset, not a late packet.
+test('a backward clock jump of more than 1s resyncs instead of dropping everything after it', () => {
+  const back = 1000 + 48000 * 10;
+  const out = feed([back, back + 960, 1000, 1960]);
+  assert.deepEqual(out.map((o) => o && o.ts), [0, 960, 1920, 2880]);
+});

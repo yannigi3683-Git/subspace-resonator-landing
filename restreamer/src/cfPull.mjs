@@ -22,8 +22,8 @@ export function makeRestamper() {
     const orig = timestamp >>> 0;
     if (prevTs !== null) {
       let delta = (orig - prevTs) | 0;
-      if (delta <= 0) return null;
-      if (delta > 48000 * 5) delta = 960; // garbage forward jump -> assume one 20ms frame
+      if (delta <= 0 && delta >= -48000) return null; // duplicate or late packet
+      if (delta <= 0 || delta > 48000 * 5) delta = 960; // clock jumped (>1s back or >5s ahead): resync as one 20ms frame
       outTs = (outTs + delta) >>> 0;
     }
     prevTs = orig;
