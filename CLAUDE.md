@@ -505,6 +505,19 @@ No buffer downstream can repair that; the cure is the host's connection. Note th
 loss as PTS gaps (no concealment), so an energy-dip scan of decoded PCM cannot see it: check
 `ffprobe -show_entries packet=pts_time` on the concatenated `.ts`.
 
+**Mid-show restart fix BUILT, NOT YET LIVE-TESTED (`fix/restreamer-resume-numbering`, 2026-11-15).**
+Until the screen-locked phone test passes, the rule stays: never restart mid-show. `startFor` now
+calls `seedPlaylist` (`hls.mjs`) before ffmpeg starts: it fetches the prefix's live `stream.m3u8`
+from R2 into the new work dir, and the existing `append_list` flag makes ffmpeg continue the
+numbering (`stream211.ts` onward) behind an `#EXT-X-DISCONTINUITY`, so no name is ever reused and
+`streamUrl` does not change, which keeps the listener code untouched. A 404 (new show) or any fetch
+failure starts fresh and logs it. Verified offline with real ffmpeg (run 2 wrote stream6-9 after
+stream5, zero names reused). ffmpeg prints one `failed to delete old segment` warning per seeded
+entry on that restart: harmless, those files live in R2, not the new work dir. **Scope limit:** an
+ffmpeg-only death still goes through the `ffmpeg exit` handler, which CLEARS `streamUrl` and so hits
+the listener-side silence described below; closing/reopening the window or a whole-process crash
+(the `.bat` auto-restart) does not clear it. Original bug note follows.
+
 **NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
 `cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and
 `.ts` objects are `immutable` for a year: phones that already fetched those names replay OLD audio
