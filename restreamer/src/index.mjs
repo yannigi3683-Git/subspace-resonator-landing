@@ -10,7 +10,7 @@ import { join } from 'node:path';
 import { loadConfig } from './config.mjs';
 import { makeStationClient, watchStation, decideAction, setStreamUrl, fetchStation, hasStaleStreamUrl } from './station.mjs';
 import { negotiatePull } from './cfPull.mjs';
-import { startHls, rtpInputArgs } from './hls.mjs';
+import { startHls, rtpInputArgs, seedPlaylist } from './hls.mjs';
 import { makeCleanup, sweepStaleTempDirs, bringUp } from './cleanup.mjs';
 import { serveLocal } from './sink/local.mjs';
 import { startR2Sink } from './sink/r2.mjs';
@@ -61,6 +61,7 @@ async function startFor(cfSessionId) {
     `m=audio ${RTP_PORT} RTP/AVP ${pull.opusPt}`, `a=rtpmap:${pull.opusPt} opus/48000/2`,
   ].join('\n') + '\n';
   await writeFile(join(outDir, 'input.sdp'), sdp);
+  if (cfg.sink === 'r2') await seedPlaylist({ url: `${cfg.publicBaseUrl}/${cfSessionId}/stream.m3u8`, outDir, log });
 
   const ff = startHls({
     ffmpegPath: cfg.ffmpegPath,

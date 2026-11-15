@@ -29,7 +29,7 @@ Each feature is a first-class isolated unit: its own branch plus its own spec/pl
 - **react-helmet-async** — dynamic `<head>` tags (SEO, Open Graph)
 - **lucide-react** — icons (never use emoji as icons)
 - **Fonts:** Space Grotesk (headings), Inter (body), JetBrains Mono (mono/labels)
-- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 44 tests as of 2026-11-13.
+- **Test runner:** Vitest — all tests must pass before publishing; the count only grows, except when a feature is intentionally removed (2026-07-31 baseline: 60 files, 488 tests — the `api/importExtensions.test.ts` import guard on top of the 2026-07-30 deep-buffer status badge; GIFs were dropped earlier after Tenor's API shutdown, taking their 6 tests with them; 2026-09-10: 65 files, 558 tests; 2026-09-24: 67 files, 565 tests — `supabase/grants.test.ts` on top of work that had already moved the count to 66/559 without updating this line; 2026-10-11: 67 files, 576 tests — the host file-deck desync fix; 2026-10-12: 67 files, 579 tests — the host deck scrub bar). The restreamer has its own `node --test` suite (`cd restreamer && npm test`): 49 tests as of 2026-11-15 (on `fix/restreamer-resume-numbering`; master has 44).
 
 ---
 
@@ -505,7 +505,25 @@ No buffer downstream can repair that; the cure is the host's connection. Note th
 loss as PTS gaps (no concealment), so an energy-dip scan of decoded PCM cannot see it: check
 `ffprobe -show_entries packet=pts_time` on the concatenated `.ts`.
 
-**NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
+**A mid-show restart no longer replays old audio (`fix/restreamer-resume-numbering`, 2026-11-15).**
+Live-tested with a screen-locked phone on the deep buffer: three restarts (window closed and reopened,
+two process kills picked up by the `.bat` auto-restart). Every one logged `resuming existing playlist
+after streamN`, all 77 segments in R2 were uploaded once and in order (no name rewritten), and the
+locked phone recovered by itself each time: one bump for the ~13-22s gaps, a longer pause for a ~40s
+gap where the restreamer's FIRST Cloudflare pull never connected and hit the 20s `no HLS segments`
+timeout (old pull code, retried fine). A restart is now a short pause, not a jump back. `startFor` now
+calls `seedPlaylist` (`hls.mjs`) before ffmpeg starts: it fetches the prefix's live `stream.m3u8`
+from R2 into the new work dir, and the existing `append_list` flag makes ffmpeg continue the
+numbering (`stream211.ts` onward) behind an `#EXT-X-DISCONTINUITY`, so no name is ever reused and
+`streamUrl` does not change, which keeps the listener code untouched. A 404 (new show) or any fetch
+failure starts fresh and logs it. Verified offline with real ffmpeg (run 2 wrote stream6-9 after
+stream5, zero names reused). ffmpeg prints one `failed to delete old segment` warning per seeded
+entry on that restart: harmless, those files live in R2, not the new work dir. **Scope limit:** an
+ffmpeg-only death still goes through the `ffmpeg exit` handler, which CLEARS `streamUrl` and so hits
+the listener-side silence described below; closing/reopening the window or a whole-process crash
+(the `.bat` auto-restart) does not clear it. Original bug note follows, kept for the history.
+
+**(FIXED 2026-11-15, above) Mid-show restart replayed old audio (found 2026-11-12).** The R2 prefix is the host
 `cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and
 `.ts` objects are `immutable` for a year: phones that already fetched those names replay OLD audio
 (listeners jumped ~20 min back in the set). `start-restreamer.bat` auto-restarts a crashed process

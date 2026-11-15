@@ -4,6 +4,30 @@
 // played ~3x slow); mpegts AAC is rock-solid, plays natively on iOS AND via hls.js, and was the
 // format the original spike decoded clean. Deep buffer lives on the CLIENT (hls.js/native config).
 import { spawn } from 'node:child_process';
+import { writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
+
+// A restart inside the same show reuses the R2 prefix (the host cfSessionId). Fresh, ffmpeg would
+// rewrite stream0.ts.., and phones replay their immutable cached copies of those names (listeners
+// jumped ~20 min back, 2026-11-12). Seeding the live playlist lets `append_list` continue the
+// numbering and mark a discontinuity. Segments uploaded after the last playlist PUT may be
+// overwritten, but no playlist ever referenced them, so no phone fetched them. Any failure starts
+// fresh: a deep buffer that might replay beats one that never comes up.
+export async function seedPlaylist({ url, outDir, fetchImpl = fetch, log = () => {} }) {
+  try {
+    const res = await fetchImpl(`${url}?cb=${Date.now()}`, { cache: 'no-store', signal: AbortSignal.timeout(5000) });
+    if (!res.ok) return null;
+    const body = await res.text();
+    const last = body.startsWith('#EXTM3U') && body.trim().split('\n').filter((l) => l.trim().endsWith('.ts')).at(-1);
+    if (!last) return null;
+    await writeFile(join(outDir, 'stream.m3u8'), body);
+    log('resuming existing playlist after', last.trim());
+    return last.trim();
+  } catch (e) {
+    log('seed playlist failed, numbering from 0 (a mid-show restart may replay old audio):', e.message);
+    return null;
+  }
+}
 
 // RTP-from-SDP input flags. cfPull re-stamps the RTP with clean monotonic sequence numbers and
 // timestamps, so ffmpeg can use them directly (no genpts/wallclock hacks needed).
