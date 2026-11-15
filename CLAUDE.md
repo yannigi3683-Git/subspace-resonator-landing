@@ -505,8 +505,13 @@ No buffer downstream can repair that; the cure is the host's connection. Note th
 loss as PTS gaps (no concealment), so an energy-dip scan of decoded PCM cannot see it: check
 `ffprobe -show_entries packet=pts_time` on the concatenated `.ts`.
 
-**Mid-show restart fix BUILT, NOT YET LIVE-TESTED (`fix/restreamer-resume-numbering`, 2026-11-15).**
-Until the screen-locked phone test passes, the rule stays: never restart mid-show. `startFor` now
+**A mid-show restart no longer replays old audio (`fix/restreamer-resume-numbering`, 2026-11-15).**
+Live-tested with a screen-locked phone on the deep buffer: three restarts (window closed and reopened,
+two process kills picked up by the `.bat` auto-restart). Every one logged `resuming existing playlist
+after streamN`, all 77 segments in R2 were uploaded once and in order (no name rewritten), and the
+locked phone recovered by itself each time: one bump for the ~13-22s gaps, a longer pause for a ~40s
+gap where the restreamer's FIRST Cloudflare pull never connected and hit the 20s `no HLS segments`
+timeout (old pull code, retried fine). A restart is now a short pause, not a jump back. `startFor` now
 calls `seedPlaylist` (`hls.mjs`) before ffmpeg starts: it fetches the prefix's live `stream.m3u8`
 from R2 into the new work dir, and the existing `append_list` flag makes ffmpeg continue the
 numbering (`stream211.ts` onward) behind an `#EXT-X-DISCONTINUITY`, so no name is ever reused and
@@ -516,9 +521,9 @@ stream5, zero names reused). ffmpeg prints one `failed to delete old segment` wa
 entry on that restart: harmless, those files live in R2, not the new work dir. **Scope limit:** an
 ffmpeg-only death still goes through the `ffmpeg exit` handler, which CLEARS `streamUrl` and so hits
 the listener-side silence described below; closing/reopening the window or a whole-process crash
-(the `.bat` auto-restart) does not clear it. Original bug note follows.
+(the `.bat` auto-restart) does not clear it. Original bug note follows, kept for the history.
 
-**NEVER restart the restreamer mid-show (open bug, found 2026-11-12).** The R2 prefix is the host
+**(FIXED 2026-11-15, above) Mid-show restart replayed old audio (found 2026-11-12).** The R2 prefix is the host
 `cfSessionId`, so a restart in the same show reuses it, ffmpeg renumbers from `stream0.ts`, and
 `.ts` objects are `immutable` for a year: phones that already fetched those names replay OLD audio
 (listeners jumped ~20 min back in the set). `start-restreamer.bat` auto-restarts a crashed process

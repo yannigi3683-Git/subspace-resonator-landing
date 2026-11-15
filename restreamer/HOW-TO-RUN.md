@@ -183,11 +183,12 @@ badge shows `STALLED`.
   listeners on the deep buffer wait about 10-25 seconds for it to go stale, then drop back to plain
   WebRTC by themselves. (Pressing Ctrl+C in the window does clear it, but listeners already on the
   deep buffer can then go silent until they tap. That is a known bug, being fixed separately.)
-- **Do not close and reopen the window during a show.** A restart mid-show reuses the same file
-  names, and phones that already played those names replay OLD audio (on 2026-11-12 listeners jumped
-  20 minutes back in the set). Only END BROADCAST + GO LIVE clears it. Until that is fixed: open the
-  window before GO LIVE, close it after END BROADCAST, and leave it alone in between. If it closes by
-  itself mid-show, leave it closed: listeners keep hearing you on plain WebRTC, which beats a replay.
+- **Restarting mid-show is safe now (fixed 2026-11-15).** If the window closes by accident, or the
+  program crashes and restarts itself, just double-click `start-restreamer.bat` again (or let it
+  restart). It picks up where it left off (`resuming existing playlist after streamN` in the log), and
+  listeners hear a short pause, not old music. Before this fix a restart replayed audio from up to 20
+  minutes earlier. Still the best habit: open the window before GO LIVE and leave it alone until after
+  END BROADCAST, because every restart costs listeners a pause of 10-40 seconds.
 - **If your internet drops mid-show**, the window logs `ffmpeg exited 0 - will restart on next poll`
   and then goes quiet. That is normal. Sound stops within a second, but the console waits about 25
   seconds before it accepts the connection is really gone. Once your internet is back the console
