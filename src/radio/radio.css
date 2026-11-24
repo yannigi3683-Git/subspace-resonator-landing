@@ -117,6 +117,8 @@
   box-shadow: 0 0 28px rgba(38, 198, 218, 0.25), inset 0 0 14px rgba(123, 47, 190, 0.18);
 }
 @keyframes radio-spin { to { transform: rotate(360deg); } }
+@keyframes radio-hybrid-spin { to { transform: rotate(360deg); } }
+.radio-hybrid-spin { animation: radio-hybrid-spin 40s linear infinite; }
 .radio-spin { animation: radio-spin 3.5s linear infinite; }
 
 @keyframes radio-eq { 0%, 100% { height: 22%; } 50% { height: 100%; } }
@@ -190,6 +192,7 @@
   .radio-stars,
   .radio-aurora,
   .radio-spin,
+  .radio-hybrid-spin,
   .radio-eq,
   .radio-pulse,
   .radio-spot,

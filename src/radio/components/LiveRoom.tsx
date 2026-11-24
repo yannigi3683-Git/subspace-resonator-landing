@@ -9,7 +9,7 @@ import { usePresence } from '../hooks/usePresence';
 import { useModeration } from '../hooks/useModeration';
 import { useListenerTransport } from '../hooks/useListenerTransport';
 import { useNowPlaying } from '../hooks/useNowPlaying';
-import { DanceFloor } from './DanceFloor';
+import { HybridDanceFloor } from './HybridDanceFloor';
 import { Chat } from './Chat';
 import { ChatInput } from './ChatInput';
 import { PresenceList } from './PresenceList';
@@ -90,7 +90,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
       {/* Stage panel */}
       <div className={`${mobileTab === 'stage' ? 'flex' : 'hidden'} md:flex flex-1 min-h-0 relative flex-col`}>
         <div className="flex-1 relative min-h-0">
-          <DanceFloor
+          <HybridDanceFloor
             presenceList={presenceList}
             station={station}
             uid={uid}

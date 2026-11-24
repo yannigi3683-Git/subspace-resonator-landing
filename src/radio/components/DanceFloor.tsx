@@ -439,7 +439,7 @@ export function DanceFloor({
 }
 
 // The host's on-stage presence: a glowing entity wearing headphones (cyan/purple).
-function BroadcasterAvatar({ live }: { live: boolean }) {
+export function BroadcasterAvatar({ live }: { live: boolean }) {
   return (
     <svg
       viewBox="0 0 80 80"

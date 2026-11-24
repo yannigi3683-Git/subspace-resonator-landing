@@ -40,7 +40,7 @@ vi.mock('../hooks/useListenerTransport', () => ({
     transportInfo: { phase: 'webrtc', hlsAvailable: false, hlsReady: false, hlsBufferedAhead: 0 },
   }),
 }));
-vi.mock('./DanceFloor', () => ({ DanceFloor: () => <div data-testid="dance-floor" /> }));
+vi.mock('./HybridDanceFloor', () => ({ HybridDanceFloor: () => <div data-testid="dance-floor" /> }));
 
 const identity: Identity = { name: 'Yanni', avatarId: 'nebula', deviceId: 'dev-1', position: { x: 1, y: 2 } };
 const station: Station = {
