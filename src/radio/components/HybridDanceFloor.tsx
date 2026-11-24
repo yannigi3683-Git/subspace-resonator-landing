@@ -29,10 +29,11 @@ const CROWD_HARD_CAP = 200;
 // otherwise names pile up and clip at the screen edges.
 export const HYBRID_AVATAR_MIN = 14;
 export const HYBRID_AVATAR_BASE = 44;
-export const HYBRID_LABEL_MIN_W = 56;
+export const HYBRID_LABEL_MIN_W = 46;
 export const HYBRID_LABEL_MAX_W = 84;
-// The simulation pushes neighbours apart below radius * 1.7 * 2 = labelW * 1.19 at this radius.
-const LABEL_RADIUS_FRACTION = 0.35;
+// The simulation pushes neighbours apart below radius * 1.7 * 2 = labelW * 1.02 at this radius:
+// names may brush but not stack, which keeps names on screen for about twice the crowd.
+const LABEL_RADIUS_FRACTION = 0.3;
 const SEPARATION_PER_LABEL_W = LABEL_RADIUS_FRACTION * 1.7 * 2;
 const NAMED_CELL_PX = Math.ceil(HYBRID_LABEL_MIN_W * SEPARATION_PER_LABEL_W);
 const DOT_CELL_PX = Math.ceil(HYBRID_AVATAR_MIN / 0.6);
