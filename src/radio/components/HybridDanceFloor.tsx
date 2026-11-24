@@ -18,7 +18,10 @@ function hashUid(uid: string): number {
 
 const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n));
 
-const CONTROLS_GUTTER_PX = 64;
+// Desktop floats the volume pill over the bottom of the floor. Below md it is its own row under
+// the floor, so phones only need room for half a tile (the name under the lowest avatar).
+export const CONTROLS_GUTTER_PX = 64;
+export const PHONE_GUTTER_PX = 24;
 const CROWD_HARD_CAP = 200;
 
 // Names never drop in this look: the avatar and the name's width are what shrink. The crowd
@@ -74,14 +77,14 @@ const REGION_SIDE_MARGIN = 0.03;
 // Status row, console and the DJ on the riser: fixed-height elements, so px rather than a fraction.
 const STAGE_BOTTOM_PX = 210;
 
-export function hybridCrowdRegion(boxW: number, boxH: number) {
+export function hybridCrowdRegion(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX) {
   const x0 = boxW * REGION_SIDE_MARGIN;
   const y0 = Math.max(boxH * REGION_TOP_FRACTION, STAGE_BOTTOM_PX);
-  return { x0, y0, x1: boxW - x0, y1: Math.max(y0 + MIN_CELL_PX, boxH - CONTROLS_GUTTER_PX) };
+  return { x0, y0, x1: boxW - x0, y1: Math.max(y0 + MIN_CELL_PX, boxH - gutter) };
 }
 
-function usableFloorPx(boxW: number, boxH: number): number {
-  const r = hybridCrowdRegion(boxW, boxH);
+function usableFloorPx(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX): number {
+  const r = hybridCrowdRegion(boxW, boxH, gutter);
   const viz = hybridVizCircle(boxW);
   const blocked = hybridObstacleRects(boxW, boxH).reduce((sum, o) => {
     const w = Math.max(0, Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0));
@@ -91,8 +94,8 @@ function usableFloorPx(boxW: number, boxH: number): number {
   return Math.max(1, (r.x1 - r.x0) * (r.y1 - r.y0) - blocked);
 }
 
-export function hybridCrowdCapacity(boxW: number, boxH: number): number {
-  return Math.max(1, Math.min(Math.floor(usableFloorPx(boxW, boxH) / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
+export function hybridCrowdCapacity(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX): number {
+  return Math.max(1, Math.min(Math.floor(usableFloorPx(boxW, boxH, gutter) / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
 }
 
 /**
@@ -100,11 +103,11 @@ export function hybridCrowdCapacity(boxW: number, boxH: number): number {
  * fills; the name itself is always rendered. The region is inset by half a name so the widest
  * label can never be pushed off either side of the screen.
  */
-export function hybridLayout(total: number, boxW: number, boxH: number) {
-  const per = Math.sqrt(usableFloorPx(boxW, boxH) / Math.max(1, total));
+export function hybridLayout(total: number, boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX) {
+  const per = Math.sqrt(usableFloorPx(boxW, boxH, gutter) / Math.max(1, total));
   const labelW = Math.round(clamp(0.7 * per, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W));
   const size = Math.round(clamp(0.6 * per, HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE));
-  const base = hybridCrowdRegion(boxW, boxH);
+  const base = hybridCrowdRegion(boxW, boxH, gutter);
   const inset = Math.max(boxW * REGION_SIDE_MARGIN, labelW / 2 + 2);
   return {
     size,
@@ -158,6 +161,13 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
   const live = station?.mode === 'live';
   const floorRef = useRef<HTMLDivElement>(null);
   const box = useMeasuredSize(floorRef);
+  // ponytail: read once at mount, a phone does not cross md mid-show; a resize listener if that changes.
+  const gutter = useMemo(
+    () => (typeof window !== 'undefined' && window.matchMedia?.('(min-width: 768px)').matches === false
+      ? PHONE_GUTTER_PX
+      : CONTROLS_GUTTER_PX),
+    [],
+  );
 
   const [, forceTick] = useState(0);
   const now = Date.now();
@@ -168,9 +178,9 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
     return () => clearInterval(id);
   }, [anyCheer]);
 
-  const cap = hybridCrowdCapacity(box.w, box.h);
+  const cap = hybridCrowdCapacity(box.w, box.h, gutter);
   const shown = Math.min(roster.length, cap);
-  const tile = hybridLayout(shown, box.w, box.h);
+  const tile = hybridLayout(shown, box.w, box.h, gutter);
   const overflow = Math.max(0, roster.length - cap);
   const visible = isGhost
     ? GHOST_ENTRIES
@@ -221,6 +231,11 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
           <span className="pixel text-[10px] text-[#FFB84D] ml-2" data-testid="aboard">
             ABOARD {String(roster.length).padStart(2, '0')}
           </span>
+          {overflow > 0 && (
+            <span className="pixel text-[10px] text-white/50" data-testid="crowd-overflow">
+              +{overflow} in the crowd
+            </span>
+          )}
         </div>
 
         <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md radio-booth-glow w-full">
@@ -241,7 +256,7 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
           )}
           <BroadcasterAvatar live={live} />
           <div className="radio-riser w-24 h-3 -mt-1" aria-hidden="true" />
-          <span className="pixel text-[10px] text-[#FF00AA] mt-0.5">
+          <span className="pixel text-[10px] text-[#FF00AA] mt-0.5 px-1.5 py-0.5 rounded bg-black/70">
             {live ? 'LIVE DJ' : 'OFF AIR'}{live && <span className="pixel-blink">_</span>}
           </span>
         </div>
@@ -297,11 +312,6 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
         );
       })}
 
-      {overflow > 0 && (
-        <div className="absolute z-[6] bottom-2 inset-x-0 flex justify-center pointer-events-none">
-          <span className="pixel text-[10px] text-white/50">+{overflow} in the crowd</span>
-        </div>
-      )}
     </div>
   );
 }

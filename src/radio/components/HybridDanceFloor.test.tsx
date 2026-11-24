@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   HybridDanceFloor, hybridCrowdCapacity, hybridLayout, hybridObstacleRects,
-  HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W,
+  HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W, PHONE_GUTTER_PX,
 } from './HybridDanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
@@ -50,6 +50,10 @@ describe('hybrid crowd sizing', () => {
 
   it('holds a real crowd on a phone', () => {
     expect(hybridCrowdCapacity(390, 780)).toBeGreaterThan(40);
+  });
+
+  it('gives phones the floor the desktop volume pill would cover', () => {
+    expect(hybridCrowdCapacity(390, 724, PHONE_GUTTER_PX)).toBeGreaterThan(hybridCrowdCapacity(390, 724));
   });
 });
 

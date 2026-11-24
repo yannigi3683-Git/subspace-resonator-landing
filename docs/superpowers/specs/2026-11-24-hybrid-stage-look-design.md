@@ -26,9 +26,13 @@ name's width shrink instead.
   under the avatar (`labelW * 0.35`), not only the avatar, otherwise names pile up.
 - The roaming region is inset by half a name on each side so the widest label can never be pushed
   off screen. The simulation clamps tile centres to the region, not tile edges.
-- Capacity is therefore set by names fitting (`MIN_CELL_PX`), not by the 12px avatar floor. At
-  390x780 that is about 47 listeners; beyond it the floor shows `+N in the crowd`. Wide desktop
-  floors still reach the 200 cap.
+- Capacity is therefore set by names fitting (`MIN_CELL_PX`), not by the 12px avatar floor. On a
+  390px phone (floor 724px tall) that is about 54 listeners; beyond it the status row shows
+  `+N in the crowd` beside `ABOARD`. A 960x800 desktop floor holds about 136, not 200.
+- Phones reserve only `PHONE_GUTTER_PX` (24px, half a tile) at the bottom of the floor, desktop
+  `CONTROLS_GUTTER_PX` (64px). Below md the volume control is its own row under the floor, so the
+  bigger gutter only made sense where the pill floats over it. Read once at mount via `matchMedia`.
+- `LIVE DJ` sits on a dark pill: bare, the pink text vanished into the flower's pink rings.
 - `obstacleRects` in `DanceFloor` returns nothing below 400px because the old floor hid the PAs
   there. `hybridObstacleRects` always returns both stacks, mirroring the 76/150/210px widths in the
   JSX. If those widths change, change both.
