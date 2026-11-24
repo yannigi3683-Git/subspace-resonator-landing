@@ -9,11 +9,16 @@ interface NowPlayingProps {
   neon?: boolean;
 }
 
+const DEFAULT_TITLE = 'Subspace Radio Live';
+
 export function NowPlaying({ station, nowPlaying, neon = false }: NowPlayingProps) {
   const stationTitle = station?.live_title ?? null;
   const track = nowPlaying?.name?.trim() ? nowPlaying.name : null;
   // Banner subtitle: normally the station title; peeks the current track name for 15s/min.
-  const text = nowPlaying?.visible && track ? track : stationTitle;
+  const shown = nowPlaying?.visible && track ? track : stationTitle;
+  // The stage already has the station name in its title row, so the neon box says LIVE DJ instead
+  // of repeating the default title. A custom show title (or a track) still shows.
+  const text = neon && (!shown || shown.trim().toLowerCase() === DEFAULT_TITLE.toLowerCase()) ? 'LIVE DJ' : shown;
   // Lock-screen metadata prefers the live track name when known, else the station title.
   const mediaTitle = track ?? stationTitle;
 

@@ -65,6 +65,9 @@ reverts those parts to the original floor and keeps the rest.
 
 - **Station title row** at the top: `SUBSPACE RESONATOR` white + `LIVE RADIO` cyan with a glow
   (`radio-title-glow`), above the On Air / ABOARD row.
+- **No duplicate name:** the neon box says `LIVE DJ` when the title is the default
+  `Subspace Radio Live` (or empty), because the title row already says it. A custom show title
+  or a peeking track still shows.
 - **Bigger PA stacks:** 120 / 170 / 230px (phone / sm / lg), at `top-[64px]`. `paWidthPx` mirrors it.
 - **The names-always rule is REVERSED by the owner.** Testing showed only ~25 avatars on a real phone,
   and the owner wants 30-40+ visible. Names now show only while each listener has room for one
