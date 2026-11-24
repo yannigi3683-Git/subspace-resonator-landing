@@ -12,6 +12,15 @@ const liveStation: Station = {
 };
 
 describe('NowPlaying', () => {
+  it('neon: says LIVE DJ instead of repeating the default station title, keeps a custom one', () => {
+    const { unmount } = render(<NowPlaying station={{ ...liveStation, live_title: 'Subspace Radio Live' }} neon />);
+    expect(screen.getByText('LIVE DJ')).toBeInTheDocument();
+    expect(screen.queryByText('Subspace Radio Live')).not.toBeInTheDocument();
+    unmount();
+    render(<NowPlaying station={liveStation} neon />);
+    expect(screen.getByText('Subspace Theory B2B GaiaX')).toBeInTheDocument();
+  });
+
   it('shows dash/placeholder when station is null', () => {
     render(<NowPlaying station={null} />);
     expect(screen.getByText('-')).toBeInTheDocument();

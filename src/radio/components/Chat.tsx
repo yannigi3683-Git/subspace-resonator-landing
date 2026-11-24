@@ -3,7 +3,7 @@ import { Reply, Shield, SmilePlus } from 'lucide-react';
 import type { ChatMessage } from '../types';
 import type { ReactionSummary } from '../chatRules';
 import { REACTIONS } from '../emojiSet';
-import { Avatar } from './Avatar';
+import { getAvatar } from '../avatars';
 
 export interface ChatModeration {
   onDelete: (msg: ChatMessage) => void;
@@ -35,25 +35,18 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
   }, [messages.length]);
 
   return (
-    <div className="flex flex-col gap-2 overflow-y-auto flex-1 px-3 py-2" aria-label="Chat messages" aria-live="polite">
+    <div className="flex flex-col gap-2 overflow-y-auto flex-1 px-4 py-2.5" aria-label="Chat messages" aria-live="polite">
       {messages.map((msg) => {
         const pills = reactions?.[msg.id] ?? [];
+        const color = getAvatar(msg.avatar_id).color;
         return (
-          <div key={msg.id} className="group flex items-start gap-2 text-sm">
-            <Avatar
-              avatarId={msg.avatar_id}
-              size={24}
-              label={msg.display_name}
-              className="flex-shrink-0 mt-0.5"
-            />
+          // A card per message, striped and named in the sender's avatar colour, so a reader can
+          // follow one person down a fast chat without reading the names.
+          <div key={msg.id} className="group flex items-stretch text-sm">
+            <div className="w-1.5 shrink-0" style={{ background: color }} aria-hidden="true" />
+            <div className="flex-1 min-w-0 flex items-start gap-1 bg-[#0E0B22] pl-3 pr-1 pt-1.5 pb-2">
             <div className="flex-1 min-w-0">
-              {msg.reply_to_name && (
-                <div className="border-l-2 border-[#7B2FBE]/60 pl-2 mb-0.5 text-[11px] text-[#888] truncate">
-                  <span className="text-[#a875d8]">{msg.reply_to_name}</span>
-                  {msg.reply_to_body ? <span className="ml-1">{msg.reply_to_body}</span> : null}
-                </div>
-              )}
-              <span className="font-mono text-[13px] text-[#aaa] mr-1">
+              <span className="font-mono text-[11px] mr-1" style={{ color }}>
                 {msg.display_name}
               </span>
               {msg.is_host && (
@@ -61,11 +54,16 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
                   HOST
                 </span>
               )}
+              {msg.reply_to_name && (
+                <div className="mt-0.5 text-[12px] text-[#B9B4D6] truncate" dir="auto">
+                  RE: <bdi>{msg.reply_to_name}</bdi>:{msg.reply_to_body ? <> <bdi>{msg.reply_to_body}</bdi></> : null}
+                </div>
+              )}
               {/* SECURITY: msg.body is rendered as text content, never as HTML */}
               {/* dir="auto" flips Hebrew to RTL per-message; Latin stays LTR (native, no detection) */}
-              <span dir="auto" className="font-mono text-white text-[14px] break-words">
+              <p dir="auto" className="font-sans text-white text-[16px] leading-snug break-words">
                 {msg.body}
-              </span>
+              </p>
 
               {onToggleReaction && (pills.length > 0 || reactOpenFor === msg.id) && (
                 <div className="flex flex-wrap items-center gap-1 mt-1">
@@ -75,7 +73,7 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
                       type="button"
                       onClick={() => onToggleReaction(msg.id, p.emoji)}
                       aria-label={`${p.mine ? 'Remove' : 'Add'} ${p.emoji} reaction (${p.count})`}
-                      className={`flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[11px] border transition-colors ${
+                      className={`flex items-center justify-center gap-1 px-2.5 min-h-[44px] min-w-[44px] rounded-full text-[12px] border transition-colors ${
                         p.mine
                           ? 'bg-[#7B2FBE]/30 border-[#7B2FBE] text-white'
                           : 'bg-white/5 border-white/10 text-[#ccc] hover:border-[#7B2FBE]'
@@ -95,7 +93,7 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
                           setReactOpenFor(null);
                         }}
                         aria-label={`React with ${e}`}
-                        className="w-6 h-6 flex items-center justify-center rounded-full text-sm hover:bg-[#7B2FBE]/40"
+                        className="w-11 h-11 flex items-center justify-center rounded-full text-lg hover:bg-[#7B2FBE]/40"
                       >
                         {e}
                       </button>
@@ -138,7 +136,7 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
               )}
             </div>
 
-            <div className="flex-shrink-0 mt-0.5 flex flex-col items-center gap-0.5">
+            <div className="flex-shrink-0 flex items-start">
               {moderation && (
                 <button
                   type="button"
@@ -159,9 +157,9 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
                   type="button"
                   onClick={() => onReply(msg)}
                   aria-label={`Reply to ${msg.display_name}`}
-                  className="p-1 text-[#666] rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[#a875d8] transition-opacity max-md:opacity-60"
+                  className="w-11 h-11 flex items-center justify-center text-[#8F8AA8] rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-white transition-opacity max-md:opacity-80"
                 >
-                  <Reply size={14} />
+                  <Reply size={16} />
                 </button>
               )}
               {onToggleReaction && (
@@ -170,11 +168,12 @@ export function Chat({ messages, onReply, reactions, onToggleReaction, moderatio
                   onClick={() => setReactOpenFor((cur) => (cur === msg.id ? null : msg.id))}
                   aria-label={`React to ${msg.display_name}'s message`}
                   aria-expanded={reactOpenFor === msg.id}
-                  className="p-1 text-[#666] rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-[#a875d8] transition-opacity max-md:opacity-60"
+                  className="w-11 h-11 flex items-center justify-center text-[#8F8AA8] rounded opacity-0 group-hover:opacity-100 focus:opacity-100 hover:text-white transition-opacity max-md:opacity-80"
                 >
-                  <SmilePlus size={14} />
+                  <SmilePlus size={16} />
                 </button>
               )}
+            </div>
             </div>
           </div>
         );
