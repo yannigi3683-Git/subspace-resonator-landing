@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import type { SubscriberStats } from '../rtc/subscriber';
-import { Volume2, Music2, MessageSquare, Lock } from 'lucide-react';
+import { Volume2, Lock } from 'lucide-react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import type { ChatMessage, Identity, Station } from '../types';
 import { useChat } from '../hooks/useChat';
@@ -139,7 +139,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
           {/* Desktop keeps the floating pill; on a phone it sat on top of the dancers, so there
               it becomes its own row below the floor (see after this panel) instead. */}
           {playing && (
-            <div className="hidden md:flex absolute bottom-4 left-4 z-20 items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-4 py-2">
+            <div className="hidden md:flex short:!hidden absolute bottom-4 left-4 z-20 items-center gap-2 max-w-[calc(100%-2rem)] rounded-full border border-white/10 bg-black/60 backdrop-blur-md pl-3 pr-1.5 py-1.5">
               <span className="w-2 h-2 bg-[#FF0033] pixel-blink shrink-0" aria-hidden="true" />
               <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
               <input
@@ -150,8 +150,9 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
                 value={volume}
                 onChange={(e) => setVolume(Number(e.target.value))}
                 aria-label="Volume"
-                className="w-24 sm:w-32 accent-primary"
+                className="w-24 sm:w-32 h-11 accent-[#26C6DA]"
               />
+              <CheerButton onCheer={cheer} />
             </div>
           )}
 
@@ -206,7 +207,7 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
             absolute pill it covered the dancers in the bottom-left corner, and the floor has no
             spare corner to give once the crowd roams the whole space. */}
         {playing && (
-          <div className="flex md:hidden shrink-0 items-center gap-3 px-4 py-2 border-t border-[#1a1a2e] bg-[#0a0010]">
+          <div className="flex md:hidden short:!flex shrink-0 items-center gap-3 px-4 py-2 border-t border-[#1a1a2e] bg-[#0a0010]">
             <Volume2 className="w-4 h-4 text-white/70 shrink-0" aria-hidden="true" strokeWidth={1.5} />
             <input
               type="range"
@@ -216,23 +217,26 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
               value={volume}
               onChange={(e) => setVolume(Number(e.target.value))}
               aria-label="Volume"
-              className="flex-1 accent-primary"
+              className="flex-1 min-w-0 h-11 accent-[#26C6DA]"
             />
+            <CheerButton onCheer={cheer} />
           </div>
         )}
       </div>
 
       {/* Chat sidebar — full screen on mobile when chat tab active */}
       <div className={`${mobileTab === 'chat' ? 'flex' : 'hidden'} md:flex w-full md:w-80 flex-1 md:flex-none min-h-0 flex-col border-t md:border-t-0 md:border-l border-[#1a1a2e] bg-[#0a0010]`}>
-        <div className="px-3 py-2 border-b border-[#1a1a2e] flex items-center gap-2">
-          <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest flex-1">Chat</p>
+        <div className="px-4 py-2 border-b border-[#1a1a2e] flex items-center gap-2">
+          <span className="w-2 h-2 bg-[#FF0033] shrink-0" aria-hidden="true" />
+          <p className="pixel text-[10px] text-white flex-1">CHAT</p>
+          <span className="pixel text-[10px] text-[#FFB84D]">ABOARD {String(count).padStart(2, '0')}</span>
           {!moderation.canModerate && (
             <button
               type="button"
               onClick={() => setHostLoginOpen(true)}
               aria-label="Host sign in"
               data-testid="host-login-trigger"
-              className="w-11 h-11 -my-2 flex items-center justify-center text-[#2a2a3e] hover:text-[#555] transition-colors"
+              className="w-11 h-11 -my-2 flex items-center justify-center text-[#6b6890] hover:text-white transition-colors"
             >
               <Lock size={12} />
             </button>
@@ -302,9 +306,6 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
           disabled={station.locked && !moderation.canModerate}
           replyTo={replyTo}
           onCancelReply={() => setReplyTo(null)}
-          // Deliberately not gated on `station.locked`: a locked chat silences typing, not the
-          // room's mood, and the cheer carries no text to moderate.
-          onCheer={cheer}
         />
       </div>
 
@@ -316,33 +317,48 @@ export function LiveRoom({ supabase, identity, uid, station, onIdentityChange, o
         <button
           type="button"
           onClick={() => setMobileTab('stage')}
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 font-mono text-[10px] tracking-widest transition-colors ${
-            mobileTab === 'stage' ? 'text-[#26C6DA]' : 'text-white/40'
+          className={`flex-1 h-16 flex items-center justify-center pixel text-[10px] border-t-[3px] transition-colors ${
+            mobileTab === 'stage' ? 'text-[#26C6DA] border-[#26C6DA]' : 'text-[#8F8AA8] border-transparent'
           }`}
         >
-          <Music2 className="w-5 h-5" aria-hidden="true" strokeWidth={1.5} />
           STAGE
         </button>
         <button
           type="button"
           onClick={() => { setMobileTab('chat'); setUnread(0); }}
-          className={`flex-1 flex flex-col items-center justify-center gap-1 py-3 font-mono text-[10px] tracking-widest transition-colors relative ${
-            mobileTab === 'chat' ? 'text-[#7B2FBE]' : 'text-white/40'
+          className={`flex-1 h-16 flex items-center justify-center gap-2 pixel text-[10px] border-t-[3px] transition-colors ${
+            mobileTab === 'chat' ? 'text-[#FFB84D] border-[#FFB84D]' : 'text-[#8F8AA8] border-transparent'
           }`}
         >
-          <span className="relative">
-            <MessageSquare className="w-5 h-5" aria-hidden="true" strokeWidth={1.5} />
-            {unread > 0 && (
-              <span className="absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#7B2FBE] text-white text-[9px] flex items-center justify-center font-bold">
-                {unread > 9 ? '9+' : unread}
-              </span>
-            )}
-          </span>
           CHAT
+          {unread > 0 && (
+            <span className="bg-[#FFB84D] text-[#0A0010] px-1.5 py-1 text-[10px]">
+              {unread > 9 ? '9+' : unread} NEW
+            </span>
+          )}
         </button>
       </div>
 
       {hostLoginOpen && <HostLoginSheet supabase={supabase} onClose={() => setHostLoginOpen(false)} />}
     </div>
+  );
+}
+
+// The cheer lives on the stage, beside the volume, so a listener watching the crowd can cheer
+// without switching to chat. Not on the avatar itself: at crowd scale a tile is near 14px, far
+// under the 44px touch target. Not gated on `station.locked`: a locked chat silences typing,
+// not the room's mood, and a cheer carries no text to moderate.
+function CheerButton({ onCheer }: { onCheer: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onCheer}
+      aria-label="Cheer"
+      title="Light up your avatar on the dance floor"
+      data-testid="cheer-btn"
+      className="shrink-0 h-11 px-3.5 rounded-[10px] border border-[#FF4FC3] bg-[#2A0B26] text-[#FFC4EC] pixel text-[10px] hover:bg-[#3d1036] transition-colors"
+    >
+      CHEER
+    </button>
   );
 }

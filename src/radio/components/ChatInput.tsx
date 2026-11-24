@@ -1,5 +1,5 @@
 import { useState, useCallback, useRef, useEffect } from 'react';
-import { Smile, Sparkles, X } from 'lucide-react';
+import { Smile, X } from 'lucide-react';
 import { formatSlowModeRemaining } from '../chatRules';
 import { EMOJI } from '../emojiSet';
 import type { ChatMessage } from '../types';
@@ -12,17 +12,11 @@ interface ChatInputProps {
   disabled?: boolean;
   replyTo?: ChatMessage | null;
   onCancelReply?: () => void;
-  /**
-   * Pulse this listener's avatar on the dance floor for everyone to see. Lives here rather than
-   * on the avatar itself: at crowd scale a tile is near the 16px floor, well under the 44px
-   * touch-target minimum, so tapping your own dot is not reliably hittable.
-   */
-  onCheer?: () => void;
 }
 
 const MAX_BODY = 500;
 
-export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply, onCheer }: ChatInputProps) {
+export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0, disabled = false, replyTo = null, onCancelReply }: ChatInputProps) {
   const [value, setValue] = useState('');
   const [emojiOpen, setEmojiOpen] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
@@ -110,22 +104,10 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
             onClick={() => setEmojiOpen((o) => !o)}
             aria-label="Insert emoji"
             aria-expanded={emojiOpen}
-            className="flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg min-w-[44px] min-h-[44px] disabled:opacity-40 hover:text-white hover:border-[#7B2FBE] transition-colors"
+            className="flex items-center justify-center bg-[#0E0B22] border border-[#2B2550] text-[#B9B4D6] rounded-[10px] min-w-[44px] min-h-[48px] disabled:opacity-40 hover:text-white hover:border-[#FFB84D] transition-colors"
           >
             <Smile size={20} />
           </button>
-          {onCheer && (
-            <button
-              type="button"
-              onClick={onCheer}
-              aria-label="Cheer"
-              title="Light up your avatar"
-              data-testid="cheer-btn"
-              className="ml-1 flex items-center justify-center bg-[#1a0030] border border-[#333] text-[#aaa] rounded-lg min-w-[44px] min-h-[44px] hover:text-[#FFD700] hover:border-[#FFD700] transition-colors"
-            >
-              <Sparkles size={20} />
-            </button>
-          )}
           {emojiOpen && (
             <div
               role="menu"
@@ -154,17 +136,17 @@ export function ChatInput({ onSend, sending, sendError, slowModeRemainingMs = 0,
           maxLength={MAX_BODY}
           rows={1}
           disabled={disabled}
-          placeholder={disabled ? 'Chat is locked' : 'Say something...'}
+          placeholder={disabled ? 'Chat is locked' : 'Open a channel...'}
           aria-label="Chat message"
           dir="auto"
-          className="flex-1 bg-[#1a0030] border border-[#333] text-white font-mono text-base px-3 py-2 rounded-lg resize-none focus:outline-none focus:ring-1 focus:ring-[#7B2FBE] disabled:opacity-40 placeholder:text-[#555]"
+          className="flex-1 min-h-[48px] bg-[#0E0B22] border border-[#2B2550] text-white font-mono text-base placeholder:text-sm px-2.5 py-3 rounded-[10px] resize-none focus:outline-none focus:ring-1 focus:ring-[#FFB84D] disabled:opacity-40 placeholder:text-[#8F8AA8]"
         />
         <button
           type="button"
           disabled={isBlocked || !value.trim()}
           onClick={handleSend}
           aria-label="Send message"
-          className="px-4 py-2 bg-[#7B2FBE] text-white font-mono text-xs font-bold rounded-lg disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#9B4FDE] min-w-[44px] min-h-[44px] transition-colors"
+          className="px-3 bg-[#FFB84D] text-[#0A0010] pixel text-[10px] rounded-[10px] disabled:opacity-40 disabled:cursor-not-allowed hover:bg-[#ffc970] min-w-[44px] min-h-[48px] transition-colors"
         >
           {sending ? '...' : 'SEND'}
         </button>

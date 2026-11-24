@@ -48,6 +48,24 @@ export function NowPlaying({ station, nowPlaying, neon = false }: NowPlayingProp
     return <p className="font-mono text-[#555] text-xs tracking-wide">-</p>;
   }
 
+  // Stage style: never scrolls. The box sits between the speakers, so a long title wraps (up to
+  // two lines) instead of widening the box over them; beyond that it ellipsizes (the full
+  // name stays in the tooltip and on the lock screen).
+  if (neon) {
+    // Short labels (LIVE DJ, OFF AIR) keep the pixel font. Long titles switch to the narrower display
+    // face, because the pixel font is about 1em per character and fits barely 13 per line.
+    const long = text.length > 12;
+    return (
+      <div
+        className={`${long ? 'font-display font-bold text-[13px] md:text-[16px] leading-tight tracking-[0.02em] py-1.5' : 'pixel text-[12px] md:text-[14px] leading-[1.5] py-1.5'} text-[#FF5CCB] radio-neon text-center max-w-full px-3 rounded-md bg-black/80 border border-[#FF00AA]/40`}
+        title={text}
+      >
+        {/* Glue a spaced dash to the next word so a wrapped line never starts with one. */}
+        <span className="line-clamp-2 break-words text-balance">{text.replace(/ ([-|]) /g, ' $1 ')}</span>
+      </div>
+    );
+  }
+
   const marquee = overflowPx > 0;
   // Constant-ish speed so long titles aren't dizzying; floor at 6s.
   const durationSec = Math.max(6, Math.round(4 + overflowPx / 25));
@@ -57,12 +75,10 @@ export function NowPlaying({ station, nowPlaying, neon = false }: NowPlayingProp
 
   return (
     <div
-      className={neon
-        ? 'pixel text-[12px] sm:text-[13px] leading-relaxed text-[#FF5CCB] radio-neon flex items-center min-w-0 max-w-full px-2.5 py-1.5 rounded-md bg-black/70 border border-[#FF00AA]/40'
-        : 'font-mono text-white text-sm tracking-wide flex items-center min-w-0'}
+      className="font-mono text-white text-sm tracking-wide flex items-center min-w-0"
       title={text}
     >
-      {!neon && <span className="text-[#7B2FBE] text-xs mr-2 shrink-0">NOW PLAYING</span>}
+      <span className="text-[#7B2FBE] text-xs mr-2 shrink-0">NOW PLAYING</span>
       <span ref={clipRef} className="flex-1 min-w-0 overflow-hidden">
         <span
           ref={textRef}

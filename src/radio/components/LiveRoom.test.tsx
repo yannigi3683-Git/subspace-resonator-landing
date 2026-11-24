@@ -1,10 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { LiveRoom } from './LiveRoom';
 import type { Identity, Station } from '../types';
 
-const presence = { presenceList: [], count: 0, isKicked: false, isBanned: false, rename: vi.fn() };
+const presence = { presenceList: [], count: 0, isKicked: false, isBanned: false, rename: vi.fn(), cheer: vi.fn() };
 const moderationApi = {
   canModerate: false,
   error: null as string | null,
@@ -73,6 +73,26 @@ describe('LiveRoom', () => {
     moderationApi.canModerate = false;
     moderationApi.error = null;
     onRemoved.mockClear();
+  });
+
+  // CHEER lives on the stage beside the volume (phone row and desktop pill), not in the chat
+  // composer, so a listener watching the crowd can cheer without switching tabs.
+  it('puts CHEER on the stage, not in the chat composer, and it cheers', () => {
+    presence.cheer.mockClear();
+    renderRoom();
+    const buttons = screen.getAllByTestId('cheer-btn');
+    expect(buttons.length).toBeGreaterThan(0);
+    for (const b of buttons) expect(b.closest('[aria-label="Chat message"]')).toBeNull();
+    fireEvent.click(buttons[0]);
+    expect(presence.cheer).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps CHEER at the 44px touch target and available while chat is locked', () => {
+    renderRoom({ locked: true });
+    for (const b of screen.getAllByTestId('cheer-btn')) {
+      expect(b.className).toContain('h-11');
+      expect(b).not.toBeDisabled();
+    }
   });
 
   it('renders the room for a normal listener', () => {

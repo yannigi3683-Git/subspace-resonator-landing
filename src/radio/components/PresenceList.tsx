@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Pencil } from 'lucide-react';
 import type { PresenceEntry } from '../types';
 import { Avatar } from './Avatar';
-import { AVATARS } from '../avatars';
+import { AVATARS, getAvatar } from '../avatars';
 
 export interface PresenceModeration {
   onKick: (entry: PresenceEntry) => void;
@@ -60,8 +60,8 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
   return (
     // Host mode renders a 44px KICK/BAN row per listener, so an unbounded roster grew past the
     // whole sidebar and collapsed the chat scroller (flex-1, min-height 0) to nothing.
-    <div className="px-3 py-2 border-t border-[#1a1a2e] shrink-0 max-h-[30vh] overflow-y-auto">
-      <p className="font-mono text-[#555] text-[10px] uppercase tracking-widest mb-2">
+    <div className="px-3 py-2 border-t border-[#1a1a2e] shrink-0 max-h-[30vh] short:max-h-14 overflow-y-auto">
+      <p className="font-mono text-[#8F8AA8] text-[10px] uppercase tracking-widest mb-2">
         {count} {count === 1 ? 'listener' : 'listeners'} online
       </p>
 
@@ -162,9 +162,9 @@ export function PresenceList({ presenceList, count, uid, onRename, moderation }:
             <span
               key={entry.uid}
               title={entry.name}
-              className="inline-flex items-center gap-1.5 font-mono text-[10px] text-[#aaa]"
+              className="inline-flex items-center gap-1.5 font-mono text-[12px] text-white/85 mr-2"
             >
-              <Avatar avatarId={entry.avatarId} size={16} label={entry.name} className="flex-shrink-0" />
+              <span className="w-2 h-2 rounded-full shrink-0" style={{ background: getAvatar(entry.avatarId).color }} aria-hidden="true" />
               {entry.name}
             </span>
           )

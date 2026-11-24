@@ -5,6 +5,9 @@ export default {
   theme: {
     container: { center: true, padding: '1rem', screens: { '2xl': '1200px' } },
     extend: {
+      // A screen under 501px tall (a phone held sideways) keeps the side-by-side radio layout but
+      // puts the volume + CHEER row under the floor instead of floating it over the crowd.
+      screens: { short: { raw: '(max-height: 500px)' } },
       fontFamily: {
         mono: ["'JetBrains Mono'", 'monospace'],
         sans: ['Inter', 'system-ui', 'sans-serif'],

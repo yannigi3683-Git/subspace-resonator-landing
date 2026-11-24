@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   HybridDanceFloor, hybridCrowdCapacity, hybridLayout, hybridObstacleRects,
-  HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W, PHONE_GUTTER_PX,
+  HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W,
 } from './HybridDanceFloor';
 import type { PresenceEntry, Station } from '../types';
 
@@ -57,11 +57,16 @@ describe('hybrid crowd sizing', () => {
   });
 
   it('holds a big crowd on a phone', () => {
-    expect(hybridCrowdCapacity(390, 654, PHONE_GUTTER_PX)).toBeGreaterThanOrEqual(100);
+    expect(hybridCrowdCapacity(390, 654)).toBeGreaterThanOrEqual(100);
   });
 
-  it('gives phones the floor the desktop volume pill would cover', () => {
-    expect(hybridCrowdCapacity(390, 724, PHONE_GUTTER_PX)).toBeGreaterThan(hybridCrowdCapacity(390, 724));
+  it('keeps the crowd out from under the floating volume pill on tablets and desktops', () => {
+    const rects = hybridObstacleRects(1046, 768, true);
+    expect(rects).toHaveLength(3);
+    const pill = rects[2];
+    expect(pill.x0).toBeLessThanOrEqual(0);
+    expect(pill.y1).toBe(768);
+    expect(hybridCrowdCapacity(448, 700, true)).toBeLessThan(hybridCrowdCapacity(448, 700, false));
   });
 });
 
