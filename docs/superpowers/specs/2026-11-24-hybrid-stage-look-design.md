@@ -75,3 +75,27 @@ reverts those parts to the original floor and keeps the rest.
   keeps shrinking to `HYBRID_AVATAR_MIN` (14px). Capacity is set by the avatar
   (`DOT_CELL_PX`), so a phone holds 100+, still capped at 200. This supersedes "The
   names-versus-capacity decision" above.
+
+## Round 4 (2026-11-24): CHEER on stage, chat restyle, every screen size (owner approved)
+
+Approved from a now-vs-proposed comparison page (real renders of master and this branch).
+
+- **CHEER moves to the stage**, beside the volume (phone row, desktop pill). A listener watching the
+  crowd can cheer without opening chat. It is removed from `ChatInput`.
+- **Chat restyle from the Hybrid mockup, name kept as CHAT** (the owner rejected "COMMS"): header with
+  red dot + ABOARD, message cards with an avatar-colour stripe and coloured name, `RE: name: text`
+  replies, presence as coloured dots, `Open a channel...` + amber SEND. Not taken from the mockup:
+  the faint flower art in the chat header, the show title there, a dashed ring for "you".
+- **Tab bar**: pixel-font STAGE / CHAT, 3px coloured top line on the open tab, amber `N NEW` badge.
+- **Neon box** hugs its text inside the speaker gap (8px clear each side, max 360px). Short labels
+  keep the pixel font; long titles switch to Space Grotesk bold and wrap to two balanced lines.
+- **Fits every screen**, checked by the `design-critic` agent on 11 sizes (320-430px phones, phone
+  sideways, tablet both ways, 1366 laptop, 1920 desktop). Geometry is computed once (`hybridViz`,
+  `paWidthPx`) and applied inline; phone speakers scale with width; the floating pill is a crowd
+  obstacle; screens under 501px tall move volume + CHEER under the floor (`short` screen).
+- **Sideways phone (owner approved "B")**: title and status on one line, DJ 48px, stage ends at
+  150px, visualizer fills the free height.
+- **Names on iPhone (owner decision "A")**: left as is, about 22 named before they drop on a
+  390px iPhone in Safari, about 41 on a 412x790 floor.
+- Accessibility: 44px reply/react/reaction/pill-slider targets, 16px chat input (no iPad zoom),
+  contrast fixes on the listener-count heading, placeholder and padlock.

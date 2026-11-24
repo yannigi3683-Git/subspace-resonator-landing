@@ -85,14 +85,17 @@ const REGION_TOP_FRACTION = 0.2;
 const REGION_SIDE_MARGIN = 0.03;
 // Title, status row and the DJ on the riser with the neon box (up to 3 lines): fixed height, px.
 const STAGE_BOTTOM_PX = 200;
+// Sideways phone: title and status share one line and the DJ is 48px, so the stage ends sooner
+// and the visualizer gets the height back.
+const COMPACT_STAGE_BOTTOM_PX = 150;
 
 // The original PsyViz: 64% of the floor's short side, max 460px, centred at 52% of its height.
 // Compact floors put it in the middle of the space left under the stage instead.
 export function hybridViz(boxW: number, boxH: number) {
   if (isCompact(boxW, boxH)) {
-    const free = Math.max(0, boxH - STAGE_BOTTOM_PX);
-    const size = Math.max(0, Math.min(free * 0.9, boxW * 0.64, 460));
-    return { size, cx: boxW / 2, cy: STAGE_BOTTOM_PX + free / 2 };
+    const free = Math.max(0, boxH - COMPACT_STAGE_BOTTOM_PX);
+    const size = Math.max(0, Math.min(free, boxW * 0.64, 460));
+    return { size, cx: boxW / 2, cy: COMPACT_STAGE_BOTTOM_PX + free / 2 };
   }
   // On a short floor (a small phone) 52% would push it up into the DJ and the neon box, so it
   // shrinks to fit under the stage and never starts above STAGE_BOTTOM_PX.
@@ -107,7 +110,7 @@ function hybridVizCircle(boxW: number, boxH: number) {
 
 export function hybridCrowdRegion(boxW: number, boxH: number) {
   const x0 = boxW * REGION_SIDE_MARGIN;
-  const y0 = Math.max(boxH * REGION_TOP_FRACTION, STAGE_BOTTOM_PX);
+  const y0 = Math.max(boxH * REGION_TOP_FRACTION, isCompact(boxW, boxH) ? COMPACT_STAGE_BOTTOM_PX : STAGE_BOTTOM_PX);
   return { x0, y0, x1: boxW - x0, y1: Math.max(y0 + DOT_CELL_PX, boxH - FLOOR_GUTTER_PX) };
 }
 
@@ -207,6 +210,7 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
 
   const viz = hybridViz(box.w, box.h);
   const paW = paWidthPx(box.w, box.h);
+  const compact = isCompact(box.w, box.h);
   const cap = hybridCrowdCapacity(box.w, box.h, pill);
   const shown = Math.min(roster.length, cap);
   const tile = hybridLayout(shown, box.w, box.h, pill);
@@ -255,7 +259,8 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
         </>
       )}
 
-      <div className="absolute top-0 inset-x-0 z-10 flex flex-col items-center gap-2 px-4 pt-3">
+      <div className={`absolute top-0 inset-x-0 z-10 flex flex-col items-center px-4 ${compact ? 'gap-1 pt-2' : 'gap-2 pt-3'}`}>
+        <div className={compact ? 'flex items-center gap-4' : 'contents'}>
         <h2 className="font-display font-bold text-[13px] md:text-[15px] leading-none tracking-[0.12em] text-white text-center whitespace-nowrap">
           SUBSPACE RESONATOR <span className="text-[#26C6DA] radio-title-glow">LIVE RADIO</span>
         </h2>
@@ -264,22 +269,26 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
             className={`w-2 h-2 ${live ? 'bg-[#FF0033] pixel-blink' : 'rounded-full bg-[#39405a]'}`}
             aria-hidden="true"
           />
-          <span className="pixel text-[10px] text-white/60">{live ? 'ON AIR' : 'STANDBY'}</span>
+          {/* Sideways the header is one line with no room to spare, so the dot alone says on air. */}
+          <span className={`pixel text-[10px] text-white/60 ${compact ? 'sr-only' : ''}`}>{live ? 'ON AIR' : 'STANDBY'}</span>
           <span className="pixel text-[10px] text-[#FFB84D] ml-2" data-testid="aboard">
             ABOARD {String(roster.length).padStart(2, '0')}
           </span>
           {overflow > 0 && (
             <span className="pixel text-[10px] text-white/50" data-testid="crowd-overflow">
-              +{overflow} in the crowd
+              +{overflow}{compact ? '' : ' in the crowd'}
             </span>
           )}
+        </div>
         </div>
 
         <div className="relative flex flex-col items-center mt-1" data-testid="broadcaster">
           {live && (
             <div className="absolute -top-2 w-40 h-28 radio-spotlight pointer-events-none" aria-hidden="true" />
           )}
-          <BroadcasterAvatar live={live} />
+          <div className={compact ? '[&>svg]:w-12 [&>svg]:h-12' : undefined}>
+            <BroadcasterAvatar live={live} />
+          </div>
           <div className="radio-riser w-24 h-3 -mt-1" aria-hidden="true" />
           {/* The box hugs its text and stays inside the gap between the speakers with 8px clear
               on each side; a long title wraps to two lines (NowPlaying neon) instead. */}
