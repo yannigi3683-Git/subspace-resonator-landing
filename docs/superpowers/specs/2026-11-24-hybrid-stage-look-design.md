@@ -92,7 +92,7 @@ Approved from a now-vs-proposed comparison page (real renders of master and this
 - **Fits every screen**, checked by the `design-critic` agent on 11 sizes (320-430px phones, phone
   sideways, tablet both ways, 1366 laptop, 1920 desktop). Geometry is computed once (`hybridViz`,
   `paWidthPx`) and applied inline; phone speakers scale with width; the floating pill is a crowd
-  obstacle; screens under 501px tall move volume + CHEER under the floor (`short` screen).
+  obstacle; screens under 501px tall move volume + CHEER under the floor (`[@media(max-height:500px)]:` variant; a custom `short` screen was tried first and silently disabled every `max-*` variant, hiding the chat Reply/React buttons on phones).
 - **Sideways phone (owner approved "B")**: title and status on one line, DJ 48px, stage ends at
   150px, visualizer fills the free height.
 - **Names on iPhone (owner decision "A")**: left as is, about 22 named before they drop on a
