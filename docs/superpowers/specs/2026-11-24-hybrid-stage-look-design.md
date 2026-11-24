@@ -60,3 +60,15 @@ reverts those parts to the original floor and keeps the rest.
 - **Names wider:** `HYBRID_LABEL_MIN_W` 44 -> 56, so short names stop collapsing to "Test …".
 - **Capacity cost, accepted by the owner:** a 390px phone holds about 33 named avatars before
   `+N in the crowd` (was about 54). The largest real shows so far had 15-24 listeners.
+
+## Round 3 (2026-11-24): title, bigger speakers, names drop when packed
+
+- **Station title row** at the top: `SUBSPACE RESONATOR` white + `LIVE RADIO` cyan with a glow
+  (`radio-title-glow`), above the On Air / ABOARD row.
+- **Bigger PA stacks:** 120 / 170 / 230px (phone / sm / lg), at `top-[64px]`. `paWidthPx` mirrors it.
+- **The names-always rule is REVERSED by the owner.** Testing showed only ~25 avatars on a real phone,
+  and the owner wants 30-40+ visible. Names now show only while each listener has room for one
+  (`NAMED_CELL_PX`, about 20 on a phone); past that `hasLabel` is false, names drop and the avatar
+  keeps shrinking to `HYBRID_AVATAR_MIN` (14px). Capacity is set by the avatar
+  (`DOT_CELL_PX`), so a phone holds 100+, still capped at 200. This supersedes "The
+  names-versus-capacity decision" above.

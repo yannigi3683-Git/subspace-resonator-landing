@@ -31,25 +31,33 @@ describe('hybrid crowd sizing', () => {
 
   it('shrinks the avatar and the name width as the room fills, within their floors', () => {
     const roomy = hybridLayout(5, 390, 780);
-    const packed = hybridLayout(hybridCrowdCapacity(390, 780), 390, 780);
-    expect(roomy.size).toBeGreaterThan(packed.size);
-    expect(roomy.labelW).toBeGreaterThan(packed.labelW);
+    const named = hybridLayout(16, 390, 780);
+    expect(roomy.size).toBeGreaterThanOrEqual(named.size);
     expect(roomy.size).toBeLessThanOrEqual(HYBRID_AVATAR_BASE);
     expect(roomy.labelW).toBeLessThanOrEqual(HYBRID_LABEL_MAX_W);
-    expect(packed.size).toBeGreaterThanOrEqual(HYBRID_AVATAR_MIN);
-    expect(packed.labelW).toBeGreaterThanOrEqual(HYBRID_LABEL_MIN_W);
+    expect(named.hasLabel).toBe(true);
+    expect(named.labelW).toBeGreaterThanOrEqual(HYBRID_LABEL_MIN_W);
   });
 
-  it('keeps a name from ever reaching either screen edge, at any crowd size', () => {
-    for (const n of [1, 5, 16, 40, 60]) {
-      const { region, labelW } = hybridLayout(n, 390, 780);
-      expect(region.x0 - labelW / 2, `left edge at ${n}`).toBeGreaterThanOrEqual(0);
-      expect(region.x1 + labelW / 2, `right edge at ${n}`).toBeLessThanOrEqual(390);
+  it('drops names and keeps shrinking avatars once the floor is packed', () => {
+    const cap = hybridCrowdCapacity(390, 780);
+    const packed = hybridLayout(cap, 390, 780);
+    expect(packed.hasLabel).toBe(false);
+    expect(packed.size).toBeGreaterThanOrEqual(HYBRID_AVATAR_MIN);
+    expect(packed.size).toBeLessThan(hybridLayout(16, 390, 780).size);
+  });
+
+  it('keeps a name or an avatar from ever reaching either screen edge, at any crowd size', () => {
+    for (const n of [1, 5, 16, 40, 60, 150]) {
+      const { region, labelW, size } = hybridLayout(n, 390, 780);
+      const half = Math.max(labelW, size) / 2;
+      expect(region.x0 - half, `left edge at ${n}`).toBeGreaterThanOrEqual(0);
+      expect(region.x1 + half, `right edge at ${n}`).toBeLessThanOrEqual(390);
     }
   });
 
-  it('holds a real crowd on a phone', () => {
-    expect(hybridCrowdCapacity(390, 780)).toBeGreaterThanOrEqual(30);
+  it('holds a big crowd on a phone', () => {
+    expect(hybridCrowdCapacity(390, 654, PHONE_GUTTER_PX)).toBeGreaterThanOrEqual(100);
   });
 
   it('gives phones the floor the desktop volume pill would cover', () => {

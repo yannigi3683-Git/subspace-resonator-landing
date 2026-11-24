@@ -202,6 +202,7 @@
 
 /* ── Retro / pixel aesthetic ────────────────────────────────── */
 .pixel { font-family: 'Press Start 2P', monospace; }
+.radio-title-glow { text-shadow: 0 0 8px rgba(38, 198, 218, 0.7); }
 .radio-neon { text-shadow: 0 0 6px rgba(255, 0, 170, 0.8), 0 0 14px rgba(255, 0, 170, 0.45); }
 
 @keyframes pixel-blink {

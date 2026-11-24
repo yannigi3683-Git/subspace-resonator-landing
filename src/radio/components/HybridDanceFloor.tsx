@@ -23,28 +23,30 @@ export const CONTROLS_GUTTER_PX = 64;
 export const PHONE_GUTTER_PX = 36;
 const CROWD_HARD_CAP = 200;
 
-// Names never drop in this look: the avatar and the name's width are what shrink. The crowd
-// simulation separates neighbours by `radius`, so that radius has to cover the name under the
-// avatar, not just the avatar itself: otherwise names pile up and clip at the screen edges.
-export const HYBRID_AVATAR_MIN = 12;
+// Names show while each listener has room for one (NAMED_CELL_PX); past that they drop and only the
+// avatar shrinks, down to HYBRID_AVATAR_MIN, so a phone still holds a big crowd. While names show,
+// the simulation's `radius` covers the name under the avatar, not just the avatar itself:
+// otherwise names pile up and clip at the screen edges.
+export const HYBRID_AVATAR_MIN = 14;
 export const HYBRID_AVATAR_BASE = 44;
 export const HYBRID_LABEL_MIN_W = 56;
 export const HYBRID_LABEL_MAX_W = 84;
 // The simulation pushes neighbours apart below radius * 1.7 * 2 = labelW * 1.19 at this radius.
 const LABEL_RADIUS_FRACTION = 0.35;
 const SEPARATION_PER_LABEL_W = LABEL_RADIUS_FRACTION * 1.7 * 2;
-const MIN_CELL_PX = Math.ceil(HYBRID_LABEL_MIN_W * SEPARATION_PER_LABEL_W);
+const NAMED_CELL_PX = Math.ceil(HYBRID_LABEL_MIN_W * SEPARATION_PER_LABEL_W);
+const DOT_CELL_PX = Math.ceil(HYBRID_AVATAR_MIN / 0.6);
 
 // The PA stacks stay on screen at every width in this look (the old floor hid them below 400px),
 // so their obstacle rects must exist at every width too. Mirrors the JSX wrappers below.
-const PA_TOP_PX = 44;
+const PA_TOP_PX = 64;
 const PA_ASPECT = 260 / 200;
 const OBSTACLE_MARGIN_PX = 12;
 
 function paWidthPx(boxW: number): number {
-  if (boxW >= 704) return 210;
-  if (boxW >= 640) return 150;
-  return 96;
+  if (boxW >= 704) return 230;
+  if (boxW >= 640) return 170;
+  return 120;
 }
 
 export function hybridObstacleRects(boxW: number, boxH: number): Rect[] {
@@ -63,12 +65,12 @@ export function hybridObstacleRects(boxW: number, boxH: number): Rect[] {
 const REGION_TOP_FRACTION = 0.2;
 const REGION_SIDE_MARGIN = 0.03;
 // Status row and the DJ on the riser with the now-playing line: fixed height, so px not a fraction.
-const STAGE_BOTTOM_PX = 168;
+const STAGE_BOTTOM_PX = 190;
 
 export function hybridCrowdRegion(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX) {
   const x0 = boxW * REGION_SIDE_MARGIN;
   const y0 = Math.max(boxH * REGION_TOP_FRACTION, STAGE_BOTTOM_PX);
-  return { x0, y0, x1: boxW - x0, y1: Math.max(y0 + MIN_CELL_PX, boxH - gutter) };
+  return { x0, y0, x1: boxW - x0, y1: Math.max(y0 + DOT_CELL_PX, boxH - gutter) };
 }
 
 function usableFloorPx(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX): number {
@@ -83,22 +85,24 @@ function usableFloorPx(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX):
 }
 
 export function hybridCrowdCapacity(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX): number {
-  return Math.max(1, Math.min(Math.floor(usableFloorPx(boxW, boxH, gutter) / (MIN_CELL_PX * MIN_CELL_PX)), CROWD_HARD_CAP));
+  return Math.max(1, Math.min(Math.floor(usableFloorPx(boxW, boxH, gutter) / (DOT_CELL_PX * DOT_CELL_PX)), CROWD_HARD_CAP));
 }
 
 /**
  * Layout for a given crowd size. The avatar and the name's width shrink together as the floor
- * fills; the name itself is always rendered. The region is inset by half a name so the widest
- * label can never be pushed off either side of the screen.
+ * fills; once a name no longer fits (`hasLabel` false) names drop and the avatar keeps shrinking.
+ * The region is inset by half a name so the widest label can never be pushed off the screen.
  */
 export function hybridLayout(total: number, boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX) {
   const per = Math.sqrt(usableFloorPx(boxW, boxH, gutter) / Math.max(1, total));
-  const labelW = Math.round(clamp(0.7 * per, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W));
+  const hasLabel = per >= NAMED_CELL_PX;
+  const labelW = hasLabel ? Math.round(clamp(0.7 * per, HYBRID_LABEL_MIN_W, HYBRID_LABEL_MAX_W)) : 0;
   const size = Math.round(clamp(0.6 * per, HYBRID_AVATAR_MIN, HYBRID_AVATAR_BASE));
   const base = hybridCrowdRegion(boxW, boxH, gutter);
-  const inset = Math.max(boxW * REGION_SIDE_MARGIN, labelW / 2 + 2);
+  const inset = Math.max(boxW * REGION_SIDE_MARGIN, Math.max(labelW, size) / 2 + 2);
   return {
     size,
+    hasLabel,
     labelW,
     fontSize: size >= 36 ? 11 : 10,
     radius: Math.max(size / 2, labelW * LABEL_RADIUS_FRACTION),
@@ -202,14 +206,17 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
         <PsyViz />
       </div>
 
-      <div className="absolute top-[44px] left-[0.5%] z-[8] w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[64px] left-[0.5%] z-[8] w-[120px] sm:w-[170px] lg:w-[230px] pointer-events-none">
         <PaStack side="left" />
       </div>
-      <div className="absolute top-[44px] right-[0.5%] z-[8] w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[64px] right-[0.5%] z-[8] w-[120px] sm:w-[170px] lg:w-[230px] pointer-events-none">
         <PaStack side="right" />
       </div>
 
       <div className="absolute top-0 inset-x-0 z-10 flex flex-col items-center gap-2 px-4 pt-3">
+        <h2 className="font-display font-bold text-[11px] sm:text-[13px] leading-none tracking-[0.14em] text-white text-center whitespace-nowrap">
+          SUBSPACE RESONATOR <span className="text-[#26C6DA] radio-title-glow">LIVE RADIO</span>
+        </h2>
         <div className="flex items-center gap-2">
           <span
             className={`w-2 h-2 ${live ? 'bg-[#FF0033] pixel-blink' : 'rounded-full bg-[#39405a]'}`}
@@ -278,13 +285,15 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
               >
                 <Avatar avatarId={entry.avatarId} size={isSelf ? size + 6 : size} label={entry.name} />
               </div>
-              <span
-                data-testid="crowd-name"
-                className="font-mono text-white/80 leading-none mt-1 truncate"
-                style={{ fontSize: tile.fontSize, maxWidth: tile.labelW }}
-              >
-                {entry.name.slice(0, 12)}
-              </span>
+              {tile.hasLabel && (
+                <span
+                  data-testid="crowd-name"
+                  className="font-mono text-white/80 leading-none mt-1 truncate"
+                  style={{ fontSize: tile.fontSize, maxWidth: tile.labelW }}
+                >
+                  {entry.name.slice(0, 12)}
+                </span>
+              )}
             </div>
           </div>
         );
