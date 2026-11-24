@@ -49,7 +49,7 @@ describe('hybrid crowd sizing', () => {
   });
 
   it('holds a real crowd on a phone', () => {
-    expect(hybridCrowdCapacity(390, 780)).toBeGreaterThan(40);
+    expect(hybridCrowdCapacity(390, 780)).toBeGreaterThanOrEqual(30);
   });
 
   it('gives phones the floor the desktop volume pill would cover', () => {
@@ -68,7 +68,7 @@ describe('HybridDanceFloor', () => {
   it('shows the DJ, the flower visualizer and both speaker stacks', () => {
     render(<HybridDanceFloor presenceList={[entry(1)]} station={liveStation} uid="u1" />);
     expect(screen.getByTestId('broadcaster')).toBeInTheDocument();
-    expect(screen.getByTestId('hybrid-viz')).toBeInTheDocument();
+    expect(screen.getByTestId('psyviz')).toBeInTheDocument();
     expect(screen.getAllByLabelText('Turbosound Floodlight speaker stack')).toHaveLength(2);
   });
 

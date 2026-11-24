@@ -5,9 +5,11 @@ interface NowPlayingProps {
   station: Station | null;
   /** Current track name + whether it's in its peek window (15s/min). Optional: absent = title only. */
   nowPlaying?: { name: string; visible: boolean };
+  /** Stage style: no NOW PLAYING label, pink neon pixel text in the DJ's slot. */
+  neon?: boolean;
 }
 
-export function NowPlaying({ station, nowPlaying }: NowPlayingProps) {
+export function NowPlaying({ station, nowPlaying, neon = false }: NowPlayingProps) {
   const stationTitle = station?.live_title ?? null;
   const track = nowPlaying?.name?.trim() ? nowPlaying.name : null;
   // Banner subtitle: normally the station title; peeks the current track name for 15s/min.
@@ -49,8 +51,13 @@ export function NowPlaying({ station, nowPlaying }: NowPlayingProps) {
     : undefined;
 
   return (
-    <div className="font-mono text-white text-sm tracking-wide flex items-center min-w-0" title={text}>
-      <span className="text-[#7B2FBE] text-xs mr-2 shrink-0">NOW PLAYING</span>
+    <div
+      className={neon
+        ? 'pixel text-[12px] sm:text-[13px] leading-relaxed text-[#FF5CCB] radio-neon flex items-center min-w-0 max-w-full px-2.5 py-1.5 rounded-md bg-black/70 border border-[#FF00AA]/40'
+        : 'font-mono text-white text-sm tracking-wide flex items-center min-w-0'}
+      title={text}
+    >
+      {!neon && <span className="text-[#7B2FBE] text-xs mr-2 shrink-0">NOW PLAYING</span>}
       <span ref={clipRef} className="flex-1 min-w-0 overflow-hidden">
         <span
           ref={textRef}

@@ -1,12 +1,11 @@
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
-import { Disc3 } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { AVATARS } from '../avatars';
 import type { PresenceEntry, Station } from '../types';
 import { NowPlaying } from './NowPlaying';
-import { HybridVisualizer } from './HybridVisualizer';
+import { PsyViz } from './PsyViz';
 import { PaStack } from './PaStack';
-import { BroadcasterAvatar, isCheering, padCrowd, readCrowdTestParam, type Rect } from './DanceFloor';
+import { BroadcasterAvatar, isCheering, padCrowd, readCrowdTestParam, vizCircle, type Rect } from './DanceFloor';
 import { useCrowdMotion } from '../hooks/useCrowdMotion';
 import type { CrowdEnv } from '../crowdMotion';
 
@@ -21,7 +20,7 @@ const clamp = (n: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, n
 // Desktop floats the volume pill over the bottom of the floor. Below md it is its own row under
 // the floor, so phones only need room for half a tile (the name under the lowest avatar).
 export const CONTROLS_GUTTER_PX = 64;
-export const PHONE_GUTTER_PX = 24;
+export const PHONE_GUTTER_PX = 36;
 const CROWD_HARD_CAP = 200;
 
 // Names never drop in this look: the avatar and the name's width are what shrink. The crowd
@@ -29,29 +28,23 @@ const CROWD_HARD_CAP = 200;
 // avatar, not just the avatar itself: otherwise names pile up and clip at the screen edges.
 export const HYBRID_AVATAR_MIN = 12;
 export const HYBRID_AVATAR_BASE = 44;
-export const HYBRID_LABEL_MIN_W = 44;
+export const HYBRID_LABEL_MIN_W = 56;
 export const HYBRID_LABEL_MAX_W = 84;
 // The simulation pushes neighbours apart below radius * 1.7 * 2 = labelW * 1.19 at this radius.
 const LABEL_RADIUS_FRACTION = 0.35;
 const SEPARATION_PER_LABEL_W = LABEL_RADIUS_FRACTION * 1.7 * 2;
 const MIN_CELL_PX = Math.ceil(HYBRID_LABEL_MIN_W * SEPARATION_PER_LABEL_W);
 
-// The small flower sits behind the DJ, not over the floor. VIZ_* mirror the JSX wrapper below:
-// if that wrapper moves, these must move with it.
-export const HYBRID_VIZ_SIZE = 176;
-const VIZ_CENTER_Y_PX = 141;
-const VIZ_CLEARANCE_PX = 6;
-
 // The PA stacks stay on screen at every width in this look (the old floor hid them below 400px),
 // so their obstacle rects must exist at every width too. Mirrors the JSX wrappers below.
-const PA_TOP_PX = 88;
+const PA_TOP_PX = 44;
 const PA_ASPECT = 260 / 200;
 const OBSTACLE_MARGIN_PX = 12;
 
 function paWidthPx(boxW: number): number {
   if (boxW >= 704) return 210;
   if (boxW >= 640) return 150;
-  return 76;
+  return 96;
 }
 
 export function hybridObstacleRects(boxW: number, boxH: number): Rect[] {
@@ -67,15 +60,10 @@ export function hybridObstacleRects(boxW: number, boxH: number): Rect[] {
   ];
 }
 
-export function hybridVizCircle(boxW: number) {
-  const size = Math.min(HYBRID_VIZ_SIZE, boxW * 0.55);
-  return { cx: boxW / 2, cy: VIZ_CENTER_Y_PX, r: size / 2 + VIZ_CLEARANCE_PX };
-}
-
 const REGION_TOP_FRACTION = 0.2;
 const REGION_SIDE_MARGIN = 0.03;
-// Status row, console and the DJ on the riser: fixed-height elements, so px rather than a fraction.
-const STAGE_BOTTOM_PX = 210;
+// Status row and the DJ on the riser with the now-playing line: fixed height, so px not a fraction.
+const STAGE_BOTTOM_PX = 168;
 
 export function hybridCrowdRegion(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX) {
   const x0 = boxW * REGION_SIDE_MARGIN;
@@ -85,7 +73,7 @@ export function hybridCrowdRegion(boxW: number, boxH: number, gutter = CONTROLS_
 
 function usableFloorPx(boxW: number, boxH: number, gutter = CONTROLS_GUTTER_PX): number {
   const r = hybridCrowdRegion(boxW, boxH, gutter);
-  const viz = hybridVizCircle(boxW);
+  const viz = vizCircle(boxW, boxH);
   const blocked = hybridObstacleRects(boxW, boxH).reduce((sum, o) => {
     const w = Math.max(0, Math.min(o.x1, r.x1) - Math.max(o.x0, r.x0));
     const h = Math.max(0, Math.min(o.y1, r.y1) - Math.max(o.y0, r.y0));
@@ -190,7 +178,7 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
 
   const crowdEnv = useMemo<CrowdEnv>(() => ({
     region: tile.region,
-    viz: hybridVizCircle(box.w),
+    viz: vizCircle(box.w, box.h),
     rects: hybridObstacleRects(box.w, box.h),
     radius: tile.radius,
     speed: 26,
@@ -206,18 +194,18 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
       <div className="absolute inset-x-0 bottom-0 h-[42%] radio-floor-glow" aria-hidden="true" />
       <div className="absolute inset-x-0 bottom-0 h-[38%] radio-grid" aria-hidden="true" />
 
+      {/* Same visualizer and placement as the original floor; vizCircle in DanceFloor mirrors it. */}
       <div
-        className="absolute left-1/2 -translate-x-1/2 -translate-y-1/2 z-[2] pointer-events-none opacity-60"
-        style={{ top: VIZ_CENTER_Y_PX }}
+        className="absolute left-1/2 top-[52%] -translate-x-1/2 -translate-y-1/2 w-[64vmin] h-[64vmin] max-w-[460px] max-h-[460px] z-[2] pointer-events-none"
         data-testid="psyviz"
       >
-        <HybridVisualizer size={Math.min(HYBRID_VIZ_SIZE, box.w * 0.55)} />
+        <PsyViz />
       </div>
 
-      <div className="absolute top-[88px] left-[0.5%] z-[8] w-[76px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[44px] left-[0.5%] z-[8] w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
         <PaStack side="left" />
       </div>
-      <div className="absolute top-[88px] right-[0.5%] z-[8] w-[76px] sm:w-[150px] lg:w-[210px] pointer-events-none">
+      <div className="absolute top-[44px] right-[0.5%] z-[8] w-[96px] sm:w-[150px] lg:w-[210px] pointer-events-none">
         <PaStack side="right" />
       </div>
 
@@ -238,27 +226,17 @@ export function HybridDanceFloor({ presenceList, station, uid, nowPlaying }: Hyb
           )}
         </div>
 
-        <div className="relative flex items-center gap-3 px-4 sm:px-5 py-2.5 rounded-xl border border-white/10 bg-white/[0.04] backdrop-blur-md radio-booth-glow w-full">
-          <Disc3
-            className={`w-7 h-7 shrink-0 text-[#26C6DA] ${live ? 'radio-spin' : ''}`}
-            aria-hidden="true"
-            strokeWidth={1.5}
-          />
-          <div className="min-w-0 flex flex-col">
-            <span className="font-display text-sm text-white tracking-wide truncate">SUBSPACE RESONATOR</span>
-            <NowPlaying station={station} nowPlaying={nowPlaying} />
-          </div>
-        </div>
-
         <div className="relative flex flex-col items-center mt-1" data-testid="broadcaster">
           {live && (
             <div className="absolute -top-2 w-40 h-28 radio-spotlight pointer-events-none" aria-hidden="true" />
           )}
           <BroadcasterAvatar live={live} />
           <div className="radio-riser w-24 h-3 -mt-1" aria-hidden="true" />
-          <span className="pixel text-[10px] text-[#FF00AA] mt-0.5 px-1.5 py-0.5 rounded bg-black/70">
-            {live ? 'LIVE DJ' : 'OFF AIR'}{live && <span className="pixel-blink">_</span>}
-          </span>
+          <div className="mt-1" style={{ maxWidth: Math.max(160, box.w - 2 * (paWidthPx(box.w) + 8)) }} data-testid="stage-now-playing">
+            {live
+              ? <NowPlaying station={station} nowPlaying={nowPlaying} neon />
+              : <span className="pixel text-[12px] text-[#FF5CCB] radio-neon px-2.5 py-1.5 rounded-md bg-black/70 border border-[#FF00AA]/40">OFF AIR</span>}
+          </div>
         </div>
       </div>
 

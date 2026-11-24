@@ -41,3 +41,22 @@ name's width shrink instead.
 
 Visual layout was checked in headless Chromium at 390x780 and 1100x800 with 5, 16, 40 and 60
 listeners. It has not been looked at on a real phone, and the audio path was not touched or tested.
+
+## Round 2 (2026-11-24, after the owner reviewed the preview)
+
+The first build drifted from what was approved, and the owner rejected three parts of it. This round
+reverts those parts to the original floor and keeps the rest.
+
+- **Visualizer: the original `PsyViz`, unchanged.** Same canvas, colours, size (`64vmin`, max 460px)
+  and place (centre of the floor, `top-[52%]`); `vizCircle` from `DanceFloor` is the crowd's
+  obstacle again. The small flower (`HybridVisualizer`) was deleted. Do not shrink or recolour the
+  visualizer without asking: "smaller, less psychedelic" was the first complaint.
+- **No now-playing bar.** The station title (or the peeking track name) shows under the DJ, where
+  `LIVE DJ_` was, through `NowPlaying` with `neon`: 12-13px pixel font, pink glow, on a dark pill so
+  it reads over the nebula. Its width stops short of the PA stacks and a long name marquees.
+  `NowPlaying` still mounts, so lock-screen metadata (`mediaSession`) is unchanged.
+- **PA stacks back to the original phone width (96px)**, moved up to `top-[44px]` into the space the
+  bar left. `hybridObstacleRects` mirrors both.
+- **Names wider:** `HYBRID_LABEL_MIN_W` 44 -> 56, so short names stop collapsing to "Test …".
+- **Capacity cost, accepted by the owner:** a 390px phone holds about 33 named avatars before
+  `+N in the crowd` (was about 54). The largest real shows so far had 15-24 listeners.
