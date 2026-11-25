@@ -142,16 +142,16 @@
 
 ## Task 8: standby before the gate (D1)
 
-- [ ] **8.0 Prove no-session reads first** (a Node script in the scratchpad, not committed): a supabase-js client with **no session** can select `station`, call `get_server_time` and `upcoming_shows`, subscribe to `station` UPDATEs and receive one when the owner toggles a harmless field off air (or the agent sees the 60 s re-read path work if the Realtime UPDATE never arrives). If the UPDATE does not arrive, record it: the flip then relies on the 60 s re-read and the spec's 5 s target changes to 60 s.
-- [ ] **8.1 Failing tests** through `RadioApp` with `makeSupabase` mocked (`ListenerApp` is not exported; `RadioApp.test.tsx` is new):
+- [ ] **8.0 (moved to V6 / Task 10.5: this container has no Supabase keys, so the no-session check runs on the preview with a private window, timing the switch to the entry screen; a flip slower than 60 s means the Realtime UPDATE is not reaching no-session visitors and only the 60 s re-read is) Prove no-session reads first** (a Node script in the scratchpad, not committed): a supabase-js client with **no session** can select `station`, call `get_server_time` and `upcoming_shows`, subscribe to `station` UPDATEs and receive one when the owner toggles a harmless field off air (or the agent sees the 60 s re-read path work if the Realtime UPDATE never arrives). If the UPDATE does not arrive, record it: the flip then relies on the 60 s re-read and the spec's 5 s target changes to 60 s.
+- [x] **8.1 Failing tests** through `RadioApp` with `makeSupabase` mocked (`ListenerApp` is not exported; `RadioApp.test.tsx` is new):
   - No session, station off: standby renders and **`signInAnonymously` is never called**.
   - No session, station loading: LOADING, then the gate after 3 s if still unknown.
   - Station flips live: the gate renders.
   - Station flips off while on the gate: standby renders.
   - Banned in localStorage: SIGNAL BLOCKED, never standby.
   - Session + identity + off air: standby via the existing room path (unchanged).
-- [ ] **8.2** Implement as a render-time rule (gate + off air renders standby). The only new effect is the 3 s timer for the LOADING fallback; nothing changes on the session/mount path.
-- [ ] **8.3** Commit: `feat(radio): show the countdown before the gate while off air`.
+- [x] **8.2** Implement as a render-time rule (gate + off air renders standby). The only new effect is the 3 s timer for the LOADING fallback; nothing changes on the session/mount path.
+- [x] **8.3** Commit: `feat(radio): show the countdown before the gate while off air`.
 
 ## Task 9: verification, design review, docs
 
