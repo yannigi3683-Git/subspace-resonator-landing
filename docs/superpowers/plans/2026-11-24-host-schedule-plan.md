@@ -1,6 +1,6 @@
 # Host Console SCHEDULE tab - Plan for approval
 
-Status: **PLAN ONLY, awaiting owner approval. No code written.**
+Status: **SUPERSEDED 2026-11-25** by `specs/2026-11-25-radio-schedule-design.md` and `plans/2026-11-25-radio-schedule.md`. Kept as the approval history (owner answers in sections 8-9).
 Date: 2026-11-24. Implementation branch, once approved: `feat/radio-schedule` off `master`.
 
 ---
