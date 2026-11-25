@@ -183,3 +183,37 @@ Risk level: **low**. No audio path, no server function, no restreamer. The only 
 | **D4** | GO LIVE title auto-filled from the scheduled show? | **Not now.** It touches `GoLivePanel`; separate small follow-up if wanted. |
 
 Reply with approval (and any changes to D1-D4) and I will start Phase 0.
+
+---
+
+## 8. Owner answers, 2026-11-25
+
+Asked after the mockup: should the schedule also play pre-assigned files automatically?
+
+| Question | Answer |
+|---|---|
+| Scope of this build | **Schedule only.** Announcement board + countdown, exactly as in sections 2-6. No automatic playout. |
+| Same-day shows (for the future autopilot) | **Both modes wanted.** (a) Separate broadcasts: END BROADCAST, then GO LIVE for the next show. (b) One continuous broadcast: files play one after another and the only visible change is the neon track name. |
+| Chat during an unattended show (future) | **Open.** Accepted risk: no moderator present (compare the 2026-07-25 incident). |
+
+Context the owner added: a show has no name of its own today. The neon under the DJ shows the track name, which comes from the file name (`makeName` in `localDeck.ts`). When a file name is not presentable, the owner types a BROADCAST TITLE by hand before GO LIVE. This bears on D4: pre-filling that field from the scheduled show would remove the manual step. D4 stays open for the owner to decide.
+
+## 9. Future, NOT in this build: scheduled autopilot
+
+Recorded so the requirements are not lost. Gets its own spec, plan and red team when picked up.
+
+- **Recommended shape:** "Option A", autopilot on the host PC (the restreamer PC). The console stays open, each scheduled show carries its own local files, and at the start time the console goes live, plays the set with the existing auto-mix, and ends. Same quality and capacity as a normal broadcast, no new cost. Rough effort 25-35 h on top of this build.
+- **Rejected for now:** "Option B", cloud playout (the June "Phase L" upload locker). 50-80 h, needs uploaded files and an always-on machine, and reverses the June decision against cloud storage.
+- **Requirements captured:**
+  - Both same-day modes from section 8.
+  - Each show's title becomes the broadcast title.
+  - Optional per-file display name, because file names are not always fit for the neon line.
+  - Chat open.
+- **Known risks to red-team then:**
+  - The PC sleeping, restarting for Windows updates, or Chrome restarting.
+  - Chrome forgetting file access after a restart (File System Access permission).
+  - The host aal2 session surviving for days.
+  - Changes to the GO LIVE / deck code (the 2026-10-11 desync area).
+  - An alert so a missed show never fails silently.
+  - An overnight 3-show rehearsal before trusting it.
+- **Why this build helps it:** the `scheduled_shows` table and SCHEDULE tab built here are the list autopilot would read. Nothing in this build blocks or pre-commits that design.
