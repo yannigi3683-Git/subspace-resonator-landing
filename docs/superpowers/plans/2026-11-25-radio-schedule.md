@@ -48,7 +48,7 @@
 ## Task 1: schema delta
 
 - [ ] **1.1 The test already exists.** `supabase/grants.test.ts` fails by itself whenever `.insert/.update/.delete` on `scheduled_shows` appear in `src/` without a matching grant. Task 3.3 proves it guards these writes.
-- [ ] **1.2** Add to `radio-schema.sql` (section 2 and section 10): the three grants, `upcoming_shows(_limit)` (sql, stable, security invoker, `set search_path = public`, limit clamped to 10, 30 min grace using `now()`), its execute grant to anon and authenticated, the `starts_at` index, and explicit drops for any policy found in 0.2.
+- [ ] **1.2** Add to `radio-schema.sql` (section 2 and section 10): the `aired_at timestamptz` column, the three grants, `upcoming_shows(_limit)` (sql, stable, security invoker, `set search_path = public`, limit clamped to 10, 30 min grace using `now()`), its execute grant to anon and authenticated, the `starts_at` index, and explicit drops for any policy found in 0.2.
 - [ ] **1.3** Write the same statements to `docs/superpowers/plans/2026-11-25-radio-schedule-delta.sql` (outside `supabase/`, so `grants.test.ts` does not read it twice), for the owner to paste **off air** in 10.1.
 - [ ] **1.4 Rebuild the `scheduled_shows` probes so they can fail** (the current probe sends a key that always gets 401 and counts that as PASS). In `scripts/rls-probe.mjs`, on supabase-js:
   - a client with **no session** and a client **signed in anonymously** (costs one anon sign-in per run);
@@ -63,7 +63,7 @@
 
 - [ ] **2.1 Failing tests** in `src/radio/scheduleRules.test.ts`:
   - `formatCountdown`: 0 and negative; 59 s; 1 h; 23:59:59; 1 day; 5d 03:22:08; 40 days.
-  - `standbyState`: no shows gives `tba`; read error gives `unavailable`; future show gives `countdown` with `later` capped at 2; at start and at start + 29:59 gives `starting-soon`; at start + 30:00 moves to the next show; late show plus a later one shows both.
+  - `standbyState`: aired shows are ignored; no shows gives `tba`; read error gives `unavailable`; future show gives `countdown` with `later` capped at 2; at start and at start + 29:59 gives `starting-soon`; at start + 30:00 moves to the next show; late show plus a later one shows both.
   - `suggestTitle`: none outside the window; picks the earliest inside `[now - 30 min, now + 6 h]`; two same-day shows pick the first, then the second once the first is over 30 min past.
   - `validateShow`: empty and whitespace title rejected; 81 chars rejected; 80 accepted after trim; invalid date rejected; past start warns, does not block; another show within 60 min warns with its title and the gap.
   - `formatShowTime`: Asia/Jerusalem en-GB gives `Sun 29 Nov, 22:00 GMT+2`; America/New_York en-US gives the EST form; a DST-change date in both zones.
@@ -101,6 +101,7 @@
   - **A panel that throws on render leaves `GoLivePanel` mounted and its GO LIVE button present**, and shows "Schedule failed to load."
   - `suggestedTitle` reaches `GoLivePanel` from the hook.
   - A schedule read that rejects leaves the console and `GoLivePanel` working, with no suggestion.
+  - When the broadcast status becomes live, the show starting within `[now - 30 min, now + 60 min]` is marked aired once; a failed write is logged and nothing else changes; no show is marked for a broadcast outside that window.
   - Existing assertion still holds: no channel opened on the shared prop client.
 - [ ] **5.2** Implement: hook at the console level (so pre-fill works without opening the tab), boundary around the panel only.
 - [ ] **5.3** Commit: `feat(radio): wire SCHEDULE tab into the console`.

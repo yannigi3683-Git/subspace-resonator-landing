@@ -37,9 +37,9 @@ about to go live, the title field is already filled in. The host still presses G
 ## 4. Design
 
 ### 4.1 Data (`supabase/radio-schema.sql`, applied as a delta, never while on air)
-- Existing table `scheduled_shows (id, title 1-80, starts_at, created_at)`. No new columns.
+- Existing table `scheduled_shows (id, title 1-80, starts_at, created_at)`, plus one new column `aired_at` (cycle A7.4 of the AUTO-RUN spec).
 - Add table grants `insert, update, delete` to `authenticated`. RLS (`shows_write`, admin + aal2) remains the real gate.
-- New read function `upcoming_shows(_limit)` (`_limit`, since `limit` is reserved; `set search_path = public`): security invoker (RLS applies), returns `id, title, starts_at` for shows with `starts_at > now() - 30 min`, soonest first, limit clamped to 10. Execute granted to anon and authenticated. The **server clock** decides what is upcoming.
+- New read function `upcoming_shows(_limit)` (`_limit`, since `limit` is reserved; `set search_path = public`): security invoker (RLS applies), returns `id, title, starts_at` for shows with `starts_at > now() - 30 min` **and `aired_at is null`**, soonest first, limit clamped to 10. Execute granted to anon and authenticated. The **server clock** decides what is upcoming.
 - Index on `starts_at`.
 - Any policy on `scheduled_shows` other than `shows_read` and `shows_write` found by the Phase 0 audit is dropped explicitly, in the existing style (not only bare-`true` ones: the 2026-07 `station_admin_write` hole was not a bare `true`).
 - **The host console reads the table directly** (all upcoming + last 5 past); only guests use `upcoming_shows`, so its clamp of 10 can never hide a show from the host or from the clash check.
@@ -67,6 +67,8 @@ about to go live, the title field is already filled in. The host still presses G
   - Applies only while the host has **not edited the field** (a `hostEdited` flag): the field is empty or still holds the last pre-filled value. Any keystroke, **including clearing the field to get `LIVE DJ`**, sets `hostEdited` and the field is left alone. END BROADCAST resets `hostEdited`, so the next show can pre-fill an empty or still-pre-filled field.
   - Never touches `titleRef` (which is set only at GO LIVE), so a reconnect can never re-title a running show.
   - Shows a hint under the field only while the field holds the pre-fill: `From schedule: <title> · <time> Israel`.
+
+- **Marking a show aired:** when the console's broadcast status becomes live, `AdminConsole` (not `GoLivePanel`) marks the show whose start is within `[now - 30 min, now + 60 min]` as aired, fire-and-forget; a failure is logged and changes nothing else. An aired show never shows as STARTING SOON again. This removes accepted limit R1.7.
 
 ### 4.4 Guest: standby + pre-gate (D1)
 - `ListenerApp`: when the view would be `gate` and the station is **off air**, render `StandbyScreen` instead. While the station row is still loading, show LOADING for up to 3 s, then fall back to the gate (today's behaviour). When the station goes live the gate appears by itself (the existing Realtime subscription in `useStation`, with its 60 s re-read as the fallback). Banned and kicked screens keep priority. Returning visitors with a session reach the same `StandbyScreen` through the existing room path.
@@ -163,7 +165,7 @@ Fixed in the prototypes: rows 2+ wrongly treated as past; the device frame is no
 Re-checked sections 1-5 and the plan after cycles 10-11. No new findings. **Ready to code once the owner signs off the journeys.**
 
 ## 7. Accepted limits
-- R1.7: a show ended inside its first 30 minutes reads STARTING SOON until those 30 minutes pass.
+- (R1.7 removed by the aired marking.) A manual broadcast more than 60 minutes before a show does not mark it aired.
 - A guest sees a schedule change within 60 s, not instantly.
 - Last write wins when two devices edit the same show.
 - Preview testing writes to the production database (7.1), and a preview GO LIVE reaches real waiting guests (S4).
