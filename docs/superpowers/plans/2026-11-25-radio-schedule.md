@@ -62,24 +62,24 @@
 
 ## Task 2: `scheduleRules.ts` (pure)
 
-- [ ] **2.1 Failing tests** in `src/radio/scheduleRules.test.ts`:
+- [x] **2.1 Failing tests** in `src/radio/scheduleRules.test.ts`:
   - `formatCountdown`: 0 and negative; 59 s; 1 h; 23:59:59; 1 day; 5d 03:22:08; 40 days.
   - `standbyState`: aired shows are ignored; no shows gives `tba`; read error gives `unavailable`; future show gives `countdown` with `later` capped at 2; at start and at start + 29:59 gives `starting-soon`; at start + 30:00 moves to the next show; late show plus a later one shows both.
   - `suggestTitle`: none outside the window; picks the earliest inside `[now - 30 min, now + 6 h]`; two same-day shows pick the first, then the second once the first is over 30 min past.
   - `validateShow`: empty and whitespace title rejected; 81 chars rejected; 80 accepted after trim; invalid date rejected; past start warns, does not block; another show within 60 min warns with its title and the gap.
   - `formatShowTime`: Asia/Jerusalem en-GB gives `Sun 29 Nov, 22:00 GMT+2`; America/New_York en-US gives the EST form; a DST-change date in both zones.
   - `hostTimePreview`: device in Israel gives no note; device in Asia/Kolkata gives the note and still shows Israel and UTC.
-- [ ] **2.2** Run `npx vitest run src/radio/scheduleRules.test.ts`, confirm red.
-- [ ] **2.2b** Add totality tests: invalid ISO strings, `NaN` dates, empty arrays, empty and whitespace titles, unknown time zones. **No function may throw**; each returns a safe value (no suggestion, `tba`, `--:--`).
-- [ ] **2.3** Implement. Confirm green.
-- [ ] **2.4** Commit: `feat(radio): schedule rules`.
+- [x] **2.2** Run `npx vitest run src/radio/scheduleRules.test.ts`, confirm red.
+- [x] **2.2b** Add totality tests: invalid ISO strings, `NaN` dates, empty arrays, empty and whitespace titles, unknown time zones. **No function may throw**; each returns a safe value (no suggestion, `tba`, `--:--`).
+- [x] **2.3** Implement. Confirm green.
+- [x] **2.4** Commit: `feat(radio): schedule rules`.
 
 ## Task 3: `useSchedule` hook
 
-- [ ] **3.1 Failing tests** with a mocked supabase client and fake timers: reads on mount; re-reads after 60 s while visible; skips while hidden; re-reads on `visibilitychange`; a failed read keeps the previous list and sets `error`; `add` disables re-entry while pending; `update` and `remove` report an error when the response has **zero rows**; every write triggers a re-read.
-- [ ] **3.2** Implement in `src/radio/hooks/useSchedule.ts`. Reads the **table directly** (all upcoming plus the last 5 past), never the RPC, so no show is ever hidden from the host. Selects on the passed client only, **no channels**, so the existing "AdminConsole never opens a channel on the shared client" test keeps passing. Every read and write error is caught and returned as `error`; the hook never throws.
-- [ ] **3.3** Guard check (not committed): comment out the Task 1 write grants, run `npx vitest run supabase/grants.test.ts`, confirm red; restore, confirm green.
-- [ ] **3.4** Commit: `feat(radio): useSchedule hook`.
+- [x] **3.1 Failing tests** with a mocked supabase client and fake timers: reads on mount; re-reads after 60 s while visible; skips while hidden; re-reads on `visibilitychange`; a failed read keeps the previous list and sets `error`; `add` disables re-entry while pending; `update` and `remove` report an error when the response has **zero rows**; every write triggers a re-read.
+- [x] **3.2** Implement in `src/radio/hooks/useSchedule.ts`. Reads the **table directly** (all upcoming plus the last 5 past), never the RPC, so no show is ever hidden from the host. Selects on the passed client only, **no channels**, so the existing "AdminConsole never opens a channel on the shared client" test keeps passing. Every read and write error is caught and returned as `error`; the hook never throws.
+- [x] **3.3** Guard check (not committed): comment out the Task 1 write grants, run `npx vitest run supabase/grants.test.ts`, confirm red; restore, confirm green.
+- [x] **3.4** Commit: `feat(radio): useSchedule hook`.
 
 ## Task 4: `SchedulePanel`
 
