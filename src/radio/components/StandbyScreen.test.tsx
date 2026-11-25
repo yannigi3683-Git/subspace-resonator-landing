@@ -140,4 +140,24 @@ describe('StandbyScreen', () => {
     await act(async () => {});
     expect(screen.getByTestId('show-when')).toHaveTextContent('Sun, Nov 29, 3:00 PM EST · your time');
   });
+
+  it('keeps a good countdown when a later refresh fails (weak signal)', async () => {
+    vi.useFakeTimers();
+    let fail = false;
+    await mount(() => (fail ? { data: null, error: { message: 'offline' } } : { data: [show('Psy Night Vol. 7', START)], error: null }));
+    expect(screen.getByTestId('countdown')).toBeInTheDocument();
+    fail = true;
+    await act(async () => { vi.advanceTimersByTime(60_000); });
+    expect(screen.getByTestId('countdown')).toBeInTheDocument();
+  });
+
+  it('still tells the guest to keep the page open when the schedule could not load', async () => {
+    await mount(() => ({ data: null, error: { message: 'offline' } }));
+    expect(screen.getByText('Keep this page open. It switches over by itself when the signal goes live.')).toBeInTheDocument();
+  });
+
+  it('reads LATER as a list, one show per item', async () => {
+    await mount(() => ({ data: [show('First', START), show('Second', START + DAY), show('Third', START + 2 * DAY)], error: null }));
+    expect(screen.getAllByRole('listitem')).toHaveLength(2);
+  });
 });

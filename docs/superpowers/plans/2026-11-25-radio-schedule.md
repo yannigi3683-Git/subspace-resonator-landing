@@ -155,10 +155,11 @@
 
 ## Task 9: verification, design review, docs
 
-- [ ] **9.1** `npm run build` and `npx vitest run`: both clean; count above baseline.
-- [ ] **9.2** `design-critic` agent on every new screen at 320, 390, 768, 1280 wide and 844x390 sideways, host and guest. Fix, re-run until no rule breaks.
-- [ ] **9.3** Docs: CLAUDE.md (Subspace Radio section: schedule, pre-gate standby, title pre-fill incl. PEEK vs ALWAYS, preview-uses-production and test-broadcast warnings, the probe rebuild; correct the test-count line and the `grants.test.ts` line, which also covers `.update` and never checks `.rpc` execute grants), `build_guide.py` + regenerated PDF (host guide page for SCHEDULE), beta guide line for the SCHEDULE tab, Key specs list.
-- [ ] **9.4** Commit: `docs(radio): schedule`.
+- [x] **9.1** `npm run build` and `npx vitest run`: both clean; count above baseline.
+- [x] **9.2** `design-critic` agent on every new screen at 320, 390, 768, 1280 wide and 844x390 sideways, host and guest. Fix, re-run until no rule breaks.
+- [x] **9.3** Docs: CLAUDE.md (Subspace Radio section: schedule, pre-gate standby, title pre-fill incl. PEEK vs ALWAYS, preview-uses-production and test-broadcast warnings, the probe rebuild; correct the test-count line and the `grants.test.ts` line, which also covers `.update` and never checks `.rpc` execute grants), `build_guide.py` + regenerated PDF (host guide page for SCHEDULE), beta guide line for the SCHEDULE tab, Key specs list.
+- [x] **9.4** Commit: `docs(radio): schedule`.
+  - Design reviews 2026-11-25: SCHEDULE tab (5 sizes, 6 states) and standby (5 sizes, 4 states + New York + reduced motion) on a local harness, never committed. Fixed: '1h 60m' rounding, focus after edit/delete, past-row contrast, off-screen alert, long titles, a failed refresh blanking a good countdown, the empty failed-load screen, LATER read as one block. Not done: input borders (project-wide token). The standby padlock is Release 2 (phone status line).
 
 ## Task 10: rollout and validation (owner + agent)
 

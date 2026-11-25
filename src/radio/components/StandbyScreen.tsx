@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import { formatCountdown, formatShowTime, standbyState, type Show } from '../scheduleRules';
 
@@ -49,6 +49,9 @@ export function StandbyScreen({ supabase, getServerTime, zone, locale }: Standby
   const [shows, setShows] = useState<Show[] | null>([]);
   const [loaded, setLoaded] = useState(false);
   const [, setTick] = useState(0);
+  // After one good read, a failed refresh keeps the last good list: on a weak phone signal the
+  // countdown must not vanish for a minute. Only a page that never read successfully says nothing.
+  const okOnce = useRef(false);
 
   useEffect(() => {
     let cancelled = false;
@@ -56,9 +59,14 @@ export function StandbyScreen({ supabase, getServerTime, zone, locale }: Standby
       try {
         const { data, error } = await supabase.rpc('upcoming_shows', { _limit: 3 });
         if (cancelled) return;
-        setShows(error || !Array.isArray(data) ? null : (data as Show[]));
+        if (error || !Array.isArray(data)) {
+          if (!okOnce.current) setShows(null);
+        } else {
+          okOnce.current = true;
+          setShows(data as Show[]);
+        }
       } catch {
-        if (!cancelled) setShows(null);
+        if (!cancelled && !okOnce.current) setShows(null);
       } finally {
         if (!cancelled) setLoaded(true);
       }
@@ -137,17 +145,19 @@ export function StandbyScreen({ supabase, getServerTime, zone, locale }: Standby
 
         {state.later.length > 0 && (
           <div data-testid="later" className="w-full mt-8 [@media(max-height:500px)]:mt-4 text-left">
-            <p className="font-mono text-[#26C6DA]/80 text-[10px] tracking-[0.3em] mb-2">LATER</p>
-            {state.later.map((s) => (
-              <div key={s.id} className="flex items-baseline justify-between gap-3 py-2 border-t border-white/10">
-                <span className="font-mono text-white/80 text-xs truncate">{s.title}</span>
-                <span className="font-mono text-white/60 text-[11px] tabular-nums shrink-0">{shortTime(s.starts_at, tz, lang)}</span>
-              </div>
-            ))}
+            <p id="standby-later" className="font-mono text-[#26C6DA]/80 text-[10px] tracking-[0.3em] mb-2">LATER</p>
+            <ul aria-labelledby="standby-later">
+              {state.later.map((s) => (
+                <li key={s.id} className="flex items-baseline justify-between gap-3 py-2 border-t border-white/10">
+                  <span className="font-mono text-white/80 text-xs min-w-0 line-clamp-2 break-words">{s.title}</span>
+                  <span className="font-mono text-white/60 text-[11px] tabular-nums shrink-0">{shortTime(s.starts_at, tz, lang)}</span>
+                </li>
+              ))}
+            </ul>
           </div>
         )}
 
-        {state.next && (
+        {(state.next || state.kind === 'unavailable') && (
           <p className="font-mono text-white/60 text-[11px] leading-relaxed mt-8 [@media(max-height:500px)]:mt-4 max-w-[260px]">
             Keep this page open. It switches over by itself when the signal goes live.
           </p>
