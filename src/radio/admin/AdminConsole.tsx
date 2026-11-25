@@ -1,7 +1,33 @@
-import { useState } from 'react';
+import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
+import SchedulePanel from './SchedulePanel';
 import { usePresenceObserver } from '../hooks/usePresenceObserver';
+import { useSchedule } from '../hooks/useSchedule';
+import { useServerClock } from '../hooks/useServerClock';
+import { showToMarkAired } from '../scheduleRules';
+
+// Keeps a crash inside the Schedule tab. Without it a render error unmounts the whole console,
+// GoLivePanel included, which orphans a live connection and takes END BROADCAST with it.
+class ScheduleBoundary extends Component<{ children: ReactNode }, { failed: boolean }> {
+  state = { failed: false };
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+  componentDidCatch(error: unknown) {
+    console.error('[schedule] panel crashed', error);
+  }
+  render() {
+    if (this.state.failed) {
+      return (
+        <section className="section-border p-6">
+          <p className="font-mono text-xs text-red-400">Schedule failed to load.</p>
+        </section>
+      );
+    }
+    return this.props.children;
+  }
+}
 
 interface Props {
   supabase: SupabaseClient;
@@ -17,6 +43,27 @@ export default function AdminConsole({ supabase, authToken }: Props) {
   // Presence is read through a rejoining observer on its own client; see usePresenceObserver.
   // Measured 2026-08-22: this badge read 21 while the server held 12.
   const listenerCount = usePresenceObserver(authToken).length;
+
+  const getServerTime = useServerClock(supabase);
+  const getNow = useCallback(() => getServerTime().getTime(), [getServerTime]);
+  const schedule = useSchedule(supabase);
+
+  // Mark the show this broadcast is for as aired, once per broadcast, so guests never see
+  // STARTING SOON or a countdown for a show that already happened. A reconnect passes through
+  // 'error' and back to 'live' without reaching 'idle', so it does not mark again.
+  const markedRef = useRef(false);
+  const { shows, markAired } = schedule;
+  useEffect(() => {
+    if (broadcastStatus === 'idle') {
+      markedRef.current = false;
+      return;
+    }
+    if (broadcastStatus !== 'live' || markedRef.current) return;
+    const show = showToMarkAired(shows, getNow());
+    if (!show) return;
+    markedRef.current = true;
+    void markAired(show.id);
+  }, [broadcastStatus, shows, markAired, getNow]);
 
   // Truthful live indicator: only 'live' means audio is actually going out.
   // 'starting'/'ending' are transitional; 'idle'/'error' are off the air.
@@ -94,12 +141,9 @@ export default function AdminConsole({ supabase, authToken }: Props) {
       </div>
 
       {activeTab === 'schedule' && (
-        <section className="section-border p-6">
-          <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground mb-4">
-            // SCHEDULE
-          </p>
-          <p className="font-mono text-xs text-muted-foreground">Scheduled shows - coming in M8.</p>
-        </section>
+        <ScheduleBoundary>
+          <SchedulePanel schedule={schedule} getNow={getNow} />
+        </ScheduleBoundary>
       )}
 
       {activeTab === 'moderation' && (

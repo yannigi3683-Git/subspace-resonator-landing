@@ -187,3 +187,16 @@ export function msToWallTime(ms: number, zone: string): string {
   const local = new Date(ms + zoneOffsetMs(ms, safeZone(zone)));
   return `${local.getUTCFullYear()}-${p2(local.getUTCMonth() + 1)}-${p2(local.getUTCDate())}T${p2(local.getUTCHours())}:${p2(local.getUTCMinutes())}`;
 }
+
+export const AIRED_AHEAD_MS = HOUR;
+
+// When the host goes live, the show this broadcast is for: the nearest not-yet-aired start within
+// an hour ahead or 30 minutes behind. Narrower than the title suggestion on purpose, so a manual
+// broadcast in the afternoon never marks the evening's show as aired.
+export function showToMarkAired(shows: Show[], nowMs: number): Show | null {
+  const candidates = shows.filter(
+    (s) => usable(s) && startMs(s) >= nowMs - GRACE_MS && startMs(s) <= nowMs + AIRED_AHEAD_MS,
+  );
+  candidates.sort((a, b) => Math.abs(startMs(a) - nowMs) - Math.abs(startMs(b) - nowMs));
+  return candidates[0] ?? null;
+}

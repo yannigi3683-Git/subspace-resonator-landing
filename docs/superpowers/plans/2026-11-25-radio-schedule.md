@@ -97,16 +97,16 @@
 
 ## Task 5: `AdminConsole` wiring + error boundary
 
-- [ ] **5.0** Extend the test mock `makeProp()` (`AdminConsole.test.tsx:51`) with `from` and `rpc`, since the console-level hook now reads on mount.
-- [ ] **5.1 Failing tests** in `AdminConsole.test.tsx`:
+- [x] **5.0** (Done differently: the console tests mock `useSchedule` and `useServerClock` the same way they already mock `GoLivePanel`, so the prop client needs no `from`/`rpc`.) Extend the test mock `makeProp()` (`AdminConsole.test.tsx:51`) with `from` and `rpc`, since the console-level hook now reads on mount.
+- [x] **5.1 Failing tests** in `AdminConsole.test.tsx`:
   - SCHEDULE tab shows the panel (replaces "coming in M8").
   - **A panel that throws on render leaves `GoLivePanel` mounted and its GO LIVE button present**, and shows "Schedule failed to load."
-  - `suggestedTitle` reaches `GoLivePanel` from the hook.
+  - `suggestedTitle` reaches `GoLivePanel` from the hook. **Moved to Task 6**, which adds that prop to `GoLivePanel`.
   - A schedule read that rejects leaves the console and `GoLivePanel` working, with no suggestion.
   - When the broadcast status becomes live, the show starting within `[now - 30 min, now + 60 min]` is marked aired once; a failed write is logged and nothing else changes; no show is marked for a broadcast outside that window.
   - Existing assertion still holds: no channel opened on the shared prop client.
-- [ ] **5.2** Implement: hook at the console level (so pre-fill works without opening the tab), boundary around the panel only.
-- [ ] **5.3** Commit: `feat(radio): wire SCHEDULE tab into the console`.
+- [x] **5.2** Implement: hook at the console level (so pre-fill works without opening the tab), boundary around the panel only.
+- [x] **5.3** Commit: `feat(radio): wire SCHEDULE tab into the console`.
 
 ## Task 6: `GoLivePanel` title pre-fill (D4)
 

@@ -9,6 +9,7 @@ import {
   formatRelative,
   wallTimeToMs,
   msToWallTime,
+  showToMarkAired,
   type Show,
 } from './scheduleRules';
 
@@ -202,5 +203,24 @@ describe('wallTimeToMs / msToWallTime', () => {
     expect(wallTimeToMs('nope', 'Asia/Jerusalem')).toBeNaN();
     expect(Number.isFinite(wallTimeToMs('2026-11-29T22:00', 'Mars/Base'))).toBe(true);
     expect(msToWallTime(Number.NaN, 'Asia/Jerusalem')).toBe('');
+  });
+});
+
+describe('showToMarkAired', () => {
+  it('picks the show starting within 60 minutes ahead or 30 minutes behind', () => {
+    expect(showToMarkAired([show('a', T)], T - 50 * MIN)?.id).toBe('a');
+    expect(showToMarkAired([show('a', T)], T + 20 * MIN)?.id).toBe('a');
+  });
+  it('marks nothing for a broadcast outside that window', () => {
+    expect(showToMarkAired([show('a', T)], T - 61 * MIN)).toBeNull();
+    expect(showToMarkAired([show('a', T)], T + 31 * MIN)).toBeNull();
+  });
+  it('never picks a show that already aired, and picks the nearest start', () => {
+    expect(showToMarkAired([show('a', T, { aired_at: iso(T) })], T)).toBeNull();
+    expect(showToMarkAired([show('far', T + 50 * MIN), show('near', T + 5 * MIN)], T)?.id).toBe('near');
+  });
+  it('returns null on empty or broken input', () => {
+    expect(showToMarkAired([], T)).toBeNull();
+    expect(showToMarkAired([{ id: 'x', title: 'x', starts_at: 'nope' }], T)).toBeNull();
   });
 });

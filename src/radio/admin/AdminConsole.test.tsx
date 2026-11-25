@@ -17,8 +17,40 @@ vi.mock('./GoLivePanel', () => ({
       <button data-testid="fake-go-live" onClick={() => onStatusChange?.('live')}>
         go
       </button>
+      <button data-testid="fake-end" onClick={() => onStatusChange?.('idle')}>
+        end
+      </button>
     </div>
   ),
+}));
+
+// The schedule's data and the server clock are their own hooks with their own tests; here they are
+// fixed so the console's coordination is what is under test.
+const SHOW_AT = Date.UTC(2026, 10, 29, 20, 0);
+const scheduleState = {
+  shows: [
+    { id: 'tonight', title: 'Psy Night Vol. 7', starts_at: new Date(SHOW_AT).toISOString(), aired_at: null },
+    { id: 'later', title: 'Goa Classics 1998', starts_at: new Date(SHOW_AT + 7 * 86_400_000).toISOString(), aired_at: null },
+  ],
+  now: SHOW_AT - 20 * 60_000,
+  markAired: vi.fn(async () => {}),
+};
+vi.mock('../hooks/useSchedule', () => ({
+  useSchedule: () => ({
+    shows: scheduleState.shows, error: null, saving: false,
+    reload: vi.fn(), add: vi.fn(), update: vi.fn(), remove: vi.fn(),
+    markAired: scheduleState.markAired,
+  }),
+}));
+vi.mock('../hooks/useServerClock', () => ({ useServerClock: () => () => new Date(scheduleState.now) }));
+
+// A stand-in panel that can be told to crash on render, to prove the crash stays inside its tab.
+const panelState = { crash: false };
+vi.mock('./SchedulePanel', () => ({
+  default: () => {
+    if (panelState.crash) throw new Error('schedule panel exploded');
+    return <div data-testid="schedule-panel" />;
+  },
 }));
 
 // One presence channel stub. `state` is read live so a rebuild can return different rosters.
@@ -61,6 +93,8 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
   vi.clearAllMocks();
+  panelState.crash = false;
+  scheduleState.now = SHOW_AT - 20 * 60_000;
 });
 
 describe('AdminConsole', () => {
@@ -169,5 +203,50 @@ describe('AdminConsole', () => {
     await act(async () => {});
 
     expect(prop.channel).not.toHaveBeenCalled();
+  });
+
+  it('shows the schedule panel on the SCHEDULE tab', () => {
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByText('SCHEDULE'));
+    expect(screen.getByTestId('schedule-panel')).toBeInTheDocument();
+    expect(screen.queryByText(/coming in M8/)).toBeNull();
+  });
+
+  it('keeps the broadcast panel and GO LIVE alive when the schedule panel crashes', () => {
+    // An unmounted GoLivePanel orphans a live connection and takes END BROADCAST with it, so a
+    // schedule bug must stay inside its own tab.
+    panelState.crash = true;
+    vi.spyOn(console, 'error').mockImplementation(() => {});
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByText('SCHEDULE'));
+    expect(screen.getByText('Schedule failed to load.')).toBeInTheDocument();
+    expect(screen.getByTestId('go-live-panel')).toBeInTheDocument();
+    fireEvent.click(screen.getByText('BROADCAST'));
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    expect(screen.getByTestId('broadcast-status-badge')).toHaveTextContent('ON AIR');
+  });
+
+  it('marks the show starting now as aired when the broadcast goes live, once', () => {
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    expect(scheduleState.markAired).toHaveBeenCalledTimes(1);
+    expect(scheduleState.markAired).toHaveBeenCalledWith('tonight');
+  });
+
+  it('marks nothing for a broadcast nowhere near a scheduled show', () => {
+    scheduleState.now = SHOW_AT - 5 * 3_600_000;
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    expect(scheduleState.markAired).not.toHaveBeenCalled();
+  });
+
+  it('can mark the next show after the broadcast ends and a new one starts', () => {
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    fireEvent.click(screen.getByTestId('fake-end'));
+    scheduleState.now = SHOW_AT + 7 * 86_400_000 - 10 * 60_000;
+    fireEvent.click(screen.getByTestId('fake-go-live'));
+    expect(scheduleState.markAired).toHaveBeenNthCalledWith(2, 'later');
   });
 });
