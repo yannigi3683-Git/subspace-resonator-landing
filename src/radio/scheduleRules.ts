@@ -143,12 +143,14 @@ export function formatRelative(targetMs: number, nowMs: number): string {
     const ago = Math.round(-diff / MIN);
     return ago < 60 ? `started ${ago} min ago` : `started ${Math.round(ago / 60)} h ago`;
   }
-  const d = Math.floor(diff / (24 * HOUR));
-  const h = Math.floor((diff % (24 * HOUR)) / HOUR);
-  const m = Math.round((diff % HOUR) / MIN);
-  if (d >= 10) return `in ${d} days`;
-  if (d) return `in ${d}d ${h}h`;
-  if (h) return `in ${h}h ${m}m`;
+  // Round to whole minutes BEFORE splitting into units, or 1h 59m 40s reads "1h 60m".
+  const mins = Math.round(diff / MIN);
+  if (mins >= 2 * 24 * 60) return `in ${Math.round(diff / (24 * HOUR))} days`;
+  const d = Math.floor(mins / (24 * 60));
+  const h = Math.floor((mins % (24 * 60)) / 60);
+  const m = mins % 60;
+  if (d) return h ? `in ${d}d ${h}h` : `in ${d}d`;
+  if (h) return m ? `in ${h}h ${m}m` : `in ${h}h`;
   return `in ${m} min`;
 }
 

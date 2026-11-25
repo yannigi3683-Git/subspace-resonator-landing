@@ -174,8 +174,15 @@ describe('formatRelative', () => {
   it('counts down in the most useful unit', () => {
     expect(formatRelative(T + 12 * MIN, T)).toBe('in 12 min');
     expect(formatRelative(T + 3 * HOUR + 20 * MIN, T)).toBe('in 3h 20m');
-    expect(formatRelative(T + 5 * DAY + 3 * HOUR, T)).toBe('in 5d 3h');
+    expect(formatRelative(T + DAY + 5 * HOUR, T)).toBe('in 1d 5h');
+    expect(formatRelative(T + 5 * DAY + 3 * HOUR, T)).toBe('in 5 days');
     expect(formatRelative(T + 12 * DAY, T)).toBe('in 12 days');
+  });
+  it('rounds before splitting, so it never reads 60m, and drops zero units', () => {
+    expect(formatRelative(T + HOUR + 59 * MIN + 40_000, T)).toBe('in 2h');
+    expect(formatRelative(T + 59 * MIN + 40_000, T)).toBe('in 1h');
+    expect(formatRelative(T + DAY, T)).toBe('in 1d');
+    expect(formatRelative(T + 5 * DAY, T)).toBe('in 5 days');
   });
   it('says how long ago a show started', () => {
     expect(formatRelative(T, T + 7 * MIN)).toBe('started 7 min ago');

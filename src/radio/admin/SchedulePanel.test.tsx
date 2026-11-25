@@ -48,7 +48,7 @@ describe('SchedulePanel list', () => {
     ]);
     expect(rows()[0].textContent).toContain('22:00 Israel');
     expect(rows()[0].textContent).toContain('20:00 UTC');
-    expect(rows()[0].textContent).toContain('in 5d 0h');
+    expect(rows()[0].textContent).toContain('in 5 days');
   });
 
   it('folds past shows behind a count and opens them on tap', () => {
@@ -167,6 +167,24 @@ describe('SchedulePanel edit and delete', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Delete Subspace Theory Live' }));
     fireEvent.click(screen.getByRole('button', { name: 'DELETE' }));
     expect(api.remove).toHaveBeenCalledWith('u3');
+  });
+});
+
+describe('SchedulePanel keyboard focus', () => {
+  it('moves focus into the edit title, and back to the pencil on CANCEL', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Edit Psy Night Vol. 7' }));
+    expect(document.activeElement).toBe(screen.getByDisplayValue('Psy Night Vol. 7'));
+    fireEvent.click(screen.getByRole('button', { name: 'CANCEL' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Edit Psy Night Vol. 7' }));
+  });
+
+  it('puts focus on KEEP, the safe choice, and back on the bin after KEEP', () => {
+    setup();
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Goa Classics 1998' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'KEEP' }));
+    fireEvent.click(screen.getByRole('button', { name: 'KEEP' }));
+    expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Delete Goa Classics 1998' }));
   });
 });
 

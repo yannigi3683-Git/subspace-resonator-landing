@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CalendarPlus, ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { ScheduleApi } from '../hooks/useSchedule';
 import {
@@ -31,9 +31,9 @@ const ICON_BTN = 'w-11 h-11 border border-border inline-flex items-center justif
 
 interface Draft { title: string; start: string }
 
-function Field({ id, label, value, type = 'text', placeholder, hint, onChange }: {
+function Field({ id, label, value, type = 'text', placeholder, hint, autoFocus, onChange }: {
   id: string; label: string; value: string; type?: 'text' | 'datetime-local'; placeholder?: string; hint?: string;
-  onChange: (v: string) => void;
+  autoFocus?: boolean; onChange: (v: string) => void;
 }) {
   return (
     <div className="flex flex-col gap-1">
@@ -44,6 +44,7 @@ function Field({ id, label, value, type = 'text', placeholder, hint, onChange }:
         value={value}
         maxLength={type === 'text' ? 80 : undefined}
         placeholder={placeholder}
+        autoFocus={autoFocus}
         onChange={(e) => onChange(e.target.value)}
         className={INPUT}
       />
@@ -87,11 +88,28 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
   const [editDraft, setEditDraft] = useState<Draft>({ title: '', start: '' });
   const [confirmId, setConfirmId] = useState<string | null>(null);
   const [pastOpen, setPastOpen] = useState(false);
+  // The pencil and the bin unmount while their row is open, so focus would fall to <body>.
+  // Hand it back to the button that opened the row when the row closes.
+  const buttons = useRef(new Map<string, HTMLButtonElement>());
+  const [returnFocus, setReturnFocus] = useState<string | null>(null);
+  const alertRef = useRef<HTMLParagraphElement>(null);
 
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 30_000);
     return () => clearInterval(t);
   }, []);
+
+  useEffect(() => {
+    if (!returnFocus) return;
+    buttons.current.get(returnFocus)?.focus();
+    setReturnFocus(null);
+  }, [returnFocus]);
+
+  // A refused change is reported at the top of the panel, which can be off screen on a phone after
+  // acting on a row further down.
+  useEffect(() => {
+    if (schedule.error) alertRef.current?.scrollIntoView?.({ block: 'nearest' });
+  }, [schedule.error]);
 
   const now = getNow();
   const { shows, saving, error } = schedule;
@@ -115,8 +133,16 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
   }
   async function handleSave() {
     if (!editId || !canSave) return;
-    if (await schedule.update(editId, { title: editDraft.title.trim(), starts_at: new Date(editMs).toISOString() })) setEditId(null);
+    const id = editId;
+    if (await schedule.update(id, { title: editDraft.title.trim(), starts_at: new Date(editMs).toISOString() })) {
+      setEditId(null);
+      setReturnFocus(`edit:${id}`);
+    }
   }
+  const keepRef = (id: string) => (el: HTMLButtonElement | null) => {
+    if (el) buttons.current.set(id, el);
+    else buttons.current.delete(id);
+  };
   async function handleDelete(id: string) {
     setConfirmId(null);
     await schedule.remove(id);
@@ -130,14 +156,14 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
       return (
         <div key={s.id} data-testid="show-row" className="border border-primary p-3 flex flex-col gap-3 bg-primary/5">
           <span className="font-mono text-[11px] tracking-widest text-white">EDITING</span>
-          <Field id={`edit-title-${s.id}`} label="TITLE" value={editDraft.title} onChange={(title) => setEditDraft((d) => ({ ...d, title }))} />
+          <Field id={`edit-title-${s.id}`} label="TITLE" value={editDraft.title} autoFocus onChange={(title) => setEditDraft((d) => ({ ...d, title }))} />
           <Field id={`edit-start-${s.id}`} label="STARTS" type="datetime-local" value={editDraft.start}
             hint={`Your device time (${zoneName(zone)}).`} onChange={(start) => setEditDraft((d) => ({ ...d, start }))} />
           <Preview draft={editDraft} zone={zone} now={now} shows={shows} ignoreId={s.id} />
           <div className="grid grid-cols-2 gap-2">
             <button type="button" onClick={handleSave} disabled={!canSave}
               className={`${BTN} ${canSave ? 'border-primary text-white bg-primary/20' : 'border-border text-muted-foreground/50'}`}>SAVE</button>
-            <button type="button" onClick={() => setEditId(null)} className={`${BTN} border-border text-muted-foreground`}>CANCEL</button>
+            <button type="button" onClick={() => { setEditId(null); setReturnFocus(`edit:${s.id}`); }} className={`${BTN} border-border text-muted-foreground`}>CANCEL</button>
           </div>
         </div>
       );
@@ -146,7 +172,7 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
     const started = !isPast && ms <= now;
     return (
       <div key={s.id} data-testid="show-row"
-        className={`border ${confirming ? 'border-red-500/60 bg-red-500/[0.04]' : started ? 'border-amber-500/60' : 'border-border'} p-3 flex flex-col gap-3 ${isPast ? 'opacity-70' : ''}`}>
+        className={`border ${confirming ? 'border-red-500/60 bg-red-500/[0.04]' : started ? 'border-amber-500/60' : 'border-border'} p-3 flex flex-col gap-3 ${isPast ? 'opacity-80' : ''}`}>
         <div className="flex items-stretch gap-3">
           <div className="w-14 shrink-0 text-center border-r border-border pr-3 flex flex-col justify-center">
             <p className="font-mono text-[10px] tracking-widest text-muted-foreground">{part(ms, { weekday: 'short' })}</p>
@@ -154,7 +180,7 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
             <p className="font-mono text-[10px] tracking-widest text-muted-foreground">{part(ms, { month: 'short' })}</p>
           </div>
           <div className="flex-1 min-w-0 flex flex-col justify-center gap-0.5">
-            <p data-testid="show-title" className="font-mono text-sm text-white break-words line-clamp-2">{s.title}</p>
+            <p data-testid="show-title" className="font-mono text-sm text-white break-words line-clamp-3 sm:line-clamp-2">{s.title}</p>
             <p className="font-mono text-[11px] text-muted-foreground">
               <span className="whitespace-nowrap">{hhmm(ms, ISRAEL)} Israel</span> · <span className="whitespace-nowrap">{hhmm(ms, 'UTC')} UTC</span>
             </p>
@@ -167,12 +193,12 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
           {!confirming && (
             <div className="flex flex-col sm:flex-row gap-1 shrink-0 items-start">
               {!isPast && (
-                <button type="button" aria-label={`Edit ${s.title}`} onClick={() => openEdit(s)}
+                <button type="button" ref={keepRef(`edit:${s.id}`)} aria-label={`Edit ${s.title}`} onClick={() => openEdit(s)}
                   className={`${ICON_BTN} hover:text-white hover:border-primary`}>
                   <Pencil className="w-4 h-4" aria-hidden="true" strokeWidth={1.5} />
                 </button>
               )}
-              <button type="button" aria-label={`Delete ${s.title}`} onClick={() => { setEditId(null); setConfirmId(s.id); }}
+              <button type="button" ref={keepRef(`del:${s.id}`)} aria-label={`Delete ${s.title}`} onClick={() => { setEditId(null); setConfirmId(s.id); }}
                 className={`${ICON_BTN} hover:text-red-400 hover:border-red-500`}>
                 <Trash2 className="w-4 h-4" aria-hidden="true" strokeWidth={1.5} />
               </button>
@@ -184,7 +210,7 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
             <p className="font-mono text-[11px] text-red-400">Delete this show? Guests stop seeing it within a minute.</p>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => handleDelete(s.id)} className={`${BTN} border-red-500 text-red-400 bg-red-500/10`}>DELETE</button>
-              <button type="button" onClick={() => setConfirmId(null)} className={`${BTN} border-border text-muted-foreground`}>KEEP</button>
+              <button type="button" autoFocus onClick={() => { setConfirmId(null); setReturnFocus(`del:${s.id}`); }} className={`${BTN} border-border text-muted-foreground`}>KEEP</button>
             </div>
           </>
         )}
@@ -197,7 +223,10 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
       <p className="font-mono text-[11px] tracking-[0.35em] text-muted-foreground">// SCHEDULE</p>
 
       {error && (
-        <p role="alert" className="font-mono text-xs text-red-400 border border-red-500/60 bg-red-500/10 p-3 leading-relaxed">{error}</p>
+        <p ref={alertRef} role="alert" className="font-mono text-xs text-red-400 border border-red-500/60 bg-red-500/10 p-3 leading-relaxed flex gap-2">
+          <AlertTriangle className="w-3.5 h-3.5 shrink-0 mt-0.5" aria-hidden="true" />
+          <span>{error}</span>
+        </p>
       )}
 
       <div className="flex flex-col gap-3">
