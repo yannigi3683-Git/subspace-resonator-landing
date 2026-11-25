@@ -31,6 +31,10 @@ create table if not exists scheduled_shows (
   created_at timestamptz not null default now()
 );
 alter table scheduled_shows enable row level security;
+-- Set by the host console when a broadcast goes live for this show, so a show that already aired
+-- (including one that ended inside its first 30 minutes) never reads STARTING SOON again.
+alter table scheduled_shows add column if not exists aired_at timestamptz;
+create index if not exists scheduled_shows_starts_idx on scheduled_shows (starts_at);
 
 -- 3. Moderation
 create table if not exists bans (
@@ -194,6 +198,20 @@ drop policy if exists shows_write on scheduled_shows;
 create policy shows_write on scheduled_shows for all
   using (is_admin_aal2()) with check (is_admin_aal2());
 
+-- What the standby screen shows. The server clock decides what is upcoming, so a phone with a
+-- wrong clock cannot hide or resurrect a show. Security invoker: RLS still applies. The limit is
+-- clamped so no caller can ask for the whole table. The host console reads the table directly,
+-- so this clamp never hides a show from the host.
+create or replace function upcoming_shows(_limit int default 3)
+returns table (id uuid, title text, starts_at timestamptz)
+language sql stable security invoker set search_path = public as $$
+  select s.id, s.title, s.starts_at
+  from scheduled_shows s
+  where s.starts_at > now() - interval '30 minutes' and s.aired_at is null
+  order by s.starts_at, s.id
+  limit least(greatest(coalesce(_limit, 3), 1), 10)
+$$;
+
 drop policy if exists bans_read_own on bans;
 create policy bans_read_own on bans for select
   using (uid = auth.uid() or has_role(auth.uid(), 'admin'));
@@ -285,6 +303,8 @@ create policy room_presence_write on realtime.messages for insert to authenticat
 
 -- 10. Table-level grants (newer Supabase does not auto-grant on new tables)
 grant select on station, scheduled_shows, chat_messages to anon, authenticated;
+-- The host console writes the schedule from the browser (RLS: admin with 2FA only).
+grant insert, update, delete on scheduled_shows to authenticated;
 -- Listeners POST from the browser (useChat.ts) on an anonymous sign-in, which carries the
 -- `authenticated` role; `anon` only ever reads. Without this grant the chat_insert policy is
 -- moot: on a fresh project chat is readable and nobody can send, host included. A policy and
@@ -296,6 +316,7 @@ grant select on bans, kicks to authenticated;
 grant select on admin_audit to authenticated;
 grant all on station, scheduled_shows, bans, kicks, chat_messages, chat_reactions, admin_audit to service_role;
 grant execute on function get_server_time() to anon, authenticated;
+grant execute on function upcoming_shows(int) to anon, authenticated;
 grant execute on function chat_allowed(text, boolean) to authenticated;
 grant execute on function reaction_allowed(text) to authenticated;
 grant execute on function chat_visible(timestamptz) to anon, authenticated;

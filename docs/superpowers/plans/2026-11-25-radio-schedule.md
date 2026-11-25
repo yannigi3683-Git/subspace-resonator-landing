@@ -48,9 +48,10 @@
 ## Task 1: schema delta
 
 - [ ] **1.1 The test already exists.** `supabase/grants.test.ts` fails by itself whenever `.insert/.update/.delete` on `scheduled_shows` appear in `src/` without a matching grant. Task 3.3 proves it guards these writes.
-- [ ] **1.2** Add to `radio-schema.sql` (section 2 and section 10): the `aired_at timestamptz` column, the three grants, `upcoming_shows(_limit)` (sql, stable, security invoker, `set search_path = public`, limit clamped to 10, 30 min grace using `now()`), its execute grant to anon and authenticated, the `starts_at` index, and explicit drops for any policy found in 0.2.
-- [ ] **1.3** Write the same statements to `docs/superpowers/plans/2026-11-25-radio-schedule-delta.sql` (outside `supabase/`, so `grants.test.ts` does not read it twice), for the owner to paste **off air** in 10.1.
-- [ ] **1.4 Rebuild the `scheduled_shows` probes so they can fail** (the current probe sends a key that always gets 401 and counts that as PASS). In `scripts/rls-probe.mjs`, on supabase-js:
+- [x] **1.2** Add to `radio-schema.sql` (section 2 and section 10): the `aired_at timestamptz` column, the three grants, `upcoming_shows(_limit)` (sql, stable, security invoker, `set search_path = public`, limit clamped to 10, 30 min grace using `now()`), its execute grant to anon and authenticated, the `starts_at` index, and explicit drops for any policy found in 0.2.
+- [x] **1.3** Write the same statements to `docs/superpowers/plans/2026-11-25-radio-schedule-delta.sql` (outside `supabase/`, so `grants.test.ts` does not read it twice), for the owner to paste **off air** in 10.1.
+- [ ] **1.4 (after PR #57 merges, which rebuilt the whole probe on 2026-11-25; rebase this branch onto it first) Extend the rebuilt probe for the schedule:** `upcoming_shows` callable with no session and as a listener; `upcoming_shows(1000)` returns at most 10; the existing schedule insert/update/delete checks already cover the new grants. Original wording kept below for the record.
+- [ ] ~~1.4 Rebuild the `scheduled_shows` probes so they can fail~~ (the current probe sends a key that always gets 401 and counts that as PASS). In `scripts/rls-probe.mjs`, on supabase-js:
   - a client with **no session** and a client **signed in anonymously** (costs one anon sign-in per run);
   - a fixture show created with the service key, dated in the past so it never reaches standby, deleted in `finally`;
   - each client tries insert, update and delete; PASS only if the insert errors **and** the fixture row is unchanged after the update and still present after the delete (re-read with the service key);
