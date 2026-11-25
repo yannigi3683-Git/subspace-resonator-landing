@@ -68,6 +68,8 @@ interface Props {
   // Lifts broadcast status to the parent so a persistent ON AIR / OFF AIR indicator
   // can show on every tab (the panel itself is hidden when another tab is active).
   onStatusChange?: (status: BroadcastStatus) => void;
+  // The show the schedule says is on now or soon, used to pre-fill BROADCAST TITLE off air.
+  suggestedTitle?: { title: string; when: string } | null;
 }
 
 interface AudioDevice {
@@ -75,7 +77,7 @@ interface AudioDevice {
   label: string;
 }
 
-export default function GoLivePanel({ supabase, authToken, listenerCount = 0, onStatusChange }: Props) {
+export default function GoLivePanel({ supabase, authToken, listenerCount = 0, onStatusChange, suggestedTitle }: Props) {
   const [status, setStatus] = useState<BroadcastStatus>('idle');
   const [title, setTitle] = useState('');
   const [devices, setDevices] = useState<AudioDevice[]>([]);
@@ -187,6 +189,18 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
   // advertised streamUrl.
   const station = useStation(supabase);
   const orphanedLive = status === 'idle' && station?.mode === 'live';
+
+  // Schedule pre-fill. Only while idle with the station row known to be off air, and only until the
+  // host edits the field (clearing it to get LIVE DJ counts). Never writes titleRef, which GO LIVE
+  // sets and every reconnect re-sends, so a running show can never be re-titled from here.
+  const prefilledRef = useRef<string | null>(null);
+  const titleEditedRef = useRef(false);
+  useEffect(() => {
+    if (!suggestedTitle || status !== 'idle' || station?.mode !== 'off' || titleEditedRef.current) return;
+    if (title !== '' && title !== prefilledRef.current) return;
+    prefilledRef.current = suggestedTitle.title;
+    if (title !== suggestedTitle.title) setTitle(suggestedTitle.title);
+  }, [suggestedTitle, status, station?.mode, title]);
 
   // Whether listeners are actually on the deep-buffer stream. The restreamer runs on another
   // machine with no window to watch when the host is broadcasting from elsewhere, so this badge is
@@ -642,6 +656,7 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
     silenceAllDeckElements();
     closeControlChannel();
     setStatus('idle');
+    titleEditedRef.current = false;
     if (!endOk) {
       setErrorMsg('Broadcast ended locally, but the station may still show as live. If the warning appears next visit, use "END PREVIOUS BROADCAST" to clear it.');
     }
@@ -1510,11 +1525,14 @@ export default function GoLivePanel({ supabase, authToken, listenerCount = 0, on
             type="text"
             maxLength={80}
             value={title}
-            onChange={(e) => setTitle(e.target.value)}
+            onChange={(e) => { titleEditedRef.current = true; prefilledRef.current = null; setTitle(e.target.value); }}
             placeholder="Subspace Radio Live"
             disabled={isBusy}
             className="bg-transparent border border-border rounded px-3 py-2 font-mono text-sm focus:outline-none focus:ring-1 focus:ring-primary min-h-[44px] disabled:opacity-50"
           />
+          {suggestedTitle && title === suggestedTitle.title && prefilledRef.current === title && (
+            <span className="font-mono text-[11px] text-[#26C6DA]">From schedule: {suggestedTitle.title} · {suggestedTitle.when}</span>
+          )}
         </label>
       )}
 

@@ -11,8 +11,9 @@ vi.mock('../supabaseClient', () => ({ makeSupabase: vi.fn() }));
 // AdminConsole's job is tab / mount-persistence / live-indicator coordination — not RTC.
 // Mock GoLivePanel with a stub that lets the test drive onStatusChange.
 vi.mock('./GoLivePanel', () => ({
-  default: ({ onStatusChange, listenerCount }: { onStatusChange?: (s: string) => void; listenerCount?: number }) => (
+  default: ({ onStatusChange, listenerCount, suggestedTitle }: { onStatusChange?: (s: string) => void; listenerCount?: number; suggestedTitle?: { title: string; when: string } | null }) => (
     <div data-testid="go-live-panel">
+      <span data-testid="suggested">{suggestedTitle ? `${suggestedTitle.title} | ${suggestedTitle.when}` : 'none'}</span>
       <span data-testid="listener-count">{listenerCount}</span>
       <button data-testid="fake-go-live" onClick={() => onStatusChange?.('live')}>
         go
@@ -248,5 +249,16 @@ describe('AdminConsole', () => {
     scheduleState.now = SHOW_AT + 7 * 86_400_000 - 10 * 60_000;
     fireEvent.click(screen.getByTestId('fake-go-live'));
     expect(scheduleState.markAired).toHaveBeenNthCalledWith(2, 'later');
+  });
+
+  it('hands the schedule suggestion to the broadcast panel, with its Israel time', () => {
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    expect(screen.getByTestId('suggested')).toHaveTextContent('Psy Night Vol. 7 | 22:00 Israel');
+  });
+
+  it('suggests nothing when no show is within six hours', () => {
+    scheduleState.now = SHOW_AT - 8 * 3_600_000;
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    expect(screen.getByTestId('suggested')).toHaveTextContent('none');
   });
 });

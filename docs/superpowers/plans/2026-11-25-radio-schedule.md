@@ -110,7 +110,7 @@
 
 ## Task 6: `GoLivePanel` title pre-fill (D4)
 
-- [ ] **6.1 Failing tests** in `GoLivePanel.test.tsx`:
+- [x] **6.1 Failing tests** in `GoLivePanel.test.tsx`:
   - Idle, empty field: suggestion fills it and the hint `From schedule: ...` shows.
   - Host typed something: suggestion ignored.
   - **Host clears the field (to get LIVE DJ): it stays empty** when the next suggestion arrives.
@@ -121,9 +121,10 @@
   - Station row live while the panel is idle (second console): suggestion ignored.
   - After END BROADCAST returns to idle: `hostEdited` resets, and the next suggestion applies to an empty or still-pre-filled field.
   - The hint renders only while the field holds the pre-fill.
-- [ ] **6.2** Implement with the minimum lines: one prop, one "pre-filled value" ref, one `hostEdited` ref, one effect, one hint line.
-- [ ] **6.3 Review gate:** `git diff master -- src/radio/admin/GoLivePanel.tsx` must touch only the prop, those refs, that effect, the title input's change handler, the END handler's one-line `hostEdited` reset and the hint. Anything else fails the task.
-- [ ] **6.4** Commit: `feat(radio): pre-fill broadcast title from the schedule`.
+- [x] **6.2** Implement with the minimum lines: one prop, one "pre-filled value" ref, one `hostEdited` ref, one effect, one hint line.
+- [x] **6.3 Review gate:** `git diff master -- src/radio/admin/GoLivePanel.tsx` must touch only the prop, those refs, that effect, the title input's change handler, the END handler's one-line `hostEdited` reset and the hint. Anything else fails the task.
+- [x] **6.4** Commit: `feat(radio): pre-fill broadcast title from the schedule`.
+  - Gate result 2026-11-25: 20 lines added, 2 changed in `GoLivePanel.tsx`, all pre-fill (prop, two refs, one effect, the title onChange, one reset after END, the hint). `suggestedTitle` is `{ title, when }`, built by `AdminConsole` with the Israel time, so the panel formats nothing.
 
 ## Task 7: `StandbyScreen`
 

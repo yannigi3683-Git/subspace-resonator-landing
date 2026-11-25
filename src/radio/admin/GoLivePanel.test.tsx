@@ -1155,3 +1155,95 @@ describe('GoLivePanel file deck transport (Phase B)', () => {
     });
   });
 });
+
+describe('GoLivePanel title pre-fill from the schedule', () => {
+  const OFF = { mode: 'off', live_title: null, live_session: null, slow_mode_s: 0, locked: false } as unknown as ReturnType<typeof useStation>;
+  const LIVE = { ...OFF, mode: 'live' } as unknown as ReturnType<typeof useStation>;
+  const PSY = { title: 'Psy Night Vol. 7', when: '22:00 Israel' };
+  const GOA = { title: 'Goa Classics 1998', when: '21:00 Israel' };
+  const field = () => screen.getByPlaceholderText('Subspace Radio Live') as HTMLInputElement;
+  const panel = (s: typeof PSY | null) => <GoLivePanel supabase={makeSupabase()} authToken={async () => 'token'} suggestedTitle={s} />;
+
+  it('fills an empty title from the schedule and says where it came from', async () => {
+    vi.mocked(useStation).mockReturnValue(OFF);
+    render(panel(PSY));
+    await waitFor(() => expect(field().value).toBe('Psy Night Vol. 7'));
+    expect(screen.getByText('From schedule: Psy Night Vol. 7 · 22:00 Israel')).toBeInTheDocument();
+  });
+
+  it('does nothing while the station row is still loading', async () => {
+    render(panel(PSY));
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    expect(field().value).toBe('');
+  });
+
+  it('does nothing while the station is live (a second console opened mid-show)', async () => {
+    vi.mocked(useStation).mockReturnValue(LIVE);
+    render(panel(PSY));
+    await act(async () => {});
+    expect(field().value).toBe('');
+  });
+
+  it('leaves a title the host typed alone, and drops the hint', async () => {
+    vi.mocked(useStation).mockReturnValue(OFF);
+    const { rerender } = render(panel(null));
+    fireEvent.change(field(), { target: { value: 'My own title' } });
+    rerender(panel(PSY));
+    await act(async () => {});
+    expect(field().value).toBe('My own title');
+    expect(screen.queryByText(/From schedule:/)).toBeNull();
+  });
+
+  it('leaves a cleared title empty, so the host can show LIVE DJ', async () => {
+    vi.mocked(useStation).mockReturnValue(OFF);
+    const { rerender } = render(panel(PSY));
+    await waitFor(() => expect(field().value).toBe('Psy Night Vol. 7'));
+    fireEvent.change(field(), { target: { value: '' } });
+    rerender(panel({ ...PSY }));
+    await act(async () => {});
+    expect(field().value).toBe('');
+  });
+
+  it('follows the schedule while the field still holds the earlier pre-fill', async () => {
+    vi.mocked(useStation).mockReturnValue(OFF);
+    const { rerender } = render(panel(PSY));
+    await waitFor(() => expect(field().value).toBe('Psy Night Vol. 7'));
+    rerender(panel(GOA));
+    await waitFor(() => expect(field().value).toBe('Goa Classics 1998'));
+  });
+
+  it('never re-titles after a lost connection, and GO LIVE sends the original title', async () => {
+    vi.mocked(useStation).mockReturnValue(OFF);
+    const { rerender } = render(panel(PSY));
+    await waitFor(() => expect(field().value).toBe('Psy Night Vol. 7'));
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => expect(mockPublisherConnect).toHaveBeenCalled());
+    expect(mockPublisherConnect.mock.calls[mockPublisherConnect.mock.calls.length - 1]?.[1]).toBe('Psy Night Vol. 7');
+    act(() => { publisherCallbacksRef.current?.onFatal?.('Connection lost.'); });
+    await waitFor(() => expect(screen.getByRole('alert')).toHaveTextContent('Connection lost'));
+    rerender(panel(GOA));
+    await act(async () => {});
+    expect(field().value).toBe('Psy Night Vol. 7');
+    mockPublisherConnect.mockClear();
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => expect(mockPublisherConnect).toHaveBeenCalled());
+    expect(mockPublisherConnect.mock.calls[mockPublisherConnect.mock.calls.length - 1]?.[1]).toBe('Psy Night Vol. 7');
+  });
+
+  it('after END BROADCAST, an empty field takes the next show again', async () => {
+    mockPublisherConnect.mockImplementation(async () => {
+      await Promise.resolve();
+      publisherCallbacksRef.current?.onSessionReady('cf-prefill');
+    });
+    vi.mocked(useStation).mockReturnValue(OFF);
+    const { rerender } = render(panel(PSY));
+    await waitFor(() => expect(field().value).toBe('Psy Night Vol. 7'));
+    fireEvent.change(field(), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('go-live-btn'));
+    await waitFor(() => screen.getByTestId('end-btn'));
+    fireEvent.click(screen.getByTestId('end-btn'));
+    await waitFor(() => screen.getByTestId('go-live-btn'));
+    rerender(panel(GOA));
+    await waitFor(() => expect(field().value).toBe('Goa Classics 1998'));
+  });
+});

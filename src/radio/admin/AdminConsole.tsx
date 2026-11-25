@@ -1,11 +1,11 @@
-import { Component, useCallback, useEffect, useRef, useState, type ReactNode } from 'react';
+import { Component, useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
 import GoLivePanel, { type BroadcastStatus } from './GoLivePanel';
 import SchedulePanel from './SchedulePanel';
 import { usePresenceObserver } from '../hooks/usePresenceObserver';
 import { useSchedule } from '../hooks/useSchedule';
 import { useServerClock } from '../hooks/useServerClock';
-import { showToMarkAired } from '../scheduleRules';
+import { ISRAEL, showToMarkAired, suggestTitle } from '../scheduleRules';
 
 // Keeps a crash inside the Schedule tab. Without it a render error unmounts the whole console,
 // GoLivePanel included, which orphans a live connection and takes END BROADCAST with it.
@@ -64,6 +64,16 @@ export default function AdminConsole({ supabase, authToken }: Props) {
     markedRef.current = true;
     void markAired(show.id);
   }, [broadcastStatus, shows, markAired, getNow]);
+
+  const suggestion = suggestTitle(shows, getNow());
+  const suggestedTitleText = suggestion?.title ?? null;
+  const suggestedWhen = suggestion
+    ? `${new Intl.DateTimeFormat('en-GB', { timeZone: ISRAEL, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(suggestion.starts_at))} Israel`
+    : null;
+  const suggestedTitle = useMemo(
+    () => (suggestedTitleText && suggestedWhen ? { title: suggestedTitleText, when: suggestedWhen } : null),
+    [suggestedTitleText, suggestedWhen],
+  );
 
   // Truthful live indicator: only 'live' means audio is actually going out.
   // 'starting'/'ending' are transitional; 'idle'/'error' are off the air.
@@ -137,6 +147,7 @@ export default function AdminConsole({ supabase, authToken }: Props) {
           authToken={authToken}
           listenerCount={listenerCount}
           onStatusChange={setBroadcastStatus}
+          suggestedTitle={suggestedTitle}
         />
       </div>
 
