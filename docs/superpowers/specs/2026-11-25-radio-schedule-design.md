@@ -37,7 +37,7 @@ about to go live, the title field is already filled in. The host still presses G
 ## 4. Design
 
 ### 4.1 Data (`supabase/radio-schema.sql`, applied as a delta, never while on air)
-- Existing table `scheduled_shows (id, title 1-80, starts_at, created_at)`, plus one new column `aired_at` (cycle A7.4 of the AUTO-RUN spec).
+- Existing table `scheduled_shows (id, title 1-80, starts_at, created_at)`, plus one new column `aired_at` (cycle A7.4 of the SCHEDULE RUNNER spec).
 - Add table grants `insert, update, delete` to `authenticated`. RLS (`shows_write`, admin + aal2) remains the real gate.
 - New read function `upcoming_shows(_limit)` (`_limit`, since `limit` is reserved; `set search_path = public`): security invoker (RLS applies), returns `id, title, starts_at` for shows with `starts_at > now() - 30 min` **and `aired_at is null`**, soonest first, limit clamped to 10. Execute granted to anon and authenticated. The **server clock** decides what is upcoming.
 - Index on `starts_at`.
