@@ -35,7 +35,7 @@
       titleField: '', lastPrefill: null, hostStatus: 'idle',
       // guest UI
       guestInRoom: false, guestName: 'Nebula Drifter', guestAvatar: 1,
-      device: JOURNEY === 'host' ? 'desktop' : 'phone',
+      device: JOURNEY === 'host' && window.innerWidth >= 1024 ? 'desktop' : 'phone',
       step: 0,
     };
   }
@@ -74,7 +74,7 @@
   const showTime = (ms, zone, locale) => fmt(ms, zone, { weekday: 'short', day: 'numeric', month: 'short', hour: locale === 'en-US' ? 'numeric' : '2-digit', minute: '2-digit', timeZoneName: 'short' }, locale);
   const shortTime = (ms, zone, locale) => fmt(ms, zone, { weekday: 'short', day: 'numeric', month: 'short', hour: locale === 'en-US' ? 'numeric' : '2-digit', minute: '2-digit' }, locale);
   const hhmm = (ms, zone) => fmt(ms, zone, { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
-  const zoneCity = (z) => ({ 'Asia/Jerusalem': 'Israel', 'America/New_York': 'New York', 'Asia/Kolkata': 'Goa' }[z] || z);
+  const zoneCity = (z) => z === ISRAEL ? 'Israel' : new Intl.DateTimeFormat('en-GB', { timeZone: z, timeZoneName: 'short' }).formatToParts(new Date()).find((x) => x.type === 'timeZoneName').value;
   function countdown(ms) {
     if (ms <= 0) return '00:00';
     const s = Math.floor(ms / 1000), d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), x = s % 60;
@@ -156,7 +156,7 @@
     const live = S.hostStatus === 'live';
     const sug = suggestion();
     const hint = !live && sug && S.titleField === sug.title && S.lastPrefill === sug.title
-      ? `<span class="font-mono text-[11px] text-[#26C6DA]">From schedule: ${esc(sug.title)} · ${hhmm(sug.startsAt, S.hostZone)}</span>` : '';
+      ? `<span class="font-mono text-[11px] text-[#26C6DA]">From schedule: ${esc(sug.title)} · ${hhmm(sug.startsAt, ISRAEL)} Israel</span>` : '';
     return `<section class="section-border p-4 sm:p-6 flex flex-col gap-5">
       <p class="font-mono text-[11px] tracking-[0.35em] text-muted-foreground">// BROADCAST</p>
       ${live ? `<div class="border border-red-500/40 bg-red-500/[0.06] p-4 flex flex-col gap-2">
@@ -194,7 +194,7 @@
     if (devZone !== ISRAEL) lines.push(`${shortTime(v.ms, ISRAEL)} Israel`);
     return `<div class="flex flex-col gap-2">
       <p class="font-mono text-xs text-white border-l-2 border-[#26C6DA] pl-3 py-1 leading-relaxed">${lines.join('<br>')}<br><span class="text-muted-foreground">${hhmm(v.ms, 'UTC')} UTC · <span data-rel="${v.ms}">${rel(v.ms)}</span></span></p>
-      ${devZone !== ISRAEL ? `<p class="font-mono text-[11px] text-amber-400 flex gap-2 leading-relaxed">${I.warn}<span>Your device is on ${zoneCity(devZone)} time, not Israel. Check the Israel line before saving.</span></p>` : ''}
+      ${devZone !== ISRAEL ? `<p class="font-mono text-[11px] text-amber-400 flex gap-2 leading-relaxed">${I.warn}<span>Your device is not on Israel time (it is on ${zoneCity(devZone)}). Check the Israel line before saving.</span></p>` : ''}
       ${v.errors.concat(v.warnings).map((w) => `<p class="font-mono text-[11px] text-amber-400 flex gap-2 leading-relaxed">${I.warn}<span>${esc(w)}</span></p>`).join('')}
     </div>`;
   }
@@ -213,7 +213,7 @@
       </div>
       <div class="flex flex-col gap-2 pt-5 border-t border-border/50">
         <span class="font-mono text-[11px] tracking-widest text-white mb-1">UPCOMING (${u.length})</span>
-        ${u.length ? u.map(showRow).join('') : `<p class="font-mono text-xs text-muted-foreground border border-dashed border-border p-4">Nothing scheduled. Guests see NEXT TRANSMISSION: TBA.</p>`}
+        ${u.length ? u.map((x) => showRow(x)).join('') : `<p class="font-mono text-xs text-muted-foreground border border-dashed border-border p-4">Nothing scheduled. Guests see NEXT TRANSMISSION: TBA.</p>`}
         <button data-a="past" class="font-mono text-[11px] tracking-widest text-muted-foreground min-h-[44px] inline-flex items-center gap-2 mt-1 self-start">${S.pastOpen ? I.chevD : I.chevR} PAST (${pa.length})</button>
         ${S.pastOpen ? pa.slice(0, 5).map((s) => showRow(s, true)).join('') : ''}
       </div>
@@ -236,9 +236,9 @@
     }
     const confirm = S.confirmId === s.id;
     const soon = s.startsAt <= now() && s.startsAt > now() - GRACE;
-    const date = new Date(s.startsAt + zoneOffset(s.startsAt, S.hostZone));
-    const dow = fmt(s.startsAt, S.hostZone, { weekday: 'short' }).toUpperCase(), mon = fmt(s.startsAt, S.hostZone, { month: 'short' }).toUpperCase();
-    return `<div class="border ${confirm ? 'border-red-500/60 bg-red-500/[0.04]' : soon ? 'border-amber-500/60' : 'border-border'} p-3 flex flex-col gap-3 ${isPast ? 'opacity-70' : ''}">
+    const date = new Date(s.startsAt + zoneOffset(s.startsAt, ISRAEL));
+    const dow = fmt(s.startsAt, ISRAEL, { weekday: 'short' }).toUpperCase(), mon = fmt(s.startsAt, ISRAEL, { month: 'short' }).toUpperCase();
+    return `<div ${soon ? 'data-soon' : ''} class="border ${confirm ? 'border-red-500/60 bg-red-500/[0.04]' : soon ? 'border-amber-500/60' : 'border-border'} p-3 flex flex-col gap-3 ${isPast ? 'opacity-70' : ''}">
       <div class="flex items-stretch gap-3">
         <div class="w-14 shrink-0 text-center border-r border-border pr-3 flex flex-col justify-center">
           <p class="font-mono text-[10px] tracking-widest text-muted-foreground">${dow}</p>
@@ -311,13 +311,13 @@
         <p class="font-mono text-[#26C6DA] text-[10px] tracking-[0.3em] mb-3 inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#26C6DA] radio-soon-pulse" style="box-shadow:0 0 10px #26C6DA"></span>STARTING SOON</p>
         <p class="font-display text-white text-lg tracking-wide mb-1 uppercase break-words">${esc(st.next.title)}</p>
         <p class="font-mono text-white/70 text-xs">Scheduled for ${fmt(st.next.startsAt, S.guestZone, { hour: S.guestLocale === 'en-US' ? 'numeric' : '2-digit', minute: '2-digit', timeZoneName: 'short' }, S.guestLocale)}</p>
-        <p class="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">The host is setting up the signal.</p>
+        <p class="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">Due any minute.</p>
       </div>` + laterList(st.later) + keepOpen, true);
     return standbyShell(`<div class="w-full border border-white/10 bg-white/[0.04] backdrop-blur px-5 py-6">
         <p class="font-mono text-[#26C6DA]/80 text-[10px] tracking-[0.3em] mb-3">NEXT TRANSMISSION</p>
         <p class="font-mono text-white text-4xl [@media(max-height:500px)]:text-3xl tabular-nums tracking-tight mb-4" style="text-shadow:0 0 18px rgba(123,47,190,0.6)" data-cd="${st.next.startsAt}">${countdown(st.next.startsAt - now())}</p>
         <p class="font-display text-white text-lg tracking-wide mb-1 uppercase break-words">${esc(st.next.title)}</p>
-        <p class="font-mono text-white/70 text-xs">${showTime(st.next.startsAt, S.guestZone, S.guestLocale)} <span class="text-white/60">· your time</span></p>
+        <p class="font-mono text-white/70 text-xs">${fmt(st.next.startsAt, S.guestZone, { weekday: 'short', day: 'numeric', month: 'short' }, S.guestLocale)}, <span class="whitespace-nowrap">${fmt(st.next.startsAt, S.guestZone, { hour: S.guestLocale === 'en-US' ? 'numeric' : '2-digit', minute: '2-digit', timeZoneName: 'short' }, S.guestLocale)} <span class="text-white/60">· your time</span></span></p>
       </div>` + laterList(st.later) + keepOpen);
   }
   const AV = ['#26C6DA', '#7B2FBE', '#E91E63', '#FFC107', '#4CAF50', '#FF7043', '#5C6BC0', '#EC407A'];
@@ -381,17 +381,17 @@
   const HOST_STEPS = [
     { t: 'Your console, off air', b: 'This is your host console as it is today. Nothing here changes except the BROADCAST TITLE field, which you will see later. Tap SCHEDULE in the tab bar, or press Next.', go: () => { Object.assign(S, fresh(), { device: S.device }); S.tab = 'broadcast'; } },
     { t: 'Open SCHEDULE', b: 'The new tab. Nothing is scheduled yet, so guests see NEXT TRANSMISSION: TBA. PAST holds old shows and stays folded.', go: () => { S.tab = 'schedule'; } },
-    { t: 'Add your first show', b: 'Type a title and pick the start in your own time. Before saving you see it back with UTC and how far away it is. Press ADD TO SCHEDULE. Next adds it for you if you skip.', go: () => { S.tab = 'schedule'; S.draft = { title: 'Psy Night Vol. 7', start: '2026-11-29T22:00' }; }, leave: () => { if (!s1()) S.shows.push({ id: 's1', title: 'Psy Night Vol. 7', startsAt: wall(2026, 11, 29, 22, 0) }); S.draft = { title: '', start: '' }; } },
-    { t: 'Add more, and see a clash warning', b: 'Two more shows are added. The form now holds "Goa Classics part 2" at 21:30, 30 minutes after another show: you get a heads-up, but can still save it.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.draft = { title: 'Goa Classics part 2', start: '2026-12-06T21:30' }; }, leave: () => { S.draft = { title: '', start: '' }; } },
-    { t: 'DJing abroad', b: 'Your phone is set to Goa time here. The preview shows the Goa time, the Israel time and UTC, with an amber note, so you never save the wrong hour by accident.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.hostZone = 'Asia/Kolkata'; S.draft = { title: 'Goa Sunrise', start: '2026-12-12T06:00' }; }, leave: () => { S.hostZone = ISRAEL; S.draft = { title: '', start: '' }; } },
-    { t: 'Edit a show', b: 'The pencil opens the show in place. Change the time to 22:30 and press SAVE. Only one show is open for editing at a time.', go: () => { ensureDemoShows(); S.tab = 'schedule'; const s = s1(); S.editId = s.id; S.editDraft = { title: s.title, start: utcToLocalInput(s.startsAt, S.hostZone) }; } , leave: () => { S.editId = null; } },
-    { t: 'Delete takes two taps', b: 'The bin asks first. DELETE removes the show, KEEP backs out. Try it on the last show.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.editId = null; S.confirmId = upcoming().slice(-1)[0]?.id || null; }, leave: () => { S.confirmId = null; } },
-    { t: 'If a change fails', b: 'Here the server refuses every change, as it would if your host sign-in had expired. Try editing or deleting: you get a red message, never a fake success.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.failWrites = true; S.alert = ''; }, leave: () => { S.failWrites = false; S.alert = ''; } },
+    { t: 'Add your first show', f: '[data-a="add"]', b: 'Type a title and pick the start in your own time. Before saving you see it back with UTC and how far away it is. Press ADD TO SCHEDULE. Next adds it for you if you skip.', go: () => { S.tab = 'schedule'; S.draft = { title: 'Psy Night Vol. 7', start: '2026-11-29T22:00' }; }, leave: () => { if (!s1()) S.shows.push({ id: 's1', title: 'Psy Night Vol. 7', startsAt: wall(2026, 11, 29, 22, 0) }); S.draft = { title: '', start: '' }; } },
+    { t: 'Add more, and see a clash warning', f: '#draftPreview', b: 'Two more shows are added. The form now holds "Goa Classics part 2" at 21:30, 30 minutes after another show: you get a heads-up, but can still save it.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.draft = { title: 'Goa Classics part 2', start: '2026-12-06T21:30' }; }, leave: () => { S.draft = { title: '', start: '' }; } },
+    { t: 'DJing abroad', f: '#draftPreview', b: 'You are DJing in Goa and your phone is on India time. The preview shows the time on your phone, the Israel time and UTC, with an amber note, so you never save the wrong hour by accident.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.hostZone = 'Asia/Kolkata'; S.draft = { title: 'Goa Sunrise', start: '2026-12-12T06:00' }; }, leave: () => { S.hostZone = ISRAEL; S.draft = { title: '', start: '' }; } },
+    { t: 'Edit a show', f: '[data-a="saveEdit"]', b: 'The pencil opens the show in place. Change the time to 22:30 and press SAVE. Only one show is open for editing at a time.', go: () => { ensureDemoShows(); S.tab = 'schedule'; const s = s1(); S.editId = s.id; S.editDraft = { title: s.title, start: utcToLocalInput(s.startsAt, S.hostZone) }; } , leave: () => { S.editId = null; } },
+    { t: 'Delete takes two taps', f: '[data-a="delYes"]', b: 'The bin asks first. DELETE removes the show, KEEP backs out. Try it on the last show.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.editId = null; S.confirmId = upcoming().slice(-1)[0]?.id || null; }, leave: () => { S.confirmId = null; } },
+    { t: 'If a change fails', f: '[data-a="edit"]', b: 'Here the server refuses every change, as it would if your host sign-in had expired. Try editing or deleting: you get a red message, never a fake success.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.failWrites = true; S.alert = ''; }, leave: () => { S.failWrites = false; S.alert = ''; } },
     { t: 'Show day: the title is already filled', b: 'It is 50 minutes before Psy Night Vol. 7. Open BROADCAST: the title is filled in from the schedule, with a "From schedule" hint. Type over it and it stays yours.', go: () => { ensureDemoShows(); S.tab = 'broadcast'; S.titleField = ''; S.lastPrefill = null; jumpTo(s1().startsAt - 50 * MIN); } },
     { t: 'GO LIVE', b: 'Press GO LIVE. On guests\' screens the neon line under the DJ shows this title most of the time, and the track name peeks in for 15 seconds each minute. Open the listener journey in another tab to watch.', go: () => { S.tab = 'broadcast'; }, leave: () => { if (S.hostStatus !== 'live') goLive(); } },
     { t: 'Edit the schedule while ON AIR', b: 'The SCHEDULE tab works mid-show, adding included. The broadcast keeps running underneath; switching tabs never touches it.', go: () => { if (S.hostStatus !== 'live') goLive(); S.tab = 'schedule'; } },
     { t: 'END BROADCAST', b: 'Press END BROADCAST. If another show starts within 6 hours, its title is filled in for you next time. Here the next show is a week away, so the field keeps the old title until that day.', go: () => { S.tab = 'broadcast'; }, leave: () => { if (S.hostStatus === 'live') endShow(); } },
-    { t: 'Running late', b: 'It is 7 minutes past the start of Goa Classics 1998 and you are not live. The row turns amber: guests see STARTING SOON for 30 minutes, then the countdown moves on to the next show.', go: () => { ensureDemoShows(); if (S.hostStatus === 'live') endShow(); S.tab = 'schedule'; jumpTo(S.shows.find((s) => s.id === 's2').startsAt + 7 * MIN); } },
+    { t: 'Running late', f: '[data-soon]', b: 'It is 7 minutes past the start of Goa Classics 1998 and you are not live. The row turns amber: guests see STARTING SOON for 30 minutes, then the countdown moves on to the next show.', go: () => { ensureDemoShows(); if (S.hostStatus === 'live') endShow(); S.tab = 'schedule'; jumpTo(S.shows.find((s) => s.id === 's2').startsAt + 7 * MIN); } },
     { t: 'Done', b: 'That is the whole host side. Open the listener journey to see the same shows from a guest\'s phone. Reset demo starts over.', go: () => {} },
   ];
   const LISTENER_STEPS = [
@@ -414,97 +414,151 @@
     S.step = Math.max(0, Math.min(steps.length - 1, i));
     steps[S.step].go();
     save(); render();
+    scrollScreenTo(steps[S.step].f);
   }
   function goLive() { S.hostStatus = 'live'; S.station = { mode: 'live', title: S.titleField.trim() || 'Subspace Radio Live', startedAt: now() }; }
   function endShow() { S.hostStatus = 'idle'; S.station = { mode: 'off', title: S.station.title, startedAt: null }; }
 
   /* ═════════════ RENDER ═════════════ */
-  const DEVICES = { phone: [390, 844, 'Phone'], small: [320, 568, 'Small phone'], sideways: [844, 390, 'Sideways'], desktop: [1280, 800, 'Desktop'] };
+  const DEVICES = { phone: [390, 844, 'PHONE'], small: [320, 568, 'SMALL'], sideways: [844, 390, 'SIDEWAYS'], desktop: [1280, 800, 'DESKTOP'] };
+  const wide = () => window.innerWidth >= 1024;
+  let frameKey = '', fdoc = null, uiMore = false, frameH = 0;
   function render() {
     if (JOURNEY === 'host') applyPrefill();
-    const act = document.activeElement; const fid = act && act.id; let sel = null;
-    try { sel = fid && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null; } catch {}
-    const screen = document.getElementById('screen');
-    const scroll = screen ? screen.scrollTop : 0;
-    document.getElementById('app').innerHTML = layout();
-    const sc = document.getElementById('screen'); if (sc) sc.scrollTop = scroll;
-    if (fid) { const el = document.getElementById(fid); if (el) { el.focus(); try { if (sel) el.setSelectionRange(sel[0], sel[1]); } catch {} } }
+    const key = [S.device, wide()].join('|');
+    if (key !== frameKey) { buildLayout(); frameKey = key; }
+    fillChrome();
     fit();
+    renderScreen();
     lastKey = phaseKey();
   }
-  function layout() {
-    const st = steps[S.step];
-    const [w, h] = DEVICES[S.device];
-    const other = JOURNEY === 'host' ? ['listener.html', 'Listener journey'] : ['host.html', 'Host journey'];
-    const devBtns = Object.entries(DEVICES).map(([k, [, , label]]) => `<button data-a="device" data-v="${k}" class="font-mono text-[11px] tracking-widest px-3 min-h-[44px] border ${S.device === k ? 'border-primary text-white bg-primary/20' : 'border-border text-muted-foreground hover:text-white'}">${label.toUpperCase()}</button>`).join('');
+  function renderScreen() {
+    if (!fdoc) return;
+    const act = fdoc.activeElement; const fid = act && act.id; let sel = null;
+    try { sel = fid && act.selectionStart != null ? [act.selectionStart, act.selectionEnd] : null; } catch {}
+    fdoc.getElementById('screen').innerHTML = JOURNEY === 'host' ? hostScreen() : guestScreen();
+    if (fid) { const el = fdoc.getElementById(fid); if (el) { el.focus({ preventScroll: true }); try { if (sel) el.setSelectionRange(sel[0], sel[1]); } catch {} } }
+  }
+  function scrollScreenTo(selector) {
+    if (!fdoc) return;
+    const sc = fdoc.scrollingElement; const el = selector && fdoc.querySelector(selector);
+    if (!el) { sc.scrollTop = 0; return; }
+    const h = frameH || DEVICES[S.device][1];
+    sc.scrollTop = Math.max(0, el.getBoundingClientRect().top + sc.scrollTop - h / 2);
+  }
+  function controls() {
     const hostSim = JOURNEY === 'listener'
       ? `<p class="font-mono text-[10px] tracking-[0.3em] text-muted-foreground mt-4 mb-2">SIMULATE THE HOST</p>
          <div class="flex flex-wrap gap-2">
            <button data-a="simGo" class="sim-btn">GO LIVE</button><button data-a="simEnd" class="sim-btn">END</button>
            <button data-a="simShift" class="sim-btn">MOVE NEXT +30 MIN</button><button data-a="simDemo" class="sim-btn">RESTORE SHOWS</button>
          </div>` : '';
-    return `<div class="min-h-screen bg-[#111] text-foreground flex flex-col lg:flex-row">
-      <aside class="lg:w-[400px] lg:shrink-0 lg:h-screen lg:sticky lg:top-0 lg:overflow-y-auto border-b lg:border-b-0 lg:border-r border-border bg-background p-5 flex flex-col gap-4">
+    return `<p class="font-mono text-[10px] tracking-[0.3em] text-muted-foreground mb-2">DEMO CLOCK</p>
+      <p class="font-mono text-sm text-white tabular-nums" data-clock>${clockText()}</p>
+      <div class="flex flex-wrap gap-2 mt-2">
+        <button data-a="time" data-v="${HOUR}" class="sim-btn">+1 HOUR</button>
+        <button data-a="time" data-v="${DAY}" class="sim-btn">+1 DAY</button>
+        <button data-a="jumpNext" class="sim-btn">10 MIN BEFORE NEXT SHOW</button>
+      </div>
+      ${hostSim}
+      <button data-a="reset" class="font-mono text-[11px] tracking-widest min-h-[44px] px-3 border border-border text-muted-foreground mt-4 w-full">RESET DEMO</button>`;
+  }
+  function buildLayout() {
+    const other = JOURNEY === 'host' ? ['listener.html', 'Listener journey'] : ['host.html', 'Host journey'];
+    const name = JOURNEY === 'host' ? 'Host journey' : 'Listener journey';
+    const sync = `<a href="${other[0]}" class="underline text-[#B388F0]">${other[1]}</a> shares this demo's shows and clock when open in the same browser.`;
+    document.getElementById('app').innerHTML = `<div class="min-h-screen bg-[#111] text-foreground lg:flex">
+      <aside class="hidden lg:flex lg:w-[400px] lg:shrink-0 lg:h-screen lg:sticky lg:top-0 lg:overflow-y-auto border-r border-border bg-background p-5 flex-col gap-4">
         <div>
           <p class="font-mono text-[11px] tracking-[0.35em] text-muted-foreground mb-1">// PROTOTYPE · NOT BUILT</p>
-          <h1 class="font-display text-2xl text-white">${JOURNEY === 'host' ? 'Host journey' : 'Listener journey'}</h1>
-          <p class="font-mono text-[11px] text-muted-foreground mt-1">Radio SCHEDULE. <a href="${other[0]}" class="underline text-[#B388F0]">${other[1]}</a> shares this demo's shows and clock when open in the same browser.</p>
+          <h1 class="font-display text-2xl text-white">${name}</h1>
+          <p class="font-mono text-[11px] text-muted-foreground mt-1">Radio SCHEDULE. ${sync}</p>
         </div>
-        <div class="border border-primary/60 bg-primary/[0.06] p-4">
-          <p class="font-mono text-[11px] tracking-widest text-[#26C6DA] mb-1">STEP ${S.step + 1} OF ${steps.length}</p>
-          <h2 class="font-display text-lg text-white mb-2">${st.t}</h2>
-          <p class="font-mono text-xs text-foreground leading-relaxed">${st.b}</p>
-          <div class="grid grid-cols-2 gap-2 mt-4">
-            <button data-a="back" ${S.step === 0 ? 'disabled' : ''} class="font-mono text-[11px] tracking-widest min-h-[44px] border border-border text-muted-foreground disabled:opacity-40">BACK</button>
-            <button data-a="next" ${S.step === steps.length - 1 ? 'disabled' : ''} class="font-mono text-[11px] tracking-widest min-h-[44px] border border-primary bg-primary/20 text-white disabled:opacity-40">NEXT</button>
-          </div>
-        </div>
-        <ol class="hidden lg:flex flex-col gap-1">${steps.map((s, i) => `<li><button data-a="step" data-v="${i}" class="w-full text-left font-mono text-[11px] min-h-[36px] px-2 ${i === S.step ? 'text-white bg-primary/15' : 'text-muted-foreground hover:text-white'}">${i + 1}. ${s.t}</button></li>`).join('')}</ol>
-        <div class="border-t border-border pt-4">
-          <p class="font-mono text-[10px] tracking-[0.3em] text-muted-foreground mb-2">DEMO CLOCK</p>
-          <p class="font-mono text-sm text-white tabular-nums" data-clock>${clockText()}</p>
-          <div class="flex flex-wrap gap-2 mt-2">
-            <button data-a="time" data-v="${HOUR}" class="sim-btn">+1 HOUR</button>
-            <button data-a="time" data-v="${DAY}" class="sim-btn">+1 DAY</button>
-            <button data-a="jumpNext" class="sim-btn">10 MIN BEFORE NEXT SHOW</button>
-          </div>
-          ${hostSim}
-          <button data-a="reset" class="font-mono text-[11px] tracking-widest min-h-[44px] px-3 border border-border text-muted-foreground mt-4 w-full">RESET DEMO</button>
-        </div>
+        <div id="guideCard"></div>
+        <ol id="stepList" class="flex flex-col gap-1"></ol>
+        <div class="border-t border-border pt-4">${controls()}</div>
       </aside>
-      <section class="flex-1 min-w-0 p-4 lg:p-8 flex flex-col items-center gap-4">
-        <div class="flex flex-wrap gap-2 justify-center">${devBtns}</div>
-        <div id="frameWrap" class="w-full flex justify-center">
-          <div id="frame" data-w="${w}" data-h="${h}" class="border border-white/25 bg-background overflow-hidden" style="width:${w}px;height:${h}px">
-            <div id="screen" class="w-full h-full overflow-y-auto overflow-x-hidden">${JOURNEY === 'host' ? hostScreen() : guestScreen()}</div>
-          </div>
+      <section class="flex-1 min-w-0 lg:p-8 flex flex-col items-center gap-3 pb-[260px] lg:pb-8">
+        <div class="lg:hidden w-full px-3 pt-3">
+          <p class="font-mono text-[10px] tracking-[0.3em] text-muted-foreground">// PROTOTYPE · NOT BUILT</p>
+          <p class="font-display text-lg text-white">${name}</p>
         </div>
-        <p class="font-mono text-[10px] text-muted-foreground">${w} x ${h}</p>
+        <div id="devices" class="grid grid-cols-4 gap-1 w-full px-3 lg:px-0 lg:w-auto lg:flex lg:gap-2"></div>
+        <div id="frameWrap" class="w-full flex justify-center">
+          <div id="frameBox" class="overflow-hidden lg:border lg:border-white/25 bg-background"><iframe id="frame" title="Simulated app screen" class="block border-0 bg-background" style="transform-origin:0 0"></iframe></div>
+        </div>
+        <p id="devInfo" class="font-mono text-[10px] text-muted-foreground"></p>
+        <details class="lg:hidden w-full px-3 border-t border-border pt-2">
+          <summary class="font-mono text-[11px] tracking-widest text-muted-foreground min-h-[44px] flex items-center cursor-pointer">DEMO CONTROLS</summary>
+          <div class="pb-4">${controls()}</div>
+          <p class="font-mono text-[11px] text-muted-foreground pb-4">${sync}</p>
+        </details>
       </section>
+      <div id="bar" class="lg:hidden fixed inset-x-0 bottom-0 z-50 bg-background border-t border-primary/60 px-3 pt-2 pb-3"></div>
     </div>`;
+    const iframe = document.getElementById('frame');
+    fdoc = iframe.contentDocument;
+    fdoc.open();
+    fdoc.write(`<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><link rel="stylesheet" href="${new URL('journeys.css', location.href).href}"><style>html,body{height:100%;margin:0;background:hsl(0 0% 1%)}#screen{height:100%}</style></head><body><div id="screen"></div></body></html>`);
+    fdoc.close();
+    fdoc.addEventListener('click', onClick);
+    fdoc.addEventListener('input', onInput);
+    const link = fdoc.querySelector('link'); if (link) link.addEventListener('load', () => scrollScreenTo(steps[S.step].f));
+    fit();
+  }
+  function fillChrome() {
+    const st = steps[S.step];
+    const nav = (cls) => `<div class="grid grid-cols-2 gap-2 ${cls}">
+      <button data-a="back" ${S.step === 0 ? 'disabled' : ''} class="font-mono text-[11px] tracking-widest min-h-[44px] border border-border text-muted-foreground disabled:opacity-40">BACK</button>
+      <button data-a="next" ${S.step === steps.length - 1 ? 'disabled' : ''} class="font-mono text-[11px] tracking-widest min-h-[44px] border border-primary bg-primary/20 text-white disabled:opacity-40">NEXT</button></div>`;
+    const card = document.getElementById('guideCard');
+    if (card) card.innerHTML = `<div class="border border-primary/60 bg-primary/[0.06] p-4">
+      <p class="font-mono text-[11px] tracking-widest text-[#26C6DA] mb-1">STEP ${S.step + 1} OF ${steps.length}</p>
+      <h2 class="font-display text-lg text-white mb-2">${st.t}</h2>
+      <p class="font-mono text-xs text-foreground leading-relaxed">${st.b}</p>${nav('mt-4')}</div>`;
+    const list = document.getElementById('stepList');
+    if (list) list.innerHTML = steps.map((x, i) => `<li><button data-a="step" data-v="${i}" class="w-full text-left font-mono text-[11px] min-h-[36px] px-2 ${i === S.step ? 'text-white bg-primary/15' : 'text-muted-foreground hover:text-white'}">${i + 1}. ${x.t}</button></li>`).join('');
+    const bar = document.getElementById('bar');
+    if (bar) bar.innerHTML = `<div class="flex items-center justify-between gap-2">
+        <p class="font-mono text-[11px] tracking-widest text-[#26C6DA]">STEP ${S.step + 1} OF ${steps.length}</p>
+        <button data-a="more" class="font-mono text-[11px] tracking-widest text-muted-foreground min-h-[44px] px-2">${uiMore ? 'LESS' : 'MORE'}</button>
+      </div>
+      <h2 class="font-display text-base text-white leading-tight">${st.t}</h2>
+      <p class="font-mono text-xs leading-relaxed mt-1 ${uiMore ? '' : 'line-clamp-2'}">${st.b}</p>${nav('mt-2')}`;
+    const dev = document.getElementById('devices');
+    if (dev) dev.innerHTML = Object.entries(DEVICES).map(([k, [, , label]]) => `<button data-a="device" data-v="${k}" class="font-mono text-[11px] tracking-widest px-1 lg:px-3 min-h-[44px] border ${S.device === k ? 'border-primary text-white bg-primary/20' : 'border-border text-muted-foreground hover:text-white'}">${label}</button>`).join('');
+    const info = document.getElementById('devInfo'); if (info) info.textContent = !wide() && S.device === 'phone' ? 'Fitted to your screen' : DEVICES[S.device].slice(0, 2).join(' x ');
   }
   function clockText() { return `${fmt(now(), JOURNEY === 'host' ? S.hostZone : S.guestZone, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short' })}`; }
   function fit() {
-    const f = document.getElementById('frame'); const wrap = document.getElementById('frameWrap'); if (!f || !wrap) return;
-    const w = +f.dataset.w; const avail = wrap.clientWidth; const z = Math.min(1, avail / w);
-    f.style.zoom = z < 1 ? String(z) : '';
+    const fr = document.getElementById('frame'), box = document.getElementById('frameBox'), wrap = document.getElementById('frameWrap'); if (!fr) return;
+    const [w, dh] = DEVICES[S.device]; const z = Math.min(1, wrap.clientWidth / w);
+    let h = dh;
+    if (!wide() && S.device === 'phone') {
+      const bar = document.getElementById('bar'); const top = box.getBoundingClientRect().top + window.scrollY;
+      h = Math.max(420, Math.min(dh, Math.floor(window.innerHeight - top - (bar ? bar.offsetHeight : 180) - 8)));
+    }
+    frameH = h;
+    fr.style.width = w + 'px'; fr.style.height = h + 'px'; fr.style.transform = z < 1 ? `scale(${z})` : '';
+    box.style.width = w * z + 'px'; box.style.height = h * z + 'px';
   }
-  window.addEventListener('resize', fit);
+  window.addEventListener('resize', () => { if ([S.device, wide()].join('|') !== frameKey) render(); else fit(); });
 
   /* ═════════════ EVENTS ═════════════ */
-  function refuse(msg) { S.alert = msg; S.confirmId = null; S.editId = null; save(); render(); }
-  document.addEventListener('click', (e) => {
+  function refuse(msg) { S.alert = msg; S.confirmId = null; S.editId = null; save(); render(); scrollScreenTo('[role="alert"]'); }
+  function onClick(e) {
     const b = e.target.closest('[data-a]'); if (!b || b.disabled || b.tagName === 'INPUT') return;
     const a = b.dataset.a, v = b.dataset.v;
     switch (a) {
       case 'next': return goStep(S.step + 1);
       case 'back': return goStep(S.step - 1);
       case 'step': return goStep(+v);
+      case 'more': uiMore = !uiMore; return render();
       case 'device': return set({ device: v });
-      case 'reset': localStorage.removeItem(KEY); S = fresh(); steps[0].go(); save(); return render();
+      case 'reset': try { localStorage.removeItem(KEY); } catch {} S = fresh(); steps[0].go(); save(); render(); return scrollScreenTo(null);
       case 'time': S.simOffset += +v; return set({});
-      case 'jumpNext': { const n = upcoming().find((s) => s.startsAt > now()); if (n) jumpTo(n.startsAt - 10 * MIN); return set({}); }
-      case 'tab': return set({ tab: v, confirmId: null });
+      case 'jumpNext': { const n = upcoming().find((x) => x.startsAt > now()); if (n) jumpTo(n.startsAt - 10 * MIN); return set({}); }
+      case 'tab': set({ tab: v, confirmId: null }); return scrollScreenTo(null);
       case 'past': return set({ pastOpen: !S.pastOpen });
       case 'add': {
         const val = validate(S.draft); if (!val.ok) return;
@@ -512,12 +566,12 @@
         S.saving = true; render();
         return setTimeout(() => { S.shows.push({ id: 'n' + Date.now(), title: S.draft.title.trim(), startsAt: val.ms }); S.draft = { title: '', start: '' }; S.saving = false; S.alert = ''; save(); render(); }, 600);
       }
-      case 'edit': { const s = S.shows.find((x) => x.id === v); return set({ editId: v, confirmId: null, editDraft: { title: s.title, start: utcToLocalInput(s.startsAt, S.hostZone) } }); }
+      case 'edit': { const x = S.shows.find((y) => y.id === v); return set({ editId: v, confirmId: null, editDraft: { title: x.title, start: utcToLocalInput(x.startsAt, S.hostZone) } }); }
       case 'cancelEdit': return set({ editId: null });
       case 'saveEdit': {
         if (S.failWrites) return refuse('Not saved. The server refused the change: your host sign-in has expired. Reload the console and sign in again.');
         const val = validate(S.editDraft, S.editId); if (!val.ok) return;
-        const s = S.shows.find((x) => x.id === S.editId); s.title = S.editDraft.title.trim(); s.startsAt = val.ms;
+        const x = S.shows.find((y) => y.id === S.editId); x.title = S.editDraft.title.trim(); x.startsAt = val.ms;
         return set({ editId: null, alert: '' });
       }
       case 'del': return set({ confirmId: v, editId: null });
@@ -535,12 +589,12 @@
       case 'simShift': { const n = upcoming()[0]; if (n) n.startsAt += 30 * MIN; return set({}); }
       case 'simDemo': S.shows = [...DEMO_SHOWS(), ...PAST_SHOWS()]; return set({});
     }
-  });
-  document.addEventListener('input', (e) => {
+  }
+  function onInput(e) {
     const a = e.target.dataset && e.target.dataset.a; if (!a) return;
     const val = e.target.value;
     if (a === 'titleField') { S.titleField = val; S.lastPrefill = null; save(); return; }
-    if (a === 'guestName') { S.guestName = val; save(); const t = document.querySelector('[data-a="tunein"]'); if (t) t.disabled = val.trim().length < 2; return; }
+    if (a === 'guestName') { S.guestName = val; save(); const t = fdoc.querySelector('[data-a="tunein"]'); if (t) t.disabled = val.trim().length < 2; return; }
     if (a === 'draftTitle') S.draft.title = val;
     if (a === 'draftStart') S.draft.start = val;
     if (a === 'editTitle') S.editDraft.title = val;
@@ -548,11 +602,13 @@
     save();
     if (a === 'draftStart' || a === 'editStart') return render();
     const isEdit = a.startsWith('edit');
-    const pv = document.getElementById(isEdit ? 'editPreview' : 'draftPreview'); if (pv) pv.innerHTML = preview(isEdit ? S.editDraft : S.draft, isEdit ? S.editId : undefined);
+    const pv = fdoc.getElementById(isEdit ? 'editPreview' : 'draftPreview'); if (pv) pv.innerHTML = preview(isEdit ? S.editDraft : S.draft, isEdit ? S.editId : undefined);
     const okNow = validate(isEdit ? S.editDraft : S.draft, isEdit ? S.editId : undefined).ok;
-    const btn = document.querySelector(isEdit ? '[data-a="saveEdit"]' : '[data-a="add"]');
+    const btn = fdoc.querySelector(isEdit ? '[data-a="saveEdit"]' : '[data-a="add"]');
     if (btn && btn.disabled === okNow) render();
-  });
+  }
+  document.addEventListener('click', onClick);
+  document.addEventListener('input', onInput);
 
   /* ═════════════ TICK ═════════════ */
   let lastKey = '';
@@ -562,10 +618,12 @@
     return [st.kind, st.next && st.next.id, st.later.map((x) => x.id).join(','), S.station.mode, guestView(), n, sug && sug.id, upcoming().length, past().length].join('|');
   }
   setInterval(() => {
-    if (phaseKey() !== lastKey) { const a = document.activeElement; if (!(a && a.tagName === 'INPUT' && a.type === 'datetime-local')) return render(); }
-    document.querySelectorAll('[data-cd]').forEach((el) => { el.innerHTML = countdown(+el.dataset.cd - now()); });
-    document.querySelectorAll('[data-rel]').forEach((el) => { el.textContent = rel(+el.dataset.rel); });
-    const c = document.querySelector('[data-clock]'); if (c) c.textContent = clockText();
+    if (phaseKey() !== lastKey) { const a = fdoc && fdoc.activeElement; if (!(a && a.tagName === 'INPUT' && a.type === 'datetime-local')) return render(); }
+    if (fdoc) {
+      fdoc.querySelectorAll('[data-cd]').forEach((el) => { el.innerHTML = countdown(+el.dataset.cd - now()); });
+      fdoc.querySelectorAll('[data-rel]').forEach((el) => { el.textContent = rel(+el.dataset.rel); });
+    }
+    document.querySelectorAll('[data-clock]').forEach((c) => { c.textContent = clockText(); });
   }, 1000);
 
   function esc(s) { return String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c])); }
