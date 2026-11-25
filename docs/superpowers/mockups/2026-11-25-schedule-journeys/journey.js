@@ -34,10 +34,11 @@
       alert: '', pastOpen: false, saving: false,
       titleField: '', lastPrefill: null, titleEdited: false, hostStatus: 'idle',
       auto: { armed: false, state: 'off', running: null, startAt: 0, done: [], missed: [], fail: null, next: null, msg: '', stale: false },
-      playlists: {}, filesOpenId: null, hostView: 'console',
+      playlists: {}, filesOpenId: null, hostView: 'console', reviewEditor: false,
       // guest UI
       guestInRoom: false, guestName: 'Nebula Drifter', guestAvatar: 1,
       device: JOURNEY === 'host' && window.innerWidth >= 1024 ? 'desktop' : 'phone',
+      userDevice: JOURNEY === 'host' && window.innerWidth >= 1024 ? 'desktop' : 'phone',
       step: 0,
     };
   }
@@ -135,6 +136,7 @@
     cal: svg('<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4"/><path d="M3 10h18"/>'),
     vol: svg('<path d="M11 4.7a.7.7 0 0 0-1.2-.5L6.4 7.6A1.4 1.4 0 0 1 5.4 8H3a1 1 0 0 0-1 1v6a1 1 0 0 0 1 1h2.4a1.4 1.4 0 0 1 1 .4l3.4 3.4a.7.7 0 0 0 1.2-.5z"/><path d="M16 9a5 5 0 0 1 0 6"/>'),
     up: svg('<path d="m18 15-6-6-6 6"/>'), down: svg('<path d="m6 9 6 6 6-6"/>'), x: svg('<path d="M18 6 6 18"/><path d="m6 6 12 12"/>'),
+    lock: svg('<rect width="18" height="11" x="3" y="11"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>'),
     spark: svg('<path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"/>'),
   };
 
@@ -281,13 +283,16 @@
     return standby();
   }
   function standbyShell(inner, soon) {
-    const status = soon
+    const status = soon === 'delayed'
+      ? `<p class="font-mono text-amber-300 text-xs tracking-widest mb-10 [@media(max-height:500px)]:mb-4 inline-flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-amber-300"></span>STANDING BY</p>`
+      : soon
       ? `<p class="font-mono text-[#26C6DA] text-xs tracking-widest mb-10 [@media(max-height:500px)]:mb-4 inline-flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-[#26C6DA]"></span>STANDING BY</p>`
       : `<p class="font-mono text-white/60 text-xs tracking-widest mb-10 [@media(max-height:500px)]:mb-4 inline-flex items-center gap-2"><span class="w-1.5 h-1.5 rounded-full bg-white/50"></span>SIGNAL OFFLINE</p>`;
     return `<div class="min-h-full bg-[#05060f] radio-nebula relative overflow-x-hidden flex flex-col items-center justify-center px-6 py-10 [@media(max-height:500px)]:py-6 text-center">
       <div class="absolute inset-0 radio-stars pointer-events-none"></div>
       <div class="absolute inset-x-0 top-0 h-1/3 radio-aurora pointer-events-none"></div>
       <div class="absolute inset-x-0 bottom-0 h-[30%] radio-floor-glow pointer-events-none"></div>
+      <button aria-label="Host sign-in" class="absolute top-2 right-2 z-20 w-11 h-11 inline-flex items-center justify-center text-white/60 hover:text-white">${I.lock}</button>
       ${JOURNEY === 'host' && S.hostView === 'phone' ? phoneLine() : ''}
       <div class="relative z-10 w-full max-w-sm flex flex-col items-center">
         <h1 class="font-display text-white text-2xl sm:text-3xl font-bold tracking-[0.2em] mb-2" style="text-shadow:0 0 24px rgba(38,198,218,0.5)">SUBSPACE RADIO</h1>
@@ -318,8 +323,8 @@
         <p class="font-mono text-amber-300 text-[10px] tracking-[0.3em] mb-3">DELAYED</p>
         <p class="font-display text-white text-lg tracking-wide mb-1 uppercase break-words">${esc(st.next.title)}</p>
         <p class="font-mono text-white/70 text-xs">Scheduled for ${fmt(st.next.startsAt, S.guestZone, { hour: S.guestLocale === 'en-US' ? 'numeric' : '2-digit', minute: '2-digit', timeZoneName: 'short' }, S.guestLocale)}</p>
-        <p class="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">The signal is late. Keep this page open.</p>
-      </div>` + laterList(st.later) + keepOpen, true);
+        <p class="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">The signal is late.</p>
+      </div>` + laterList(st.later) + keepOpen, 'delayed');
     if (st.kind === 'soon') return standbyShell(`<div class="w-full border border-[#26C6DA]/40 bg-[#26C6DA]/[0.06] backdrop-blur px-5 py-6" aria-live="polite">
         <p class="font-mono text-[#26C6DA] text-[10px] tracking-[0.3em] mb-3 inline-flex items-center gap-2"><span class="w-2 h-2 rounded-full bg-[#26C6DA] radio-soon-pulse" style="box-shadow:0 0 10px #26C6DA"></span>STARTING SOON</p>
         <p class="font-display text-white text-lg tracking-wide mb-1 uppercase break-words">${esc(st.next.title)}</p>
@@ -418,7 +423,7 @@
     const A = S.auto; if (!A.armed) return;
     const t = now();
     if (A.running) {
-      if (t >= A.startAt + total(A.running) + 30e3) { endShow(); A.done.push(A.running); A.running = null; A.state = 'armed'; }
+      if (t >= A.startAt + total(A.running) + 30e3) { endShow(); A.last = { title: (S.shows.find((x) => x.id === A.running) || {}).title, at: A.startAt + total(A.running) + 30e3 }; A.done.push(A.running); A.running = null; A.state = 'armed'; }
       else A.state = t < A.startAt ? 'starting' : 'on_air';
       return;
     }
@@ -457,7 +462,7 @@
     else if (A.state === 'on_air') { const tr = nowTrack(); line = `${esc(run.title)} · track ${tr.i + 1} of ${plist(A.running).length} · ends by itself about ${hhmm(A.startAt + total(A.running), ISRAEL)}.`; }
     else if (A.state === 'failed') line = A.msg === 'already' ? `${esc(nx.title)}: the station is already live, so AUTO-RUN will not start on top of it.` : `${esc(nx.title)}: no network. Retrying every 30 s until ${hhmm(nx.startsAt + GRACE, ISRAEL)}.`;
     else if (A.state === 'missed') line = `${esc(A.msg)} could not start within 30 min and was skipped.`;
-    else line = nxt ? `Next: ${esc(nxt.title)} at ${hhmm(nxt.startsAt, ISRAEL)}${A.state === 'preflight' ? '. Sign-in, files, audio and network checked' : ''}. Checked 1 min ago.` : 'No upcoming show has files on this PC.';
+    else line = (A.last ? `Last: ${esc(A.last.title)} ended ${hhmm(A.last.at, ISRAEL)}, chat log saved. ` : '') + (nxt ? `Next: ${esc(nxt.title)} at ${hhmm(nxt.startsAt, ISRAEL)}${A.state === 'preflight' ? '. Sign-in, files, audio and network checked' : ''}. Checked 1 min ago.` : 'No upcoming show has files on this PC.');
     return `<div class="border ${bc} p-3 mb-4 flex items-center justify-between gap-3">
       <div class="min-w-0"><p class="font-mono text-[11px] tracking-widest ${tc}">AUTO-RUN ${label}</p><p class="font-mono text-[11px] text-foreground mt-0.5 leading-relaxed">${line}</p>
       ${noFiles && A.state !== 'on_air' ? `<p class="font-mono text-[11px] text-amber-400 mt-0.5 leading-relaxed">${esc(noFiles.title)} has no files on this PC: announced, not played.</p>` : ''}</div>
@@ -469,29 +474,31 @@
     const tr = nowTrack(); const l = plist(S.auto.running);
     return `<div class="flex flex-col gap-1"><span class="font-mono text-[11px] tracking-widest text-muted-foreground mt-2">FILE DECK · AUTO-RUN</span>
       ${l.map((f, i) => `<p class="font-mono text-xs ${tr && tr.i === i ? 'text-white' : 'text-muted-foreground'} flex justify-between gap-3"><span class="truncate">${tr && tr.i === i ? 'NOW ' : ''}${esc(f.name)}</span><span class="tabular-nums shrink-0">${dur(f.dur)}</span></p>`).join('')}
-      <p class="font-mono text-[11px] text-muted-foreground mt-1">PAUSE, NEXT and END still work. END finishes this show.</p></div>`;
+      <p class="font-mono text-[11px] text-muted-foreground mt-1">PAUSE, NEXT and END work. END finishes this show.</p></div>`;
   }
   function filesRow(x) {
     const l = plist(x.id); const open = S.filesOpenId === x.id;
-    return `<button data-a="files" data-v="${x.id}" aria-expanded="${open}" class="font-mono text-[11px] tracking-widest min-h-[44px] px-3 border ${l.length ? 'border-emerald-500/40 text-emerald-300' : 'border-dashed border-border text-muted-foreground'} text-left flex items-center justify-between gap-2"><span>${l.length ? `FILES · ${l.length} · ${dur(total(x.id))} · on this PC` : 'FILES · none on this PC'}</span>${open ? I.chevD : I.chevR}</button>${open ? filesEditor(x) : ''}`;
+    return `<button data-a="files" data-v="${x.id}" aria-expanded="${open}" class="font-mono text-[11px] tracking-widest min-h-[44px] px-3 border ${l.length ? 'border-emerald-500/60 text-emerald-300' : 'border-dashed border-border text-muted-foreground'} text-left flex items-center justify-between gap-2"><span>${onPhone() && !S.reviewEditor ? 'FILES · assign on the broadcasting PC' : l.length ? `FILES · ${l.length} files · ${dur(total(x.id))} · on this PC` : 'FILES · none on this PC'}</span>${open ? I.chevD : I.chevR}</button>${open ? filesEditor(x) : ''}`;
   }
+  const onPhone = () => S.device === 'phone' || S.device === 'small';
   function filesEditor(x) {
+    if (onPhone() && !S.reviewEditor) return `<p class="font-mono text-[11px] text-muted-foreground border border-border p-3 leading-relaxed">Files are added on the PC that will play the show. Open the console there.</p>`;
     const l = plist(x.id); const nx = upcoming().find((y) => y.startsAt > x.startsAt);
     const over = nx && l.length && x.startsAt + total(x.id) > nx.startsAt;
-    const sq = 'w-11 h-11 border border-border inline-flex items-center justify-center text-muted-foreground disabled:opacity-30';
+    const sq = 'w-11 h-11 border border-border inline-flex items-center justify-center text-muted-foreground disabled:opacity-30 disabled:border-transparent';
     return `<div class="border border-border p-3 flex flex-col gap-3 bg-white/[0.02]">
-      ${l.length ? l.map((f, i) => `<div class="flex items-start gap-2 border-b border-border/60 pb-3">
-        <span class="font-mono text-[11px] text-muted-foreground w-4 pt-7 shrink-0">${i + 1}</span>
-        <div class="flex-1 min-w-0 flex flex-col gap-1">
-          <label for="disp-${x.id}-${i}" class="font-mono text-[10px] tracking-widest text-muted-foreground">NEON NAME</label>
+      ${S.reviewEditor && onPhone() ? `<p class="font-mono text-[10px] text-[#26C6DA] leading-relaxed">Shown at phone size so you can review it. On a real phone this row only says: assign on the broadcasting PC.</p>` : ''}
+      ${l.length ? l.map((f, i) => `<div class="flex flex-col gap-1 border-b border-border/60 pb-3">
+          <label for="disp-${x.id}-${i}" class="font-mono text-[10px] tracking-widest text-muted-foreground">TRACK ${i + 1} · NEON NAME</label>
           <input id="disp-${x.id}-${i}" data-a="disp" data-v="${x.id}:${i}" value="${esc(f.name)}" maxlength="80" class="w-full bg-transparent border border-border px-2 font-mono text-xs min-h-[44px] text-white focus:outline-none focus:ring-1 focus:ring-primary" />
-          <span class="font-mono text-[10px] text-muted-foreground break-all">${esc(f.file)} · ${dur(f.dur)}</span>
-        </div>
-        <div class="grid grid-cols-1 gap-1 shrink-0">
-          <button data-a="fup" data-v="${x.id}:${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up" class="${sq}">${I.up}</button>
-          <button data-a="fdown" data-v="${x.id}:${i}" ${i === l.length - 1 ? 'disabled' : ''} aria-label="Move down" class="${sq}">${I.down}</button>
-          <button data-a="frm" data-v="${x.id}:${i}" aria-label="Remove file" class="${sq} hover:text-red-400">${I.x}</button>
-        </div></div>`).join('') : `<p class="font-mono text-xs text-muted-foreground leading-relaxed">No files yet. Add the set this show should play.</p>`}
+          <div class="flex items-center justify-between gap-2">
+            <span class="font-mono text-[10px] text-muted-foreground break-all min-w-0">${esc(f.file)} · ${dur(f.dur)}</span>
+            <div class="flex gap-1 shrink-0">
+              <button data-a="fup" data-v="${x.id}:${i}" ${i === 0 ? 'disabled' : ''} aria-label="Move up" class="${sq}">${I.up}</button>
+              <button data-a="fdown" data-v="${x.id}:${i}" ${i === l.length - 1 ? 'disabled' : ''} aria-label="Move down" class="${sq}">${I.down}</button>
+              <button data-a="frm" data-v="${x.id}:${i}" aria-label="Remove file" class="${sq} hover:text-red-400">${I.x}</button>
+            </div>
+          </div></div>`).join('') : `<p class="font-mono text-xs text-muted-foreground leading-relaxed">No files yet. Add the set this show should play.</p>`}
       <button data-a="fadd" data-v="${x.id}" class="font-mono text-[11px] tracking-widest min-h-[44px] border border-primary text-white bg-primary/20">ADD FILES</button>
       <div class="flex flex-col gap-1"><span class="font-mono text-[11px] tracking-widest text-muted-foreground">NEON SHOWS</span>
         <div class="grid grid-cols-2 gap-2">${['tracks', 'title'].map((m) => `<button data-a="neon" data-v="${x.id}:${m}" class="font-mono text-[11px] tracking-widest min-h-[44px] border ${(x.neon || 'tracks') === m ? 'border-primary text-white bg-primary/20' : 'border-border text-muted-foreground'}">${m === 'tracks' ? 'TRACK NAMES' : 'SHOW TITLE'}</button>`).join('')}</div></div>
@@ -502,9 +509,12 @@
   }
   function phoneLine() {
     const A = S.auto; const n = nextWithFiles();
-    const txt = A.stale ? 'AUTO-RUN · PC-STUDIO last seen 2 h ago. The PC may be off or asleep: shows will not start.'
-      : A.armed ? `AUTO-RUN · armed on PC-STUDIO · next ${n ? `${esc(n.title)} ${hhmm(n.startsAt, ISRAEL)}` : 'none'} · seen 1 min ago` : 'AUTO-RUN · off';
-    return `<div class="relative z-10 w-full max-w-sm mb-6 border ${A.stale ? 'border-amber-500/60 text-amber-300' : 'border-emerald-500/40 text-emerald-300'} bg-black/70 px-3 py-2 font-mono text-[11px] leading-relaxed text-left">${txt}<span class="block text-white/60 text-[10px] mt-1">Only you see this line (signed in as host on this phone).</span></div>`;
+    const lastMissed = A.missed.length ? S.shows.find((x) => x.id === A.missed[A.missed.length - 1]) : null;
+    const kind = A.stale ? 'stale' : !A.armed ? 'off' : lastMissed ? 'missed' : 'ok';
+    const nextTxt = n ? `next ${esc(n.title)} ${hhmm(n.startsAt, ISRAEL)}` : 'no next show with files';
+    const txt = { stale: 'AUTO-RUN · PC-STUDIO last seen 2 h ago. The PC may be off or asleep: shows will not start.', off: 'AUTO-RUN · off', missed: `AUTO-RUN · MISSED ${esc(lastMissed && lastMissed.title)} (no network) · still armed on PC-STUDIO · ${nextTxt}`, ok: `AUTO-RUN · armed on PC-STUDIO · ${nextTxt} · seen 1 min ago` }[kind];
+    const cls = { stale: 'border-amber-500/60 text-amber-300', off: 'border-white/20 text-white/70', missed: 'border-red-500/60 text-red-300', ok: 'border-emerald-500/60 text-emerald-300' }[kind];
+    return `<div class="relative z-10 w-full max-w-sm mb-6 border ${cls} bg-black/70 px-3 py-2 font-mono text-[11px] leading-relaxed text-left">${txt}<span class="block text-white/60 text-[10px] mt-1">Only you see this line (signed in as host on this phone).</span></div>`;
   }
 
   /* ═════════════ STEPS ═════════════ */
@@ -515,7 +525,7 @@
   const R2 = '<span class="text-[#26C6DA]">Release 2.</span> ';
   const R1 = '<span class="text-[#26C6DA]">Release 1.</span> ';
   const HOST_STEPS = [
-    { t: 'Your console, off air', b: 'Your host console as it is today, with one new bar at the top: AUTO-RUN. It is OFF until you arm it. Tap SCHEDULE, or press Next.', go: () => { Object.assign(S, fresh(), { device: S.device }); S.tab = 'broadcast'; } },
+    { t: 'Your console, off air', b: 'Your host console as it is today, with one new bar at the top: AUTO-RUN. It is OFF until you arm it. Tap SCHEDULE, or press Next.', go: () => { Object.assign(S, fresh(), { device: S.userDevice || S.device, userDevice: S.userDevice }); S.tab = 'broadcast'; } },
     { t: 'Open SCHEDULE', b: R1 + 'The new tab. Nothing is scheduled yet, so guests see NEXT TRANSMISSION: TBA. PAST holds old shows and stays folded.', go: () => { S.tab = 'schedule'; } },
     { t: 'Add your first show', f: '[data-a="add"]', b: R1 + 'Type a title and pick the start in your own time. Before saving you see it back with UTC and how far away it is. Press ADD TO SCHEDULE. Next adds it for you if you skip.', go: () => { S.tab = 'schedule'; S.draft = { title: 'Psy Night Vol. 7', start: '2026-11-29T22:00' }; }, leave: () => { if (!s1()) S.shows.push({ id: 's1', title: 'Psy Night Vol. 7', startsAt: wall(2026, 11, 29, 22, 0) }); S.draft = { title: '', start: '' }; } },
     { t: 'Add more, and see a clash warning', f: '#draftPreview', b: R1 + 'Two more shows are added. The form now holds "Goa Classics part 2" at 21:30, 30 minutes after another show: you get a heads-up, but can still save it.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.draft = { title: 'Goa Classics part 2', start: '2026-12-06T21:30' }; }, leave: () => { S.draft = { title: '', start: '' }; } },
@@ -523,20 +533,20 @@
     { t: 'Edit a show', f: '[data-a="saveEdit"]', b: R1 + 'The pencil opens the show in place. Change the time and press SAVE. Only one show is open for editing at a time.', go: () => { ensureDemoShows(); S.tab = 'schedule'; const x = s1(); S.editId = x.id; S.editDraft = { title: x.title, start: utcToLocalInput(x.startsAt, S.hostZone) }; }, leave: () => { S.editId = null; } },
     { t: 'Delete takes two taps', f: '[data-a="delYes"]', b: R1 + 'The bin asks first. DELETE removes the show, KEEP backs out.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.editId = null; S.confirmId = upcoming().slice(-1)[0]?.id || null; }, leave: () => { S.confirmId = null; } },
     { t: 'If a change fails', f: '[data-a="edit"]', b: R1 + 'Here the server refuses every change, as it would if your host sign-in had expired. Try editing or deleting: a red message, never a fake success.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.failWrites = true; S.alert = ''; }, leave: () => { S.failWrites = false; S.alert = ''; } },
-    { t: 'Give a show its files', f: '[data-a="fadd"]', b: R2 + 'Open FILES on a show and add the set it should play. Files are copied into the console\'s storage on this PC; nothing is uploaded. Set the NEON NAME of each track, reorder, and choose TRACK NAMES or SHOW TITLE. Goa Classics 1998 has no files, so it is announced but not played.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.playlists.s1 = DEMO_PLAYLIST(); S.filesOpenId = 's1'; }, leave: () => { S.filesOpenId = null; } },
+    { t: 'Give a show its files', f: '[data-a="fadd"]', b: R2 + 'Open FILES on a show and add the set it should play. Files are copied into the console\'s storage on this PC; nothing is uploaded. Set the NEON NAME of each track, reorder, and choose TRACK NAMES or SHOW TITLE. A test show at 22:30 shows the overrun warning (removed on Next). If the browser ever refuses to protect the storage, the last line turns amber. Goa Classics 1998 has no files, so it is announced but not played.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.playlists.s1 = DEMO_PLAYLIST(); S.filesOpenId = 's1'; S.reviewEditor = true; S.shows.push({ id: 'ov', title: 'Afterparty', startsAt: wall(2026, 11, 29, 22, 30) }); }, leave: () => { S.filesOpenId = null; S.reviewEditor = false; S.shows = S.shows.filter((x) => x.id !== 'ov'); } },
     { t: 'ARM AUTO-RUN', b: R2 + 'Press ARM. One click, on purpose: a browser only lets a page start sound after you have clicked on it. From now on this console runs shows with files by itself. Reload the page or restart the PC and it is OFF again, and asks for your sign-in.', go: () => { ensureDemoShows(); if (!S.playlists.s1) S.playlists.s1 = DEMO_PLAYLIST(); S.tab = 'schedule'; }, leave: () => { S.auto.armed = true; S.auto.state = 'armed'; } },
     { t: 'Ten minutes before: checks', b: R2 + 'AUTO-RUN checks your sign-in, the files, audio permission and the network. If one fails it retries every 30 seconds and the bar says why.', go: () => { S.auto.armed = true; S.tab = 'broadcast'; jumpTo(s1().startsAt - 9 * MIN); } },
-    { t: 'Show time: it goes live by itself', b: R2 + '45 seconds early it goes live for you, with the show title and an empty deck (no microphone or input device, so no Windows sounds). Guests waiting on the countdown move to the entry screen. At the start time it loads the files and plays. PAUSE, NEXT and END still work.', go: () => { S.tab = 'broadcast'; jumpTo(s1().startsAt - 30e3); } },
-    { t: 'Track by track', b: R2 + 'Track 2 is playing. Guests\' neon line shows its NEON NAME, because this show is set to TRACK NAMES. You can edit the schedule while on air.', go: () => { S.tab = 'broadcast'; jumpTo(s1().startsAt + 9 * MIN); } },
+    { t: 'Show time: it goes live by itself', b: R2 + '45 seconds early it goes live for you, with the show title and an empty deck (no microphone or input device, so no Windows sounds). Guests waiting on the countdown move to the entry screen. At the start time it loads the files and plays.', go: () => { S.tab = 'broadcast'; jumpTo(s1().startsAt - 30e3); } },
+    { t: 'Track by track', b: R2 + 'Track 2 is playing. Guests\' neon line shows its NEON NAME, because this show is set to TRACK NAMES. PAUSE, NEXT and END work; a pause just moves the safety END later. You can edit the schedule while on air.', go: () => { S.tab = 'broadcast'; jumpTo(s1().startsAt + 9 * MIN); } },
     { t: 'It ends by itself', b: R2 + '30 seconds after the last file ends (so deep-buffer listeners hear the very end) it ends the broadcast and saves the chat log. If a file will not play it is skipped. If the PC crashes mid-show, the server takes the station off air within 5 minutes.', go: () => { S.tab = 'broadcast'; jumpTo(s1().startsAt + total('s1') + 31e3); } },
-    { t: 'If a start fails', b: R2 + 'Here the network is down at show time. AUTO-RUN retries every 30 seconds until 30 minutes after the start, then marks the show MISSED. Guests see STARTING SOON, then DELAYED, then the next show.', go: () => { S.playlists.s3 = DEMO_PLAYLIST().slice(0, 2); S.auto.fail = 'network'; S.tab = 'broadcast'; jumpTo(sid('s3').startsAt + 2 * MIN); }, leave: () => { S.auto.fail = null; S.auto.missed.push('s3'); } },
-    { t: 'Check it from your phone', b: R2 + 'Open /radio on your phone, signed in as host (the padlock). One line only you can see says AUTO-RUN is armed, on which PC, the next show, and when the PC last checked in.', go: () => { S.hostView = 'phone'; S.device = 'phone'; jumpTo(sid('s3').startsAt + GRACE + 2 * MIN); S.shows.push({ id: 's5', title: 'Psy Night Vol. 8', startsAt: wall(2027, 1, 2, 22, 0) }); S.playlists.s5 = DEMO_PLAYLIST(); }, leave: () => { S.hostView = 'console'; } },
-    { t: 'If the PC goes to sleep', b: R2 + 'The line turns amber when the PC has not checked in for 3 minutes. Nothing will start until you wake it, sign in and ARM.', go: () => { S.hostView = 'phone'; S.auto.stale = true; }, leave: () => { S.auto.stale = false; S.hostView = 'console'; S.device = wide() ? 'desktop' : 'phone'; } },
+    { t: 'If a start fails', b: R2 + 'Here the network is down at show time. AUTO-RUN retries every 30 seconds until 30 minutes after the start, then the bar says MISSED and it moves on. Guests see STARTING SOON, then DELAYED, then the next show.', go: () => { S.playlists.s3 = DEMO_PLAYLIST().slice(0, 2); S.auto.fail = 'network'; S.tab = 'broadcast'; jumpTo(sid('s3').startsAt + 2 * MIN); }, leave: () => { S.auto.fail = null; S.auto.missed.push('s3'); } },
+    { t: 'Check it from your phone', b: R2 + 'Open /radio on your phone, signed in as host (the padlock). One line only you can see says whether AUTO-RUN is armed, on which PC, the next show, and when the PC last checked in. It is red here because Subspace Theory Live was just MISSED.', go: () => { S.hostView = 'phone'; S.device = 'phone'; jumpTo(sid('s3').startsAt + GRACE + 2 * MIN); S.shows.push({ id: 's5', title: 'Psy Night Vol. 8', startsAt: wall(2027, 1, 2, 22, 0) }); S.playlists.s5 = DEMO_PLAYLIST(); }, leave: () => { S.hostView = 'console'; } },
+    { t: 'If the PC goes to sleep', b: R2 + 'The line turns amber when the PC has not checked in for 3 minutes. Nothing will start until you wake it, sign in and ARM.', go: () => { S.hostView = 'phone'; S.auto.stale = true; }, leave: () => { S.auto.stale = false; S.hostView = 'console'; S.device = S.userDevice || (wide() ? 'desktop' : 'phone'); } },
     { t: 'DJing yourself still works', b: R1 + 'Goa Classics 1998 has no files, so you DJ it yourself as today. AUTO-RUN leaves it alone. The title is already filled in from the schedule. Type over it, or clear it to show LIVE DJ, and it stays as you left it.', go: () => { S.auto.armed = false; S.auto.state = 'off'; S.tab = 'broadcast'; S.titleField = ''; S.lastPrefill = null; S.titleEdited = false; jumpTo(sid('s2').startsAt - 50 * MIN); } },
     { t: 'Done', b: 'That is the host side, both releases. Open the listener journey to see it from a guest\'s phone. Reset demo starts over.', go: () => {} },
   ];
   const LISTENER_STEPS = [
-    { t: 'A guest opens your link, off air', b: R1 + 'They see the countdown straight away, with no name, avatar or sign-in first. Then the next two shows under LATER. The countdown is live.', go: () => { Object.assign(S, fresh(), { device: S.device }); ensureDemoShows(); S.playlists.s1 = DEMO_PLAYLIST(); S.auto.armed = true; S.auto.state = 'armed'; } },
+    { t: 'A guest opens your link, off air', b: R1 + 'They see the countdown straight away, with no name, avatar or sign-in first. Then the next two shows under LATER. The countdown is live.', go: () => { Object.assign(S, fresh(), { device: S.userDevice || S.device, userDevice: S.userDevice }); ensureDemoShows(); S.playlists.s1 = DEMO_PLAYLIST(); S.auto.armed = true; S.auto.state = 'armed'; } },
     { t: 'Same moment, a guest in New York', b: R1 + 'Same countdown. Times in their own zone and their phone\'s format.', go: () => { S.guestZone = 'America/New_York'; S.guestLocale = 'en-US'; }, leave: () => { S.guestZone = ISRAEL; S.guestLocale = 'en-GB'; } },
     { t: 'You move the show', b: R1 + 'You moved Psy Night Vol. 7 to 22:30 in the console. A waiting guest sees the change within a minute (instantly in this demo).', go: () => { s1().startsAt = wall(2026, 11, 29, 22, 30); } },
     { t: 'AUTO-RUN goes live, 45 s early', b: R2 + 'Your console goes live by itself just before 22:30. The page switches to the entry screen, so guests pick a name and avatar before the music starts.', go: () => { S.guestInRoom = false; jumpTo(s1().startsAt - 30e3); } },
@@ -544,7 +554,7 @@
     { t: 'Next track', b: R2 + 'Nine minutes in, track 2: the neon line changes by itself.', go: () => { S.guestInRoom = true; jumpTo(s1().startsAt + 9 * MIN); } },
     { t: 'The show ends by itself', b: R2 + 'The last file ends, the broadcast ends, and guests are back on the countdown, now for Goa Classics 1998. A show that has aired never shows as late.', go: () => { jumpTo(s1().startsAt + total('s1') + 31e3); } },
     { t: 'A show does not start: STARTING SOON', b: 'Goa Classics 1998 has not started (no files on the PC and you are not live, or AUTO-RUN could not start). For the first 10 minutes guests see STARTING SOON.', go: () => { S.guestInRoom = false; jumpTo(sid('s2').startsAt + 4 * MIN); } },
-    { t: 'Then DELAYED', b: R2 + 'From 10 to 30 minutes after the start time: DELAYED, and "The signal is late. Keep this page open."', go: () => { jumpTo(sid('s2').startsAt + 15 * MIN); } },
+    { t: 'Then DELAYED', b: R2 + 'From 10 to 30 minutes after the start time the card says DELAYED: "The signal is late."', go: () => { jumpTo(sid('s2').startsAt + 15 * MIN); } },
     { t: 'Then the next show', b: '30 minutes after the start time the screen moves on to the next show.', go: () => { jumpTo(sid('s2').startsAt + GRACE + MIN); } },
     { t: 'Nothing scheduled', b: R1 + 'With no shows at all: NEXT TRANSMISSION TBA and the archive link.', go: () => { S.shows = [...PAST_SHOWS()]; } },
     { t: 'Small and sideways phones', b: 'Use the device buttons: small phone and sideways. The screen scrolls when it does not fit. Reset demo starts over.', go: () => { ensureDemoShows(); S.device = 'small'; } },
@@ -557,7 +567,7 @@
     if (i === S.step + 1) { if (cur && cur.leave) cur.leave(); }
     else {
       // Any other move (BACK or a jump) replays the demo from scratch, so every step is deterministic.
-      S = { ...fresh(), device: S.device };
+      S = { ...fresh(), device: S.userDevice || S.device, userDevice: S.userDevice };
       for (let k = 0; k < i; k++) { steps[k].go(); autoTick(); if (steps[k].leave) steps[k].leave(); autoTick(); }
     }
     S.step = i;
@@ -704,7 +714,7 @@
       case 'back': return goStep(S.step - 1);
       case 'step': return goStep(+v);
       case 'more': uiMore = !uiMore; return render();
-      case 'device': return set({ device: v });
+      case 'device': return set({ device: v, userDevice: v });
       case 'reset': try { localStorage.removeItem(KEY); } catch {} S = fresh(); steps[0].go(); save(); render(); return scrollScreenTo(null);
       case 'time': S.simOffset += +v; return set({});
       case 'jumpNext': { const n = upcoming().find((x) => x.startsAt > now()); if (n) jumpTo(n.startsAt - 10 * MIN); return set({}); }

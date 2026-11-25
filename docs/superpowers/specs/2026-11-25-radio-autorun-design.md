@@ -62,8 +62,8 @@ In the SCHEDULE tab, each upcoming show has a **FILES** row: `No files on this P
   Goa Classics 1998. That show will start when this one ends.").
 - Storage line: `Using 812 MB on this PC. Storage is protected` or, if the browser refused
   persistent storage, an amber `The browser may clear these files if the disk fills up.`
-- On a phone, or on a PC with no files for that show, the row reads `Files: assign on the
-  broadcasting PC`.
+- On a phone the row reads `FILES · assign on the broadcasting PC` (no ADD FILES: phones never play shows). On a PC without the files it reads `FILES · none on this PC` with ADD FILES.
+- With files: `FILES · 4 files · 37:05 · on this PC`.
 
 ### 4.2 Arming
 A bar at the top of the console, on every tab:
@@ -71,7 +71,7 @@ A bar at the top of the console, on every tab:
   off` when relevant.
 - ARM requires a click, on purpose: browsers only let a page start audio after the person has
   clicked on it. The click is what lets AUTO-RUN start sound later with nobody there.
-- Armed: `AUTO-RUN ARMED · Psy Night Vol. 7 at 22:00 · checks OK 1 min ago` + DISARM.
+- Armed: `AUTO-RUN ARMED · Psy Night Vol. 7 at 22:00 · checks OK 1 min ago` + DISARM. After a show it adds `Last: Psy Night Vol. 7 ended 22:37, chat log saved`, so a host coming back can see it ran.
 - Only one console anywhere can be armed (a lease in the database, refreshed every minute,
   expires after 3 min). A second console shows `Armed on another console (PC-STUDIO), seen 40 s ago`.
 - **Any reload or restart disarms**, and the console asks for the full sign-in again (it does not
@@ -85,7 +85,7 @@ A bar at the top of the console, on every tab:
 | T | Loads the show's files (REPEAT forced off) and starts the deck. |
 | A file will not play | Skipped, logged in the heartbeat; the show continues. |
 | Last file ends | Waits **30 s** (deep-buffer listeners are 8-20 s behind), then ends the broadcast using "only if this is still my broadcast". |
-| Safety net | A hard END at start + total length + 2 min, whatever the deck reports. |
+| Safety net | A hard END at start + total length + **time spent paused** + 2 min, whatever the deck reports. |
 | Next show | At least **15 s** after the previous END, so the restreamer sees a real END (and sweeps storage) rather than a reconnect. If the previous show overran, the next one starts as soon as that gap has passed (E4). |
 | Connection lost mid-show | AUTO-RUN sends the same reconnect the browser's `online` handler sends. It never rebuilds the mixer or restarts the track. |
 ### 4.4 When a start fails
@@ -98,7 +98,7 @@ in a silent live room. Each failure shows on the bar with its reason and in the 
 In `/radio` with host mode on (the existing padlock sign-in), one line at the top of the screen. Off air there is no chat header, so the standby screen gets the same small padlock (listeners can see it, as they already see it in the room; only the host can sign in through it). The line:
 `AUTO-RUN · armed on PC-STUDIO · next Psy Night Vol. 7 22:00 · seen 1 min ago`, amber when the
 heartbeat is over 3 min old (`last seen 2 h ago`, the PC is probably off or asleep), red on
-START FAILED or MISSED. Read-only; arming happens only at the PC.
+START FAILED or MISSED (the missed show is named, for 24 h), grey when AUTO-RUN is off. Read-only; arming happens only at the PC.
 
 ## 5. Guest experience
 | Time | Guest sees |
@@ -106,7 +106,7 @@ START FAILED or MISSED. Read-only; arming happens only at the PC.
 | before T - 45 s | Countdown (Release 1). |
 | T - 45 s | Station goes live, the page moves to the entry screen; audio starts at T. |
 | T to T + 10 min, not live | STANDING BY / STARTING SOON. |
-| T + 10 to T + 30 min, not live | **DELAYED** ("The signal is late. Keep this page open."). |
+| T + 10 to T + 30 min, not live | **DELAYED** ("The signal is late."; the screen already says "Keep this page open" below). |
 | after T + 30 min | Countdown to the next show, or TBA. |
 | In the room | Neon shows track names (or the show title, per show). |
 

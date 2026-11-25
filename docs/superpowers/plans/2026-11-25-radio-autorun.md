@@ -76,7 +76,7 @@
 
 ## Task 8: standby DELAYED
 
-- [ ] **8.1 Failing tests:** STARTING SOON from T to T+10 min, DELAYED from T+10 to T+30 min, then the next show; copy "The signal is late. Keep this page open."
+- [ ] **8.1 Failing tests:** STARTING SOON from T to T+10 min, DELAYED from T+10 to T+30 min, then the next show; copy "The signal is late." (the screen's own "Keep this page open" line stays below)
 - [ ] **8.2** Implement in `scheduleRules.standbyState`. **8.3** Commit.
 
 ## Task 9: verification, design, docs
