@@ -83,7 +83,7 @@
 
 ## Task 4: `SchedulePanel`
 
-- [ ] **4.1 Failing tests** in `src/radio/admin/SchedulePanel.test.tsx`:
+- [x] **4.1 Failing tests** in `src/radio/admin/SchedulePanel.test.tsx`:
   - Renders upcoming rows soonest first with Israel and UTC times; PAST folded with a count.
   - ADD disabled until the title and time are valid; preview text appears; overlap and past warnings appear and do not disable ADD; ADD disabled while saving.
   - EDIT opens one row inline; opening another closes the first; SAVE calls update; CANCEL restores.
@@ -91,8 +91,9 @@
   - Zero-row error and insert error render in a `role="alert"` box.
   - Every button is at least 44 px (class check, as elsewhere in the radio tests).
   - No em dash in rendered copy.
-- [ ] **4.2** Implement. Match the journeys' layout and copy exactly.
-- [ ] **4.3** Commit: `feat(radio): SCHEDULE panel`.
+- [x] **4.2** Implement. Match the journeys' layout and copy exactly.
+- [x] **4.3** Commit: `feat(radio): SCHEDULE panel`.
+  - Added on the way: `formatRelative`, `wallTimeToMs`, `msToWallTime` in `scheduleRules.ts` (typed times read against an explicit device zone, so results never depend on where the code runs), and a test that the edit field keeps the cursor while typing (it did not at first: rows were a component declared inside the panel).
 
 ## Task 5: `AdminConsole` wiring + error boundary
 

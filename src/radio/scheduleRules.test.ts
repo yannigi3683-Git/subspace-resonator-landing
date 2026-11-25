@@ -6,6 +6,9 @@ import {
   validateShow,
   formatShowTime,
   hostTimePreview,
+  formatRelative,
+  wallTimeToMs,
+  msToWallTime,
   type Show,
 } from './scheduleRules';
 
@@ -163,5 +166,41 @@ describe('hostTimePreview', () => {
     expect(() => hostTimePreview(T, 'Mars/Base')).not.toThrow();
     expect(hostTimePreview(T, 'Mars/Base').lines[0]).not.toMatch(/UTC UTC/);
     expect(hostTimePreview(Number.NaN, 'Asia/Jerusalem').lines).toEqual([]);
+  });
+});
+
+describe('formatRelative', () => {
+  it('counts down in the most useful unit', () => {
+    expect(formatRelative(T + 12 * MIN, T)).toBe('in 12 min');
+    expect(formatRelative(T + 3 * HOUR + 20 * MIN, T)).toBe('in 3h 20m');
+    expect(formatRelative(T + 5 * DAY + 3 * HOUR, T)).toBe('in 5d 3h');
+    expect(formatRelative(T + 12 * DAY, T)).toBe('in 12 days');
+  });
+  it('says how long ago a show started', () => {
+    expect(formatRelative(T, T + 7 * MIN)).toBe('started 7 min ago');
+    expect(formatRelative(T, T + 2 * HOUR)).toBe('started 2 h ago');
+  });
+  it('never throws on nonsense', () => {
+    expect(formatRelative(Number.NaN, T)).toBe('');
+  });
+});
+
+describe('wallTimeToMs / msToWallTime', () => {
+  it('reads a typed local time in the given zone', () => {
+    expect(wallTimeToMs('2026-11-29T22:00', 'Asia/Jerusalem')).toBe(T);
+    expect(wallTimeToMs('2026-11-29T15:00', 'America/New_York')).toBe(T);
+  });
+  it('handles Israel summer time', () => {
+    expect(wallTimeToMs('2027-06-01T22:00', 'Asia/Jerusalem')).toBe(Date.UTC(2027, 5, 1, 19, 0));
+  });
+  it('round-trips for the edit form', () => {
+    expect(msToWallTime(T, 'Asia/Jerusalem')).toBe('2026-11-29T22:00');
+    expect(msToWallTime(wallTimeToMs('2027-06-01T22:00', 'Asia/Jerusalem'), 'Asia/Jerusalem')).toBe('2027-06-01T22:00');
+  });
+  it('never throws: empty or broken input gives NaN or an empty string', () => {
+    expect(wallTimeToMs('', 'Asia/Jerusalem')).toBeNaN();
+    expect(wallTimeToMs('nope', 'Asia/Jerusalem')).toBeNaN();
+    expect(Number.isFinite(wallTimeToMs('2026-11-29T22:00', 'Mars/Base'))).toBe(true);
+    expect(msToWallTime(Number.NaN, 'Asia/Jerusalem')).toBe('');
   });
 });

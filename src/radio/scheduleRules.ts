@@ -135,3 +135,55 @@ export function hostTimePreview(ms: number, deviceZone: string): HostPreview {
   const utc = `${safeFormat(ms, 'UTC', 'en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23' })} UTC`;
   return { lines, utc, abroad };
 }
+
+export function formatRelative(targetMs: number, nowMs: number): string {
+  if (!Number.isFinite(targetMs) || !Number.isFinite(nowMs)) return '';
+  const diff = targetMs - nowMs;
+  if (diff <= 0) {
+    const ago = Math.round(-diff / MIN);
+    return ago < 60 ? `started ${ago} min ago` : `started ${Math.round(ago / 60)} h ago`;
+  }
+  const d = Math.floor(diff / (24 * HOUR));
+  const h = Math.floor((diff % (24 * HOUR)) / HOUR);
+  const m = Math.round((diff % HOUR) / MIN);
+  if (d >= 10) return `in ${d} days`;
+  if (d) return `in ${d}d ${h}h`;
+  if (h) return `in ${h}h ${m}m`;
+  return `in ${m} min`;
+}
+
+function zoneOffsetMs(ms: number, zone: string): number {
+  const parts = Object.fromEntries(
+    new Intl.DateTimeFormat('en-US', {
+      timeZone: zone, hourCycle: 'h23', year: 'numeric', month: '2-digit', day: '2-digit',
+      hour: '2-digit', minute: '2-digit', second: '2-digit',
+    }).formatToParts(new Date(ms)).map((p) => [p.type, p.value]),
+  );
+  return Date.UTC(+parts.year, +parts.month - 1, +parts.day, +parts.hour, +parts.minute, +parts.second) - ms;
+}
+
+function safeZone(zone: string): string {
+  try {
+    new Intl.DateTimeFormat('en-US', { timeZone: zone });
+    return zone;
+  } catch {
+    return 'UTC';
+  }
+}
+
+// A <input type="datetime-local"> value is a wall-clock time with no zone. Reading it against an
+// explicit zone (the device's own) keeps the result independent of where the code happens to run.
+export function wallTimeToMs(local: string, zone: string): number {
+  const m = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(local ?? '');
+  if (!m) return Number.NaN;
+  const z = safeZone(zone);
+  const guess = Date.UTC(+m[1], +m[2] - 1, +m[3], +m[4], +m[5]);
+  const first = guess - zoneOffsetMs(guess, z);
+  return guess - zoneOffsetMs(first, z);
+}
+
+export function msToWallTime(ms: number, zone: string): string {
+  if (!Number.isFinite(ms)) return '';
+  const local = new Date(ms + zoneOffsetMs(ms, safeZone(zone)));
+  return `${local.getUTCFullYear()}-${p2(local.getUTCMonth() + 1)}-${p2(local.getUTCDate())}T${p2(local.getUTCHours())}:${p2(local.getUTCMinutes())}`;
+}
