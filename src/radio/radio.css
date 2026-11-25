@@ -181,7 +181,12 @@
 }
 
 /* ── Reduced motion ─────────────────────────────────────────── */
+/* Standby: the STARTING SOON dot. Off under reduced motion below. */
+@keyframes radio-soon-pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+.radio-soon-pulse { animation: radio-soon-pulse 1.6s ease-in-out infinite; }
+
 @media (prefers-reduced-motion: reduce) {
+  .radio-soon-pulse,
   .radio-dance,
   .radio-bob,
   .radio-roam,

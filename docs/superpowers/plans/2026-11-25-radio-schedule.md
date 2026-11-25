@@ -128,7 +128,7 @@
 
 ## Task 7: `StandbyScreen`
 
-- [ ] **7.1 Failing tests** (fake timers, mocked RPC, injected server clock):
+- [x] **7.1 Failing tests** (fake timers, mocked RPC, injected server clock):
   - Countdown renders with days; ticks; switches to STARTING SOON at zero with `STANDING BY`; moves on after 30 min.
   - LATER shows at most 2.
   - TBA only when the read succeeded with no shows; a failed read renders no card.
@@ -136,9 +136,9 @@
   - Uses the server clock, not `Date.now()` (clock offset test).
   - Ticking digits carry no `aria-live`; the state line does.
   - Copy: "Keep this page open. It switches over by itself when the signal goes live."; no em dash.
-- [ ] **7.2** Implement to the journeys' layout (nebula backdrop, `min-h-[100dvh]`, short-screen variant, contrast values from the design review).
-- [ ] **7.3** Add any pulse class to the `prefers-reduced-motion` list in `radio.css`.
-- [ ] **7.4** Commit: `feat(radio): standby countdown rewrite`.
+- [x] **7.2** Implement to the journeys' layout (nebula backdrop, `min-h-[100dvh]`, short-screen variant, contrast values from the design review).
+- [x] **7.3** Add any pulse class to the `prefers-reduced-motion` list in `radio.css`.
+- [x] **7.4** Commit: `feat(radio): standby countdown rewrite`.
 
 ## Task 8: standby before the gate (D1)
 
