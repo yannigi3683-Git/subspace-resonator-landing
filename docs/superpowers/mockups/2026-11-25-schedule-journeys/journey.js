@@ -32,7 +32,7 @@
       // host UI
       tab: 'broadcast', draft: { title: '', start: '' }, editId: null, editDraft: null, confirmId: null,
       alert: '', pastOpen: false, saving: false,
-      titleField: '', lastPrefill: null, hostStatus: 'idle',
+      titleField: '', lastPrefill: null, titleEdited: false, hostStatus: 'idle',
       // guest UI
       guestInRoom: false, guestName: 'Nebula Drifter', guestAvatar: 1,
       device: JOURNEY === 'host' && window.innerWidth >= 1024 ? 'desktop' : 'phone',
@@ -102,7 +102,7 @@
   }
   function suggestion() { return S.shows.filter((s) => s.startsAt >= now() - GRACE && s.startsAt <= now() + SUGGEST_AHEAD).sort((a, b) => a.startsAt - b.startsAt)[0] || null; }
   function applyPrefill() {
-    if (S.hostStatus !== 'idle' || S.station.mode === 'live') return;
+    if (S.hostStatus !== 'idle' || S.station.mode === 'live' || S.titleEdited) return;
     const sug = suggestion();
     if (!sug) return;
     if (S.titleField === '' || S.titleField === S.lastPrefill) {
@@ -387,10 +387,10 @@
     { t: 'Edit a show', f: '[data-a="saveEdit"]', b: 'The pencil opens the show in place. Change the time to 22:30 and press SAVE. Only one show is open for editing at a time.', go: () => { ensureDemoShows(); S.tab = 'schedule'; const s = s1(); S.editId = s.id; S.editDraft = { title: s.title, start: utcToLocalInput(s.startsAt, S.hostZone) }; } , leave: () => { S.editId = null; } },
     { t: 'Delete takes two taps', f: '[data-a="delYes"]', b: 'The bin asks first. DELETE removes the show, KEEP backs out. Try it on the last show.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.editId = null; S.confirmId = upcoming().slice(-1)[0]?.id || null; }, leave: () => { S.confirmId = null; } },
     { t: 'If a change fails', f: '[data-a="edit"]', b: 'Here the server refuses every change, as it would if your host sign-in had expired. Try editing or deleting: you get a red message, never a fake success.', go: () => { ensureDemoShows(); S.tab = 'schedule'; S.failWrites = true; S.alert = ''; }, leave: () => { S.failWrites = false; S.alert = ''; } },
-    { t: 'Show day: the title is already filled', b: 'It is 50 minutes before Psy Night Vol. 7. Open BROADCAST: the title is filled in from the schedule, with a "From schedule" hint. Type over it and it stays yours.', go: () => { ensureDemoShows(); S.tab = 'broadcast'; S.titleField = ''; S.lastPrefill = null; jumpTo(s1().startsAt - 50 * MIN); } },
+    { t: 'Show day: the title is already filled', b: 'It is 50 minutes before Psy Night Vol. 7. On BROADCAST, the title is already filled in from the schedule, with a "From schedule" hint. Type over it, or clear it to show LIVE DJ, and it stays the way you left it.', go: () => { ensureDemoShows(); S.tab = 'broadcast'; S.titleField = ''; S.lastPrefill = null; S.titleEdited = false; jumpTo(s1().startsAt - 50 * MIN); } },
     { t: 'GO LIVE', b: 'Press GO LIVE. On guests\' screens the neon line under the DJ shows this title most of the time, and the track name peeks in for 15 seconds each minute. Open the listener journey in another tab to watch.', go: () => { S.tab = 'broadcast'; }, leave: () => { if (S.hostStatus !== 'live') goLive(); } },
     { t: 'Edit the schedule while ON AIR', b: 'The SCHEDULE tab works mid-show, adding included. The broadcast keeps running underneath; switching tabs never touches it.', go: () => { if (S.hostStatus !== 'live') goLive(); S.tab = 'schedule'; } },
-    { t: 'END BROADCAST', b: 'Press END BROADCAST. If another show starts within 6 hours, its title is filled in for you next time. Here the next show is a week away, so the field keeps the old title until that day.', go: () => { S.tab = 'broadcast'; }, leave: () => { if (S.hostStatus === 'live') endShow(); } },
+    { t: 'END BROADCAST', b: 'Press END BROADCAST. Psy Night Vol. 7 stays suggested until 30 minutes after its start time. After that, the next show takes over the title field on its own day (within 6 hours of its start).', go: () => { S.tab = 'broadcast'; }, leave: () => { if (S.hostStatus === 'live') endShow(); } },
     { t: 'Running late', f: '[data-soon]', b: 'It is 7 minutes past the start of Goa Classics 1998 and you are not live. The row turns amber: guests see STARTING SOON for 30 minutes, then the countdown moves on to the next show.', go: () => { ensureDemoShows(); if (S.hostStatus === 'live') endShow(); S.tab = 'schedule'; jumpTo(S.shows.find((s) => s.id === 's2').startsAt + 7 * MIN); } },
     { t: 'Done', b: 'That is the whole host side. Open the listener journey to see the same shows from a guest\'s phone. Reset demo starts over.', go: () => {} },
   ];
@@ -409,15 +409,21 @@
   steps = JOURNEY === 'host' ? HOST_STEPS : LISTENER_STEPS;
 
   function goStep(i) {
+    i = Math.max(0, Math.min(steps.length - 1, i));
     const cur = steps[S.step];
-    if (i > S.step && cur && cur.leave) cur.leave();
-    S.step = Math.max(0, Math.min(steps.length - 1, i));
+    if (i === S.step + 1) { if (cur && cur.leave) cur.leave(); }
+    else {
+      // Any other move (BACK or a jump) replays the demo from scratch, so every step is deterministic.
+      S = { ...fresh(), device: S.device };
+      for (let k = 0; k < i; k++) { steps[k].go(); if (steps[k].leave) steps[k].leave(); }
+    }
+    S.step = i;
     steps[S.step].go();
     save(); render();
     scrollScreenTo(steps[S.step].f);
   }
-  function goLive() { S.hostStatus = 'live'; S.station = { mode: 'live', title: S.titleField.trim() || 'Subspace Radio Live', startedAt: now() }; }
-  function endShow() { S.hostStatus = 'idle'; S.station = { mode: 'off', title: S.station.title, startedAt: null }; }
+  function goLive() { applyPrefill(); S.hostStatus = 'live'; S.station = { mode: 'live', title: S.titleField.trim() || 'Subspace Radio Live', startedAt: now() }; }
+  function endShow() { S.titleEdited = false; S.hostStatus = 'idle'; S.station = { mode: 'off', title: S.station.title, startedAt: null }; }
 
   /* ═════════════ RENDER ═════════════ */
   const DEVICES = { phone: [390, 844, 'PHONE'], small: [320, 568, 'SMALL'], sideways: [844, 390, 'SIDEWAYS'], desktop: [1280, 800, 'DESKTOP'] };
@@ -527,14 +533,14 @@
       <p class="font-mono text-xs leading-relaxed mt-1 ${uiMore ? '' : 'line-clamp-2'}">${st.b}</p>${nav('mt-2')}`;
     const dev = document.getElementById('devices');
     if (dev) dev.innerHTML = Object.entries(DEVICES).map(([k, [, , label]]) => `<button data-a="device" data-v="${k}" class="font-mono text-[11px] tracking-widest px-1 lg:px-3 min-h-[44px] border ${S.device === k ? 'border-primary text-white bg-primary/20' : 'border-border text-muted-foreground hover:text-white'}">${label}</button>`).join('');
-    const info = document.getElementById('devInfo'); if (info) info.textContent = !wide() && S.device === 'phone' ? 'Fitted to your screen' : DEVICES[S.device].slice(0, 2).join(' x ');
+    const info = document.getElementById('devInfo'); if (info) info.textContent = !wide() && (S.device === 'phone' || S.device === 'small') ? 'Fitted to your screen height' : DEVICES[S.device].slice(0, 2).join(' x ') + (!wide() && DEVICES[S.device][0] > 600 ? ' · shrunk to fit, best viewed on a computer' : '');
   }
   function clockText() { return `${fmt(now(), JOURNEY === 'host' ? S.hostZone : S.guestZone, { weekday: 'short', day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23', timeZoneName: 'short' })}`; }
   function fit() {
     const fr = document.getElementById('frame'), box = document.getElementById('frameBox'), wrap = document.getElementById('frameWrap'); if (!fr) return;
     const [w, dh] = DEVICES[S.device]; const z = Math.min(1, wrap.clientWidth / w);
     let h = dh;
-    if (!wide() && S.device === 'phone') {
+    if (!wide() && (S.device === 'phone' || S.device === 'small')) {
       const bar = document.getElementById('bar'); const top = box.getBoundingClientRect().top + window.scrollY;
       h = Math.max(420, Math.min(dh, Math.floor(window.innerHeight - top - (bar ? bar.offsetHeight : 180) - 8)));
     }
@@ -593,7 +599,7 @@
   function onInput(e) {
     const a = e.target.dataset && e.target.dataset.a; if (!a) return;
     const val = e.target.value;
-    if (a === 'titleField') { S.titleField = val; S.lastPrefill = null; save(); return; }
+    if (a === 'titleField') { S.titleField = val; S.lastPrefill = null; S.titleEdited = true; save(); return; }
     if (a === 'guestName') { S.guestName = val; save(); const t = fdoc.querySelector('[data-a="tunein"]'); if (t) t.disabled = val.trim().length < 2; return; }
     if (a === 'draftTitle') S.draft.title = val;
     if (a === 'draftStart') S.draft.start = val;
