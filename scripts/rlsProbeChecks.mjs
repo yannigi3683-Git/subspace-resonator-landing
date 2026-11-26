@@ -15,22 +15,34 @@ export const PAST_ISO = '2000-01-01T00:00:00.000Z';
 
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
+// supabase-js answers a refused or failed request with `data: null`, and a destructuring default
+// only replaces `undefined`, so every read goes through these. A privileged read that errors means
+// the outcome cannot be confirmed: that is a SKIP, never a PASS.
+const rows = (res) => (Array.isArray(res?.data) ? res.data : []);
+const unconfirmed = (res) => (res?.error ? { pass: null, detail: `could not confirm (${res.error.code ?? res.error.message})` } : null);
+
 export async function insertRefused({ attacker, admin, table, row, match }) {
   const attempt = await attacker.insert(table, row);
-  const { data: leaked = [] } = await admin.select(table, match);
+  const check = await admin.select(table, match);
+  if (unconfirmed(check)) return unconfirmed(check);
+  const leaked = rows(check);
   if (leaked.length) {
     await admin.remove(table, match);
     return { pass: false, detail: `insert went through (${leaked.length} row, removed)` };
   }
-  return { pass: true, detail: attempt.error ? `refused: ${attempt.error.code ?? attempt.error.message}` : 'no row written' };
+  return { pass: true, detail: attempt?.error ? `refused: ${attempt.error.code ?? attempt.error.message}` : 'no row written' };
 }
 
 export async function updateRefused({ attacker, admin, table, match, patch }) {
-  const { data: before = [] } = await admin.select(table, match, 1);
+  const first = await admin.select(table, match, 1);
+  if (unconfirmed(first)) return unconfirmed(first);
+  const before = rows(first);
   if (!before.length) return { pass: null, detail: 'no row to test against' };
   const original = Object.fromEntries(Object.keys(patch).map((k) => [k, before[0][k]]));
   await attacker.update(table, match, patch);
-  const { data: after = [] } = await admin.select(table, match, 1);
+  const second = await admin.select(table, match, 1);
+  if (unconfirmed(second)) return unconfirmed(second);
+  const after = rows(second);
   const now = Object.fromEntries(Object.keys(patch).map((k) => [k, after[0]?.[k]]));
   if (!same(now, original)) {
     await admin.update(table, match, original);
@@ -40,11 +52,14 @@ export async function updateRefused({ attacker, admin, table, match, patch }) {
 }
 
 export async function deleteRefused({ attacker, admin, table, match, restoreRow }) {
-  const { data: before = [] } = await admin.select(table, match, 1);
+  const first = await admin.select(table, match, 1);
+  if (unconfirmed(first)) return unconfirmed(first);
+  const before = rows(first);
   if (!before.length) return { pass: null, detail: 'no row to test against' };
   await attacker.remove(table, match);
-  const { data: after = [] } = await admin.select(table, match, 1);
-  if (!after.length) {
+  const second = await admin.select(table, match, 1);
+  if (unconfirmed(second)) return unconfirmed(second);
+  if (!rows(second).length) {
     await admin.insert(table, restoreRow ?? before[0]);
     return { pass: false, detail: 'delete went through (row put back)' };
   }
@@ -52,10 +67,13 @@ export async function deleteRefused({ attacker, admin, table, match, restoreRow 
 }
 
 export async function selectHidden({ attacker, admin, table }) {
-  const { data: exists = [] } = await admin.select(table, {}, 1);
-  if (!exists.length) return { pass: null, detail: 'table is empty, nothing to leak' };
-  const { data: seen = [] } = await attacker.select(table, {}, 1);
-  return seen.length ? { pass: false, detail: `${seen.length} row visible` } : { pass: true, detail: 'no rows visible' };
+  const check = await admin.select(table, {}, 1);
+  if (unconfirmed(check)) return unconfirmed(check);
+  if (!rows(check).length) return { pass: null, detail: 'table is empty, nothing to leak' };
+  const attempt = await attacker.select(table, {}, 1);
+  const seen = rows(attempt);
+  if (seen.length) return { pass: false, detail: `${seen.length} row visible` };
+  return { pass: true, detail: attempt?.error ? `refused: ${attempt.error.code ?? attempt.error.message}` : 'no rows visible' };
 }
 
 // pass: true = PASS, false = FAIL, null = SKIP (could not be tested, never counted as a pass).

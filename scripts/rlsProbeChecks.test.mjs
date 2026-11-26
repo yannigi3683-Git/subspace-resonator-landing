@@ -91,6 +91,33 @@ describe('selectHidden', () => {
   });
 });
 
+// What supabase-js really returns when the database refuses: `data: null` plus an error.
+// The first live run crashed on exactly this (2026-11-26), because `= []` does not replace null.
+const refused = { data: null, error: { code: '42501', message: 'permission denied' } };
+const deny = (db) => ({ ...db, select: async () => refused, update: async () => refused, remove: async () => refused });
+const brokenAdmin = (db) => ({ ...db, select: async () => ({ data: null, error: { code: 'PGRST000', message: 'down' } }) });
+
+describe('a refusal that comes back as data: null', () => {
+  it('selectHidden passes and names the refusal', async () => {
+    const s = makeStore({ admin_audit: [{ action: 'x' }] });
+    const r = await selectHidden({ attacker: deny(s.locked), admin: s.admin, table: 'admin_audit' });
+    expect(r).toEqual({ pass: true, detail: 'refused: 42501' });
+  });
+  it('update and delete checks pass when the attacker gets data: null', async () => {
+    const s = makeStore({ station: [{ id: true, live_title: 'a' }] });
+    expect((await updateRefused({ attacker: deny(s.locked), admin: s.admin, table: 'station', match: { id: true }, patch: { live_title: 'b' } })).pass).toBe(true);
+    expect((await deleteRefused({ attacker: deny(s.locked), admin: s.admin, table: 'station', match: { id: true } })).pass).toBe(true);
+  });
+  it('a failed privileged read is a SKIP, never a PASS, in every check', async () => {
+    const s = makeStore({ bans: [], station: [{ id: true, live_title: 'a' }], admin_audit: [{ action: 'x' }] });
+    const admin = brokenAdmin(s.admin);
+    expect((await insertRefused({ attacker: s.locked, admin, table: 'bans', row: { uid: 'u1' }, match: { uid: 'u1' } })).pass).toBeNull();
+    expect((await updateRefused({ attacker: s.locked, admin, table: 'station', match: { id: true }, patch: { live_title: 'b' } })).pass).toBeNull();
+    expect((await deleteRefused({ attacker: s.locked, admin, table: 'station', match: { id: true } })).pass).toBeNull();
+    expect((await selectHidden({ attacker: s.locked, admin, table: 'admin_audit' })).pass).toBeNull();
+  });
+});
+
 describe('summarize', () => {
   it('reports ALL PASS only when every check ran and passed', () => {
     expect(summarize([{ pass: true }, { pass: true }])).toEqual({ ok: true, line: 'ALL 2 PROBES PASS' });
