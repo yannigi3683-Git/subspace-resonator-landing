@@ -65,3 +65,51 @@ test('one failed upload does not abort the scan (playlist still gets pushed)', a
 
   assert.ok(puts.some((k) => k.endsWith('stream.m3u8')), 'playlist must still upload after a segment fails');
 });
+
+// streamUrl is published when sink.live resolves. It used to go out as soon as ffmpeg opened its
+// first .ts, ~4-6s before any playlist existed in R2, and hls.js never retries a 404 manifest.
+const fakeSink = (files, bodies) => startR2Sink({
+  outDir: '/fake',
+  r2: { bucket: 'b' },
+  publicBaseUrl: 'https://cdn',
+  prefix: 'sess',
+  _s3: { async send() {} },
+  _readdir: async () => files(),
+  _stat: async (p) => ({ size: (bodies[p.split(/[\\/]/).pop()] ?? 'x').length }),
+  _readFile: async (p) => Buffer.from(bodies[p.split(/[\\/]/).pop()] ?? 'x'),
+  _setTimeout: (fn) => setTimeout(fn, 2),
+});
+const settled = (p, ms = 40) => Promise.race([p.then(() => true), sleep(ms).then(() => false)]);
+
+test('listsUploadedSegment only counts segment lines this run uploaded', async () => {
+  const { listsUploadedSegment } = await import('./r2.mjs');
+  const pl = '#EXTM3U\n#EXT-X-TARGETDURATION:4\n#EXTINF:4.0,\nstream7.ts\r\n';
+  assert.equal(listsUploadedSegment(pl, new Map([['stream7.ts', 10]])), true);
+  assert.equal(listsUploadedSegment(pl, new Map([['stream6.ts', 10]])), false);
+  assert.equal(listsUploadedSegment('#EXTM3U\n', new Map([['stream7.ts', 10]])), false);
+});
+
+test('not live while ffmpeg has only started a segment and no playlist exists', async () => {
+  const sink = await fakeSink(() => ['stream0.ts'], {});
+  assert.equal(await settled(sink.live), false);
+  sink.stop();
+});
+
+test('live once a playlist listing an uploaded segment has been uploaded', async () => {
+  const sink = await fakeSink(() => ['stream0.ts', 'stream.m3u8'], { 'stream.m3u8': '#EXTM3U\n#EXTINF:4.0,\nstream0.ts\n' });
+  assert.equal(await settled(sink.live, 200), true);
+  sink.stop();
+});
+
+test('a playlist seeded from R2 on a mid-show restart does not count as live', async () => {
+  // Seeded playlist lists stream210.ts, which lives in R2, not in this run's work dir.
+  let files = ['stream.m3u8'];
+  const bodies = { 'stream.m3u8': '#EXTM3U\n#EXTINF:4.0,\nstream210.ts\n' };
+  const sink = await fakeSink(() => files, bodies);
+  assert.equal(await settled(sink.live), false);
+  // ffmpeg closes its first new segment and appends it to the playlist.
+  files = ['stream211.ts', 'stream.m3u8'];
+  bodies['stream.m3u8'] += '#EXT-X-DISCONTINUITY\n#EXTINF:4.0,\nstream211.ts\n';
+  assert.equal(await settled(sink.live, 200), true);
+  sink.stop();
+});

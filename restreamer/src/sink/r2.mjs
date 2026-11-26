@@ -14,6 +14,13 @@ const TYPES = {
 
 // DI hooks (_s3/_readdir/_stat/_readFile/_setTimeout) exist so the scan loop can be tested offline
 // with a fake S3 client — no bucket, no network. Production passes none of them.
+export function listsUploadedSegment(playlist, uploaded) {
+  return playlist.split(/\r?\n/).some((line) => {
+    const name = line.trim();
+    return name && !name.startsWith('#') && uploaded.has(name);
+  });
+}
+
 export async function startR2Sink({
   outDir, r2, publicBaseUrl, prefix, log = () => {},
   _s3, _readdir = fsReaddir, _stat = fsStat, _readFile = fsReadFile, _setTimeout = setTimeout,
@@ -41,6 +48,13 @@ export async function startR2Sink({
   }
 
   const seen = new Map(); // filename -> size; segments are write-once so size change => re-upload
+  // Resolves on the first playlist upload that lists a segment THIS run uploaded. Publishing
+  // streamUrl before that (it used to go out when ffmpeg opened its first .ts) gave listeners
+  // already in the room a 404 on the manifest for ~4-6s, and hls.js never retries a 4xx manifest.
+  // A playlist seeded from R2 on a mid-show restart lists only older segments, so it does not count:
+  // otherwise a restart whose pull never connects would publish a playlist that never advances.
+  let markLive;
+  const live = new Promise((resolve) => { markLive = resolve; });
   async function put(name, isPlaylist) {
     const body = await _readFile(join(outDir, name));
     const params = {
@@ -51,6 +65,7 @@ export async function startR2Sink({
       CacheControl: isPlaylist ? 'max-age=1' : 'public, max-age=31536000, immutable',
     };
     await s3.send(PutObjectCommand ? new PutObjectCommand(params) : { input: params });
+    if (isPlaylist && listsUploadedSegment(String(body), seen)) markLive();
   }
 
   async function scan() {
@@ -90,6 +105,7 @@ export async function startR2Sink({
 
   return {
     publicUrl: `${publicBaseUrl}/${prefix}/stream.m3u8`,
+    live,
     stop() { stopped = true; if (timer) clearTimeout(timer); },
   };
 }
