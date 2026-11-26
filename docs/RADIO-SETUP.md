@@ -56,5 +56,11 @@ MFA on: GitHub, Vercel, Supabase, Cloudflare, Google. Unique passwords in a pass
 
 ## 6. Verify (I do this with you)
 
-After steps 1-4: run `node scripts/rls-probe.mjs` in the project folder.
-Every line must say PASS. Then the build continues to M3 (live stream round-trip).
+After steps 1-4: run `node scripts/rls-probe.mjs` in the project folder, **off air** (it refuses
+to run while the station is live, because it creates and removes test rows). It needs
+`SUPABASE_SECRET_KEY` in `.env`: every check confirms its result with that key. Every line must
+say PASS and the last line must read `ALL n PROBES PASS`. `SKIP` or `INCOMPLETE` is not a pass.
+
+To prove the probe can see a hole, run `node scripts/rls-probe.mjs --selftest`: it makes the same
+writes with the service key, which bypasses RLS, so every check must FAIL and the last line must
+read `SELFTEST OK`. Then the build continues to M3 (live stream round-trip).
