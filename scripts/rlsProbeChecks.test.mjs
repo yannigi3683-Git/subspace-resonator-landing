@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { insertRefused, updateRefused, deleteRefused, selectHidden, summarize } from './rlsProbeChecks.mjs';
+import { insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, summarize } from './rlsProbeChecks.mjs';
 
 // In-memory stand-in for a Supabase client. A "locked" client behaves like RLS refusing it:
 // inserts error, updates and deletes silently touch zero rows, selects return nothing.
@@ -115,6 +115,20 @@ describe('a refusal that comes back as data: null', () => {
     expect((await updateRefused({ attacker: s.locked, admin, table: 'station', match: { id: true }, patch: { live_title: 'b' } })).pass).toBeNull();
     expect((await deleteRefused({ attacker: s.locked, admin, table: 'station', match: { id: true } })).pass).toBeNull();
     expect((await selectHidden({ attacker: s.locked, admin, table: 'admin_audit' })).pass).toBeNull();
+  });
+});
+
+describe('rpcAnswers', () => {
+  it('passes when the function answers, including an empty schedule', () => {
+    expect(rpcAnswers({ data: '2026-11-26T10:00:00Z', error: null }).pass).toBe(true);
+    expect(rpcAnswers({ data: [], error: null }, { list: true }).pass).toBe(true);
+  });
+  it('fails when the call is refused, so a missing execute grant cannot hide', () => {
+    expect(rpcAnswers({ data: null, error: { code: '42501', message: 'permission denied' } }, { list: true }))
+      .toEqual({ pass: false, detail: 'refused: 42501' });
+  });
+  it('fails when a list call answers with something that is not a list', () => {
+    expect(rpcAnswers({ data: null, error: null }, { list: true }).pass).toBe(false);
   });
 });
 

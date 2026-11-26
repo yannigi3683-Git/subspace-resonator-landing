@@ -14,6 +14,9 @@ import { makeSupabase } from './supabaseClient';
 
 
 const supabaseClient = makeSupabase();
+// How long an off-air visitor waits for the station row before seeing the entry screen anyway,
+// which is today's behaviour, so a slow or failed read never leaves anyone stuck on LOADING.
+const STATION_WAIT_MS = 3000;
 
 function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
   const [view, setView] = useState<'loading' | 'gate' | 'room' | 'banned' | 'kicked'>('loading');
@@ -21,6 +24,12 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
   const [uid, setUid] = useState<string | null>(null);
   const station = useStation(supabase);
   const getServerTime = useServerClock(supabase);
+  const [stationTimedOut, setStationTimedOut] = useState(false);
+  useEffect(() => {
+    if (station) return;
+    const t = setTimeout(() => setStationTimedOut(true), STATION_WAIT_MS);
+    return () => clearTimeout(t);
+  }, [station]);
 
   // The broadcast's identity, and the ONLY value allowed to drive re-entry. Keyed on startedAt,
   // NOT cfSessionId: a host network drop re-publishes and mints a new cfSessionId mid-show, which
@@ -98,6 +107,21 @@ function ListenerApp({ supabase }: { supabase: SupabaseClient }) {
             You were removed by the host.
           </p>
         </section>
+      </main>
+    );
+  }
+
+  // Off air, a visitor without a room session sees the countdown instead of the name/avatar gate.
+  // Nothing here signs anyone in: the gate (and its anonymous sign-in) only appears once the
+  // station is live, which is when today's re-entry rule sends everyone through it anyway.
+  if (view === 'gate' && station?.mode === 'off') {
+    return <StandbyScreen supabase={supabase} getServerTime={getServerTime} />;
+  }
+
+  if (view === 'gate' && !station && !stationTimedOut) {
+    return (
+      <main className="min-h-screen bg-background text-foreground flex items-center justify-center">
+        <p className="font-mono text-xs tracking-widest">LOADING...</p>
       </main>
     );
   }

@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { PROBE_TAG, PAST_ISO, insertRefused, updateRefused, deleteRefused, selectHidden, summarize } from './rlsProbeChecks.mjs';
+import { PROBE_TAG, PAST_ISO, insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, summarize } from './rlsProbeChecks.mjs';
 
 const env = Object.fromEntries(
   readFileSync('.env', 'utf8')
@@ -42,6 +42,7 @@ const wrap = (client) => ({
   update: (t, match, patch) => client.from(t).update(patch).match(match).select(),
   remove: (t, match) => client.from(t).delete().match(match).select(),
   select: (t, match, limit = 1000) => client.from(t).select('*').match(match).limit(limit),
+  rpc: (fn, args) => client.rpc(fn, args),
 });
 const adminClient = createClient(URL_, SECRET, opts);
 const admin = wrap(adminClient);
@@ -123,9 +124,14 @@ try {
   }
 
   if (!selftest) {
-    const { data, error } = await createClient(URL_, KEY, opts).rpc('get_server_time');
-    const r = { pass: !error && !!data, detail: error ? error.message : 'answered' };
-    record('no session', 'can read the server clock', r);
+    record('no session', 'can read the server clock',
+      rpcAnswers(await createClient(URL_, KEY, opts).rpc('get_server_time')));
+    // The off-air countdown reads through this before any sign-in, so a missing execute grant
+    // would leave every guest on a blank standby screen. grants.test.ts cannot see .rpc() grants.
+    for (const [who, attacker] of attackers) {
+      record(who, 'can read the upcoming schedule',
+        rpcAnswers(await attacker.rpc('upcoming_shows', { _limit: 3 }), { list: true }));
+    }
   }
 } finally {
   await admin.remove('scheduled_shows', { id: fixtureId });

@@ -102,7 +102,7 @@ This is your first end-to-end test. You will be in two browser tabs at the same 
 
 > **Important:** The code changes every 30 seconds. If the countdown is almost at zero, wait for the next code before typing.
 
-**What you will see:** The HOST CONSOLE. It has three tabs at the top: BROADCAST, SCHEDULE, MODERATION. You are on BROADCAST.
+**What you will see:** The HOST CONSOLE. It has three tabs at the top: BROADCAST, SCHEDULE, MODERATION. You are on BROADCAST. SCHEDULE is where you announce upcoming shows (guests see a countdown to them while you are off air); see page 6 of the host guide PDF.
 
 ### Step 4 - Understand the BROADCAST tab
 

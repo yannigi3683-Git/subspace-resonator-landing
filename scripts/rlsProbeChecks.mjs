@@ -76,6 +76,13 @@ export async function selectHidden({ attacker, admin, table }) {
   return { pass: true, detail: attempt?.error ? `refused: ${attempt.error.code ?? attempt.error.message}` : 'no rows visible' };
 }
 
+// The opposite of the checks above: a call that MUST work for a visitor (an execute grant).
+export function rpcAnswers(res, { list = false } = {}) {
+  if (res?.error) return { pass: false, detail: `refused: ${res.error.code ?? res.error.message}` };
+  const ok = list ? Array.isArray(res?.data) : res?.data != null;
+  return ok ? { pass: true, detail: 'answered' } : { pass: false, detail: 'no answer' };
+}
+
 // pass: true = PASS, false = FAIL, null = SKIP (could not be tested, never counted as a pass).
 export function summarize(results, { selftest = false } = {}) {
   const tested = results.filter((r) => r.pass !== null);

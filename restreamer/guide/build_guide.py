@@ -18,7 +18,7 @@ WHITE = HexColor("#FFFFFF")
 FONT = "Helvetica"
 FONT_B = "Helvetica-Bold"
 
-TOTAL_PAGES = 5
+TOTAL_PAGES = 6
 
 def wrap(c, text, font, size, max_w):
     c.setFont(font, size)
@@ -367,6 +367,48 @@ callout(c, bx, fy - 2*mm - h1 - 5*mm, bw, "If you logged out by mistake",
         "5. Go Live again as normal. Listeners rejoin from the guest link.", min_h=26*mm)
 
 footer(c, 5)
+c.showPage()
+
+# ---------------- PAGE 6 : Scheduling shows ----------------
+header_bar(c, "Host Quick Guide  -  Scheduling Shows")
+y = PAGE_H - 32*mm
+section_header(c, 18*mm, y, "G.  The SCHEDULE Tab")
+c.setFillColor(MUTED)
+c.setFont(FONT, 8.8)
+c.drawString(18*mm, y - 7*mm,
+    "The schedule announces shows. It never starts or ends one: GO LIVE and END BROADCAST are still yours.")
+
+g_steps = [
+    ("Add a show",
+     "Host console, SCHEDULE tab. Type a title and pick the start in your own time. Before you press "
+     "ADD TO SCHEDULE, read the line below the time: it shows the start in Israel time and UTC. If your "
+     "device is not on Israel time (DJing abroad), an amber note appears: check the Israel line."),
+    ("Edit or delete",
+     "The pencil opens a show in place. The bin asks first: DELETE removes it, KEEP backs out. A red message "
+     "means the change was NOT saved, usually because your sign-in expired: reload the console (only when "
+     "off air) and sign in again."),
+    ("What guests see",
+     "Off air, anyone opening /radio sees a countdown to the next show, in their own time zone, before "
+     "picking a name. If you are not live at the start time they see STARTING SOON for 30 minutes, then the "
+     "next show. Nothing scheduled shows TBA. Your changes reach them within a minute."),
+    ("Show day",
+     "Up to 6 hours before a show, BROADCAST TITLE is already filled in from the schedule (\"From schedule\"). "
+     "Type over it or clear it and it stays as you left it. When you go live the show is marked as aired, "
+     "so guests never see a show that already happened as late."),
+]
+gh = 25*mm
+gy = y - 14*mm
+for i, (t, b) in enumerate(g_steps):
+    box(c, bx, gy - gh, bw, gh, t, b, num=i+1)
+    gy = gy - gh - 5*mm
+
+callout(c, bx, gy - 2*mm, bw, "Testing on a preview link uses the REAL station",
+        "Vercel preview links share the live database. A show added there appears on the real /radio, and "
+        "GO LIVE there is a real broadcast that pulls every waiting guest to the entry screen. Title test "
+        "shows TEST and delete them straight after; test broadcasts only far from announced shows, titled TEST.",
+        min_h=26*mm)
+
+footer(c, 6)
 c.showPage()
 c.save()
 print("done")
