@@ -37,14 +37,18 @@ async function anonToken() {
   return data.session.access_token;
 }
 
-async function waitForSegments(dir, timeoutMs = 20000) {
+// streamUrl goes out only once listeners can actually load it: for R2, the first playlist upload
+// that lists a segment from this run (see sink/r2.mjs); for the local dev sink, a playlist on disk.
+// The budget is the old 20s for a first segment plus one segment and an upload.
+async function waitUntilPlayable(sink, dir, timeoutMs = 20000 + cfg.segmentSeconds * 1000 + 2000) {
   const start = Date.now();
+  let ready = false;
+  sink.live?.then(() => { ready = true; });
   while (Date.now() - start < timeoutMs) {
-    const files = await readdir(dir).catch(() => []);
-    if (files.some((f) => f.endsWith('.ts'))) return true;
-    await sleep(500);
+    if (sink.live ? ready : (await readdir(dir).catch(() => [])).includes('stream.m3u8')) return true;
+    await sleep(250);
   }
-  throw new Error('no HLS segments produced within timeout');
+  throw new Error('no playable HLS playlist within timeout');
 }
 
 let running = null; // { cfSessionId, stop() }
@@ -89,7 +93,7 @@ async function startFor(cfSessionId) {
   // tear down THIS attempt's resources before bubbling the error - otherwise ffmpeg keeps holding
   // the RTP port and the sink keeps uploading, unreachable because `running` is still unset.
   await bringUp(cleanupResources, async () => {
-    await waitForSegments(outDir);
+    await waitUntilPlayable(sink, outDir);
     await setStreamUrl(supabase, sink.publicUrl, cfSessionId);
   });
   log('streamUrl published:', sink.publicUrl, '(rtp packets so far', pull.rtpCount() + ')');
