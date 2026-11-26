@@ -1,6 +1,20 @@
-// RLS negative-probe: verifies the database refuses what it must refuse.
-// Usage: node scripts/rls-probe.mjs   (reads VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY from .env)
+// RLS negative-probe: verifies the database refuses what it must refuse, and can prove it.
+//
+// Usage (from the project folder, OFF AIR, with .env holding VITE_SUPABASE_URL,
+// VITE_SUPABASE_PUBLISHABLE_KEY and SUPABASE_SECRET_KEY):
+//   node scripts/rls-probe.mjs              real run: every line must say PASS
+//   node scripts/rls-probe.mjs --selftest   same writes as the service role, which bypasses RLS:
+//                                           every check must FAIL, proving the probe can see a hole
+//
+// Rebuilt 2026-11-25. The old probe sent the publishable key as a Bearer token, which Supabase
+// always rejects with 401, and counted any non-OK response as PASS, so it could never fail.
+// Now each attempt runs through supabase-js as a real attacker (no session, and an anonymous
+// listener session, which is what every listener holds), and the result is confirmed with the
+// service role. A write that got through is undone on the spot. Costs one anonymous sign-in.
 import { readFileSync } from 'node:fs';
+import { randomUUID } from 'node:crypto';
+import { createClient } from '@supabase/supabase-js';
+import { PROBE_TAG, PAST_ISO, insertRefused, updateRefused, deleteRefused, selectHidden, summarize } from './rlsProbeChecks.mjs';
 
 const env = Object.fromEntries(
   readFileSync('.env', 'utf8')
@@ -11,70 +25,113 @@ const env = Object.fromEntries(
 const URL_ = env.VITE_SUPABASE_URL;
 const KEY = env.VITE_SUPABASE_PUBLISHABLE_KEY;
 const SECRET = env.SUPABASE_SECRET_KEY;
+const selftest = process.argv.includes('--selftest');
+
 if (!URL_ || !KEY) {
   console.error('FAIL: missing VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY in .env');
   process.exit(1);
 }
+if (!SECRET) {
+  console.error('INCOMPLETE: SUPABASE_SECRET_KEY is not in .env. Every check confirms its result with it, so nothing can be tested without it.');
+  process.exit(2);
+}
 
-// New Supabase publishable key format (sb_publishable_...) is not a JWT and cannot be used
-// as a Bearer token for table access. Reject tests use it (401 = "not ok" = PASS).
-// The station read test uses the service role key to verify table + RLS are correctly configured.
-const headers = { apikey: KEY, Authorization: `Bearer ${KEY}`, 'Content-Type': 'application/json' };
-const serviceHeaders = SECRET
-  ? { apikey: SECRET, 'Content-Type': 'application/json' }
-  : null;
-let failures = 0;
+const opts = { auth: { persistSession: false, autoRefreshToken: false } };
+const wrap = (client) => ({
+  insert: (t, row) => client.from(t).insert(row),
+  update: (t, match, patch) => client.from(t).update(patch).match(match).select(),
+  remove: (t, match) => client.from(t).delete().match(match).select(),
+  select: (t, match, limit = 1000) => client.from(t).select('*').match(match).limit(limit),
+});
+const adminClient = createClient(URL_, SECRET, opts);
+const admin = wrap(adminClient);
 
-async function probe(name, expectOk, fn) {
-  try {
-    const res = await fn();
-    const pass = expectOk ? res.ok : !res.ok;
-    console.log(`${pass ? 'PASS' : 'FAIL'}  ${name}  (HTTP ${res.status})`);
-    if (!pass) failures++;
-  } catch (e) {
-    console.log(`FAIL  ${name}  (${e.message})`);
-    failures++;
+// Writes below create and remove fixture rows. During a broadcast a stray chat or ban row would
+// reach real listeners, so the probe refuses to run while the station is live.
+const { data: st, error: stErr } = await adminClient.from('station').select('mode').single();
+if (stErr) {
+  console.error(`FAIL: could not read the station row with the service key (${stErr.message})`);
+  process.exit(1);
+}
+if (st.mode === 'live') {
+  console.error('REFUSED: the station is LIVE. Run the probe off air.');
+  process.exit(2);
+}
+
+const attackers = [];
+let listenerId = null;
+if (selftest) {
+  attackers.push(['service role (selftest)', admin]);
+} else {
+  attackers.push(['no session', wrap(createClient(URL_, KEY, opts))]);
+  const listenerClient = createClient(URL_, KEY, opts);
+  const { data, error } = await listenerClient.auth.signInAnonymously();
+  if (error || !data.user) {
+    console.log(`SKIP  anonymous listener checks (sign-in failed: ${error?.message ?? 'no user'})`);
+  } else {
+    listenerId = data.user.id;
+    attackers.push(['anon listener', wrap(listenerClient)]);
   }
 }
 
-// Station read verified via service role (new publishable key is not a JWT Bearer).
-// The app uses supabase-js sessions — anon access works correctly there.
-if (serviceHeaders) {
-  await probe('station table is readable (service role)', true, () =>
-    fetch(`${URL_}/rest/v1/station?select=mode`, { headers: serviceHeaders }));
-} else {
-  console.log('SKIP  station readable check (no SUPABASE_SECRET_KEY in .env)');
+const results = [];
+const record = (who, name, r) => {
+  results.push(r);
+  const tag = r.pass === null ? 'SKIP' : r.pass ? 'PASS' : 'FAIL';
+  console.log(`${tag}  [${who}] ${name}  (${r.detail})`);
+};
+
+const fixtureId = randomUUID();
+const fixture = { id: fixtureId, title: `${PROBE_TAG} fixture, safe to delete`, starts_at: PAST_ISO };
+
+try {
+  // Dated in 2000, so it never reaches a standby screen even if a cleanup step fails.
+  const { error: fxErr } = await admin.insert('scheduled_shows', fixture);
+  if (fxErr) console.log(`SKIP  scheduled_shows fixture could not be created (${fxErr.message})`);
+
+  for (const [who, attacker] of attackers) {
+    const tagged = `${PROBE_TAG}-${randomUUID().slice(0, 8)}`;
+    const ghost = randomUUID();
+
+    record(who, 'cannot change the station row',
+      await updateRefused({ attacker, admin, table: 'station', match: { id: true }, patch: { live_title: tagged } }));
+
+    record(who, 'cannot add a scheduled show',
+      await insertRefused({ attacker, admin, table: 'scheduled_shows',
+        row: { title: tagged, starts_at: PAST_ISO }, match: { title: tagged } }));
+    if (!fxErr) {
+      record(who, 'cannot edit a scheduled show',
+        await updateRefused({ attacker, admin, table: 'scheduled_shows', match: { id: fixtureId }, patch: { title: tagged } }));
+      record(who, 'cannot delete a scheduled show',
+        await deleteRefused({ attacker, admin, table: 'scheduled_shows', match: { id: fixtureId }, restoreRow: fixture }));
+    }
+
+    record(who, 'cannot ban anyone',
+      await insertRefused({ attacker, admin, table: 'bans', row: { uid: ghost, device_id: tagged }, match: { uid: ghost } }));
+    record(who, 'cannot kick anyone',
+      await insertRefused({ attacker, admin, table: 'kicks', row: { uid: ghost, device_id: tagged }, match: { device_id: tagged } }));
+
+    // Off air, chat_allowed() refuses every post, so this proves the off-air lock, not bans or
+    // slow mode. Those need a live station and a real banned device (see CLAUDE.md, RLS section).
+    record(who, 'cannot post chat while off air',
+      await insertRefused({ attacker, admin, table: 'chat_messages',
+        row: { uid: listenerId ?? ghost, device_id: tagged, display_name: 'probe', avatar_id: 'a1', body: tagged, is_host: false },
+        match: { device_id: tagged } }));
+
+    record(who, 'cannot read the admin audit log',
+      await selectHidden({ attacker, admin, table: 'admin_audit' }));
+  }
+
+  if (!selftest) {
+    const { data, error } = await createClient(URL_, KEY, opts).rpc('get_server_time');
+    const r = { pass: !error && !!data, detail: error ? error.message : 'answered' };
+    record('no session', 'can read the server clock', r);
+  }
+} finally {
+  await admin.remove('scheduled_shows', { id: fixtureId });
+  if (listenerId) await adminClient.auth.admin.deleteUser(listenerId).catch(() => {});
 }
 
-await probe('anon CANNOT update station', false, () =>
-  fetch(`${URL_}/rest/v1/station?id=eq.true`, {
-    method: 'PATCH', headers, body: JSON.stringify({ mode: 'live' }) }));
-
-await probe('anon CANNOT insert chat (no session)', false, () =>
-  fetch(`${URL_}/rest/v1/chat_messages`, {
-    method: 'POST', headers,
-    body: JSON.stringify({ uid: '00000000-0000-0000-0000-000000000000', device_id: 'probe', display_name: 'probe', avatar_id: 'a1', body: 'probe', is_host: false }) }));
-
-await probe('anon CANNOT insert ban', false, () =>
-  fetch(`${URL_}/rest/v1/bans`, {
-    method: 'POST', headers,
-    body: JSON.stringify({ uid: '00000000-0000-0000-0000-000000000000', device_id: 'probe' }) }));
-
-await probe('anon CANNOT insert scheduled show', false, () =>
-  fetch(`${URL_}/rest/v1/scheduled_shows`, {
-    method: 'POST', headers, body: JSON.stringify({ title: 'probe', starts_at: new Date().toISOString() }) }));
-
-// Under RLS, anon select on admin_audit returns 200 with an empty array; rows leaking = failure.
-{
-  const res = await fetch(`${URL_}/rest/v1/admin_audit?select=action&limit=1`, { headers });
-  const rows = res.ok ? await res.json() : [];
-  const pass = !res.ok || (Array.isArray(rows) && rows.length === 0);
-  console.log(`${pass ? 'PASS' : 'FAIL'}  anon sees no admin_audit rows  (HTTP ${res.status}, rows ${rows.length ?? 0})`);
-  if (!pass) failures++;
-}
-
-await probe('get_server_time rpc works', true, () =>
-  fetch(`${URL_}/rest/v1/rpc/get_server_time`, { method: 'POST', headers, body: '{}' }));
-
-console.log(failures === 0 ? '\nALL PROBES PASS' : `\n${failures} PROBE(S) FAILED`);
-process.exit(failures === 0 ? 0 : 1);
+const { ok, line } = summarize(results, { selftest });
+console.log(`\n${line}`);
+process.exit(ok ? 0 : 1);
