@@ -57,9 +57,23 @@ describe('standbyState', () => {
     expect(s.next?.id).toBe('a');
     expect(s.later.map((x) => x.id)).toEqual(['b', 'c']);
   });
-  it('says starting soon from the start time until 29:59 after', () => {
+  it('says starting soon from the start time until 9:59 after', () => {
     expect(standbyState([show('a', T)], T).kind).toBe('starting-soon');
-    expect(standbyState([show('a', T)], T + 30 * MIN - 1000).kind).toBe('starting-soon');
+    expect(standbyState([show('a', T)], T + 10 * MIN - 1000).kind).toBe('starting-soon');
+  });
+  it('says delayed from 10 minutes after the start until 29:59 after', () => {
+    expect(standbyState([show('a', T)], T + 10 * MIN).kind).toBe('delayed');
+    expect(standbyState([show('a', T)], T + 30 * MIN - 1000).kind).toBe('delayed');
+  });
+  it('keeps the late show and the later ones while delayed', () => {
+    const s = standbyState([show('a', T), show('b', T + DAY)], T + 20 * MIN);
+    expect(s.next?.id).toBe('a');
+    expect(s.later.map((x) => x.id)).toEqual(['b']);
+  });
+  it('never calls an aired show delayed', () => {
+    const s = standbyState([show('a', T, { aired_at: iso(T + MIN) }), show('b', T + DAY)], T + 15 * MIN);
+    expect(s.kind).toBe('countdown');
+    expect(s.next?.id).toBe('b');
   });
   it('moves on to the next show 30 minutes after the start', () => {
     const s = standbyState([show('a', T), show('b', T + DAY)], T + 30 * MIN);

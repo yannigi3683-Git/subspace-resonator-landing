@@ -78,8 +78,8 @@
 
 ## Task 8: standby DELAYED
 
-- [ ] **8.1 Failing tests:** STARTING SOON from T to T+10 min, DELAYED from T+10 to T+30 min, then the next show; copy "The signal is late." (the screen's own "Keep this page open" line stays below)
-- [ ] **8.2** Implement in `scheduleRules.standbyState`. **8.3** Commit.
+- [x] **8.1 Failing tests** (2026-11-27, 3 in `scheduleRules.test.ts`, 1 in `StandbyScreen.test.tsx`; the old 30-min STARTING SOON test now stops at 9:59): STARTING SOON from T to T+10 min, DELAYED from T+10 to T+30 min, then the next show; copy "The signal is late." (the screen's own "Keep this page open" line stays below)
+- [x] **8.2** Implement in `scheduleRules.standbyState` (`SOON_MS`, kind `delayed`); the card turns amber `#FFB52E`, same size as STARTING SOON. **8.3** Commit.
 
 ## Task 9: verification, design, docs
 

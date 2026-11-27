@@ -89,7 +89,8 @@ export function StandbyScreen({ supabase, getServerTime, zone, locale }: Standby
 
   const now = getServerTime().getTime();
   const state = standbyState(shows, now);
-  const soon = state.kind === 'starting-soon';
+  const delayed = state.kind === 'delayed';
+  const soon = state.kind === 'starting-soon' || delayed;
 
   const when = state.next ? formatShowTime(state.next.starts_at, tz, lang) : '';
   const cut = when.lastIndexOf(', ');
@@ -125,14 +126,15 @@ export function StandbyScreen({ supabase, getServerTime, zone, locale }: Standby
         )}
 
         {loaded && soon && state.next && (
-          <div className="w-full border border-[#26C6DA]/40 bg-[#26C6DA]/[0.06] backdrop-blur px-5 py-6">
-            <p className="font-mono text-[#26C6DA] text-[10px] tracking-[0.3em] mb-3 inline-flex items-center gap-2">
-              <span className="w-2 h-2 rounded-full bg-[#26C6DA] radio-soon-pulse" style={{ boxShadow: '0 0 10px #26C6DA' }} aria-hidden="true" />
-              STARTING SOON
+          <div className={`w-full border backdrop-blur px-5 py-6 ${delayed ? 'border-[#FFB52E]/40 bg-[#FFB52E]/[0.06]' : 'border-[#26C6DA]/40 bg-[#26C6DA]/[0.06]'}`}>
+            <p role="status" className={`font-mono text-[10px] tracking-[0.3em] mb-3 inline-flex items-center gap-2 ${delayed ? 'text-[#FFB52E]' : 'text-[#26C6DA]'}`}>
+              <span className={`w-2 h-2 rounded-full radio-soon-pulse ${delayed ? 'bg-[#FFB52E]' : 'bg-[#26C6DA]'}`}
+                style={{ boxShadow: `0 0 10px ${delayed ? '#FFB52E' : '#26C6DA'}` }} aria-hidden="true" />
+              {delayed ? 'DELAYED' : 'STARTING SOON'}
             </p>
             <p className="font-display text-white text-lg tracking-wide mb-1 uppercase break-words">{state.next.title}</p>
             <p className="font-mono text-white/70 text-xs">Scheduled for {timePart}</p>
-            <p className="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">Due any minute.</p>
+            <p className="font-mono text-white/60 text-[11px] mt-3 leading-relaxed">{delayed ? 'The signal is late.' : 'Due any minute.'}</p>
           </div>
         )}
 

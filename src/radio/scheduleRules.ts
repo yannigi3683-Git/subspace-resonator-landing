@@ -13,6 +13,7 @@ export interface Show {
 const MIN = 60_000;
 const HOUR = 60 * MIN;
 export const GRACE_MS = 30 * MIN;
+export const SOON_MS = 10 * MIN;
 export const SUGGEST_AHEAD_MS = 6 * HOUR;
 export const CLASH_MS = HOUR;
 export const TITLE_MAX = 80;
@@ -37,7 +38,7 @@ export function formatCountdown(ms: number): string {
 }
 
 export type StandbyState =
-  | { kind: 'countdown' | 'starting-soon'; next: Show; later: Show[] }
+  | { kind: 'countdown' | 'starting-soon' | 'delayed'; next: Show; later: Show[] }
   | { kind: 'tba' | 'unavailable'; next: null; later: Show[] };
 
 // `shows === null` means the read failed: say nothing rather than a false "TBA".
@@ -46,7 +47,9 @@ export function standbyState(shows: Show[] | null, nowMs: number): StandbyState 
   const upcoming = shows.filter((s) => usable(s) && startMs(s) > nowMs - GRACE_MS).sort(bySoonest);
   if (!upcoming.length) return { kind: 'tba', next: null, later: [] };
   const [next, ...rest] = upcoming;
-  return { kind: startMs(next) <= nowMs ? 'starting-soon' : 'countdown', next, later: rest.slice(0, 2) };
+  const late = nowMs - startMs(next);
+  const kind = late < 0 ? 'countdown' : late < SOON_MS ? 'starting-soon' : 'delayed';
+  return { kind, next, later: rest.slice(0, 2) };
 }
 
 export function suggestTitle(shows: Show[], nowMs: number): Show | null {

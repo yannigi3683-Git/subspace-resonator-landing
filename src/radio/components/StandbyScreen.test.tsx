@@ -69,10 +69,24 @@ describe('StandbyScreen', () => {
     expect(screen.queryByTestId('countdown')).toBeNull();
   });
 
+  it('says DELAYED from 10 minutes after a start that never went live', async () => {
+    clock = START + 12 * MIN;
+    await mount(() => ({ data: [show('Psy Night Vol. 7', START)], error: null }));
+    expect(screen.getByRole('status')).toHaveTextContent('DELAYED');
+    expect(screen.getByText('The signal is late.')).toBeInTheDocument();
+    expect(screen.getByText('Psy Night Vol. 7')).toBeInTheDocument();
+    expect(screen.getByText('STANDING BY')).toBeInTheDocument();
+    expect(screen.getByText(/Keep this page open/)).toBeInTheDocument();
+    expect(screen.queryByText('STARTING SOON')).toBeNull();
+    expect(screen.queryByText('Due any minute.')).toBeNull();
+    expect(screen.queryByTestId('countdown')).toBeNull();
+  });
+
   it('moves on to the next show 30 minutes after a start that never went live', async () => {
     clock = START + 30 * MIN;
     await mount(() => ({ data: [show('Late', START), show('Next', START + DAY)], error: null }));
     expect(screen.queryByText('STARTING SOON')).toBeNull();
+    expect(screen.queryByText('DELAYED')).toBeNull();
     expect(screen.getByText('Next')).toBeInTheDocument();
   });
 
