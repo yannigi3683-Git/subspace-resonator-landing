@@ -643,7 +643,7 @@ Key specs on record:
 - `2026-08-02-crowd-dance-glow-design.md` — dance-floor wander + the happy glow reaction (implemented on `feat/crowd-dance-glow`)
 - `2026-08-02-crowd-roam-design.md` — replacing the crowd grid with a roaming region (implemented on `feat/crowd-roam`)
 - `2026-10-11-host-deck-desync-design.md` — host file deck played a removed track and ignored every control; root cause, the five candidate fixes and the red-team rounds (implemented on `fix/host-deck-desync`)
-- `2026-11-25-radio-schedule-design.md` — SCHEDULE tab, guest countdown before the gate, title pre-fill; decisions D1-D4 and 12 red-team cycles (Release 1, implemented on `feat/radio-schedule`). Release 2, SCHEDULE RUNNER (automatic start/end), is specced on `claude/schedule-feature-plan-wmv49g`, not built.
+- `2026-11-25-radio-schedule-design.md` — SCHEDULE tab, guest countdown before the gate, title pre-fill; decisions D1-D4 and 12 red-team cycles (Release 1, implemented on `feat/radio-schedule`). Release 2, SCHEDULE RUNNER (automatic start/end), is specced, not built: `2026-11-25-radio-schedule-runner-design.md` + `plans/2026-11-25-radio-schedule-runner.md`. The original combined plan (`plans/2026-11-24-host-schedule-plan.md`, superseded) and the approved mockups (`docs/superpowers/mockups/2026-11-24-schedule/`, and the clickable host + listener journeys in `docs/superpowers/mockups/2026-11-25-schedule-journeys/index.html`) are kept for the record.
 
 Owner manuals / recaps:
 - `docs/RADIO-CAPACITY.md` — how many listeners the radio holds + how to raise it (Supabase anon sign-in cap). The answer to the "how many can I host" question.
