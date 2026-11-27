@@ -59,8 +59,10 @@
 
 ## Task 4: playlist editor in `SchedulePanel`
 
-- [ ] **4.1 Failing tests:** FILES row states (none / n files and length / assign on the broadcasting PC); editor add, reorder (drag and up/down buttons), remove, display name, NEON toggle saved to the show; total length; overrun warning text; storage line (protected / may be cleared); 44 px targets; no em dash.
-- [ ] **4.2** Implement to the journeys. **4.3** Commit.
+- [x] **4.1 Failing tests** (2026-11-27: `ShowFilesRow.test.tsx` 18, `SchedulePanel` +5, `AdminConsole` +2, `useSchedule` +3, `overrun` +4): FILES row states (none / n files and length / assign on the broadcasting PC); editor add, reorder (drag and up/down buttons), remove, display name, NEON toggle saved to the show; total length; overrun warning text; storage line (protected / may be cleared); 44 px targets; no em dash.
+- [x] **4.2** Implement to the journeys. **4.3** Commit.
+  - As built: `ShowFilesRow.tsx` (own file, so the editor is not re-created each render); `SchedulePanel` takes an optional `files` prop and is the Release 1 panel exactly without it. `AdminConsole` opens the storage once; a touch-first device (`(pointer: coarse)`) gets "assign on the broadcasting PC". A browser without OPFS gets "this browser cannot keep files" instead of a memory store pretending to be safe. Deleting a show removes its copies only after the delete succeeds. Copies of shows that are deleted or older than the five past shows the host sees are offered as REMOVE THEM; a show on air is aired, hence past, hence still in that list, so its files are never offered while they play. `useSchedule` reads `neon_mode` and falls back to the Release 1 columns if the database change is not applied yet, so merging before the delta cannot blank the schedule. Removing a single track is one tap, as in the approved journey.
+  - **Open for Task 6:** the panel footer still says "The schedule never starts a broadcast: GO LIVE is still yours." It must change when ARM ships.
 
 ## Task 5: `GoLivePanel` handle
 

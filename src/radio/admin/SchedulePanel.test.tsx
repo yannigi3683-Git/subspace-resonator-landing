@@ -1,8 +1,9 @@
-import { render, screen, fireEvent, within } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
 import { describe, it, expect, vi } from 'vitest';
 import SchedulePanel from './SchedulePanel';
 import type { ScheduleApi } from '../hooks/useSchedule';
 import type { Show } from '../scheduleRules';
+import { createShowFiles, memoryFileStore, memoryMetaStore } from '../showFiles';
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -206,5 +207,65 @@ describe('SchedulePanel honesty and house rules', () => {
   it('uses no em dash anywhere', () => {
     const { container } = setup();
     expect(container.textContent).not.toContain('—');
+  });
+});
+
+describe('SchedulePanel FILES (SCHEDULE RUNNER, Release 2)', () => {
+  const mp3 = (name: string) => new File([new Uint8Array(10)], name, { type: 'audio/mpeg' });
+  async function withFiles(overrides: Partial<ScheduleApi> = {}) {
+    const lib = createShowFiles({ files: memoryFileStore(), meta: memoryMetaStore(), probe: async () => 60, storage: null });
+    const api = makeApi(overrides);
+    const utils = render(<SchedulePanel schedule={api} getNow={() => NOW} deviceZone={ZONE} files={{ lib, durable: true, assignHere: true }} />);
+    return { api, lib, ...utils };
+  }
+
+  it('has no FILES rows when the console gives it no file storage (Release 1 unchanged)', () => {
+    setup();
+    expect(screen.queryByRole('button', { name: /^FILES/ })).toBeNull();
+  });
+
+  it('gives every upcoming show a FILES row, and past shows none', async () => {
+    await withFiles();
+    expect(await screen.findAllByRole('button', { name: 'FILES · none on this PC' })).toHaveLength(3);
+    fireEvent.click(screen.getByRole('button', { name: /past \(1\)/i }));
+    expect(screen.getAllByRole('button', { name: /^FILES/ })).toHaveLength(3);
+  });
+
+  it('saves the neon choice to the show', async () => {
+    const { api } = await withFiles();
+    const rows = await screen.findAllByTestId('show-row');
+    fireEvent.click(within(rows.find((r) => r.textContent?.includes('Psy Night Vol. 7'))!).getByRole('button', { name: /^FILES/ }));
+    fireEvent.click(await screen.findByRole('button', { name: 'SHOW TITLE' }));
+    expect(api.update).toHaveBeenCalledWith('u1', { neon_mode: 'title' });
+  });
+
+  it('removes a deleted show\'s files from this PC, and says it will', async () => {
+    const { lib } = await withFiles();
+    await lib.add('u3', [mp3('a.mp3')]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Subspace Theory Live' }));
+    expect(screen.getByText(/Its files on this PC are removed too\./)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'DELETE' }));
+    await waitFor(async () => expect(await lib.list('u3')).toEqual([]));
+  });
+
+  it('keeps the files when the delete was refused', async () => {
+    const { lib } = await withFiles({ remove: vi.fn(async () => false) });
+    await lib.add('u3', [mp3('a.mp3')]);
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Subspace Theory Live' }));
+    fireEvent.click(screen.getByRole('button', { name: 'DELETE' }));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(await lib.list('u3')).toHaveLength(1);
+  });
+
+  it('offers to remove files left by shows that are gone, and keeps the rest', async () => {
+    const lib = createShowFiles({ files: memoryFileStore(), meta: memoryMetaStore(), probe: async () => 60, storage: null });
+    await lib.add('gone', [mp3('a.mp3')]);
+    await lib.add('u1', [mp3('b.mp3')]);
+    render(<SchedulePanel schedule={makeApi()} getNow={() => NOW} deviceZone={ZONE} files={{ lib, durable: true, assignHere: true }} />);
+    expect(await screen.findByText('Files for 1 show that is deleted or long past are still on this PC.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'REMOVE THEM' }));
+    await waitFor(() => expect(screen.queryByText(/deleted or long past/)).toBeNull());
+    expect(await lib.list('gone')).toEqual([]);
+    expect(await lib.list('u1')).toHaveLength(1);
   });
 });

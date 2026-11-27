@@ -6,6 +6,16 @@ import { usePresenceObserver } from '../hooks/usePresenceObserver';
 import { useSchedule } from '../hooks/useSchedule';
 import { useServerClock } from '../hooks/useServerClock';
 import { ISRAEL, showToMarkAired, suggestTitle } from '../scheduleRules';
+import { openShowFiles } from '../showFiles';
+
+// Phones and tablets never play a SCHEDULE RUNNER show, so files are assigned on the PC that does.
+const touchFirst = () => {
+  try {
+    return typeof window !== 'undefined' && window.matchMedia?.('(pointer: coarse)').matches === true;
+  } catch {
+    return false;
+  }
+};
 
 // Keeps a crash inside the Schedule tab. Without it a render error unmounts the whole console,
 // GoLivePanel included, which orphans a live connection and takes END BROADCAST with it.
@@ -47,6 +57,7 @@ export default function AdminConsole({ supabase, authToken }: Props) {
   const getServerTime = useServerClock(supabase);
   const getNow = useCallback(() => getServerTime().getTime(), [getServerTime]);
   const schedule = useSchedule(supabase);
+  const [showFiles] = useState(() => ({ ...openShowFiles(), assignHere: !touchFirst() }));
 
   // Mark the show this broadcast is for as aired, once per broadcast, so guests never see
   // STARTING SOON or a countdown for a show that already happened. A reconnect passes through
@@ -153,7 +164,7 @@ export default function AdminConsole({ supabase, authToken }: Props) {
 
       {activeTab === 'schedule' && (
         <ScheduleBoundary>
-          <SchedulePanel schedule={schedule} getNow={getNow} />
+          <SchedulePanel schedule={schedule} getNow={getNow} files={showFiles} />
         </ScheduleBoundary>
       )}
 

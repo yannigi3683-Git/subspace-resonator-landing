@@ -10,6 +10,7 @@ import {
   wallTimeToMs,
   msToWallTime,
   showToMarkAired,
+  overrun,
   type Show,
 } from './scheduleRules';
 
@@ -243,5 +244,25 @@ describe('showToMarkAired', () => {
   it('returns null on empty or broken input', () => {
     expect(showToMarkAired([], T)).toBeNull();
     expect(showToMarkAired([{ id: 'x', title: 'x', starts_at: 'nope' }], T)).toBeNull();
+  });
+});
+
+describe('overrun', () => {
+  it('names the next show and how many minutes a long set runs into it', () => {
+    const shows = [show('a', T), show('b', T + HOUR)];
+    expect(overrun(shows[0], 85 * MIN, shows)).toEqual({ minutes: 25, next: shows[1] });
+  });
+  it('is null when the set ends in time, or there is no next show', () => {
+    const shows = [show('a', T), show('b', T + HOUR)];
+    expect(overrun(shows[0], HOUR, shows)).toBeNull();
+    expect(overrun(shows[1], 5 * HOUR, shows)).toBeNull();
+  });
+  it('ignores aired shows and broken dates, and rounds a partial minute up', () => {
+    const shows = [show('a', T), show('x', T + 10 * MIN, { aired_at: iso(T) }), { id: 'y', title: 'y', starts_at: 'nope' }, show('b', T + HOUR)];
+    expect(overrun(shows[0], HOUR + 1000, shows)).toEqual({ minutes: 1, next: shows[3] });
+  });
+  it('never throws on nonsense', () => {
+    expect(overrun({ id: 'z', title: 'z', starts_at: 'nope' }, HOUR, [])).toBeNull();
+    expect(overrun(show('a', T), Number.NaN, [show('b', T + MIN)])).toBeNull();
   });
 });

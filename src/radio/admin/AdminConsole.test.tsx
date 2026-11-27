@@ -46,9 +46,10 @@ vi.mock('../hooks/useSchedule', () => ({
 vi.mock('../hooks/useServerClock', () => ({ useServerClock: () => () => new Date(scheduleState.now) }));
 
 // A stand-in panel that can be told to crash on render, to prove the crash stays inside its tab.
-const panelState = { crash: false };
+const panelState: { crash: boolean; props: Record<string, unknown> | null } = { crash: false, props: null };
 vi.mock('./SchedulePanel', () => ({
-  default: () => {
+  default: (props: Record<string, unknown>) => {
+    panelState.props = props;
     if (panelState.crash) throw new Error('schedule panel exploded');
     return <div data-testid="schedule-panel" />;
   },
@@ -99,6 +100,26 @@ afterEach(() => {
 });
 
 describe('AdminConsole', () => {
+  it('hands the schedule tab this PC\'s show file storage, and lets a mouse PC assign files', () => {
+    render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+    fireEvent.click(screen.getByText('SCHEDULE'));
+    const files = panelState.props?.files as { lib: unknown; durable: boolean; assignHere: boolean };
+    expect(files.lib).toBeTruthy();
+    expect(files.assignHere).toBe(true);
+  });
+
+  it('on a touch-first device (phone, tablet) files are assigned on the broadcasting PC instead', () => {
+    const before = window.matchMedia;
+    window.matchMedia = ((q: string) => ({ matches: q === '(pointer: coarse)' })) as unknown as typeof window.matchMedia;
+    try {
+      render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
+      fireEvent.click(screen.getByText('SCHEDULE'));
+      expect((panelState.props?.files as { assignHere: boolean }).assignHere).toBe(false);
+    } finally {
+      window.matchMedia = before;
+    }
+  });
+
   it('keeps the broadcast panel mounted when switching to another tab', () => {
     render(<AdminConsole supabase={makeProp()} authToken={async () => 't'} />);
     expect(screen.getByTestId('go-live-panel')).toBeInTheDocument();

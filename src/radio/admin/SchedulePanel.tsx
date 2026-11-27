@@ -1,14 +1,25 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, CalendarPlus, ChevronDown, ChevronRight, Pencil, Trash2 } from 'lucide-react';
 import type { ScheduleApi } from '../hooks/useSchedule';
+import type { ShowFiles } from '../showFiles';
+import ShowFilesRow from './ShowFilesRow';
 import {
   GRACE_MS, ISRAEL, formatRelative, hostTimePreview, msToWallTime, validateShow, wallTimeToMs, type Show,
 } from '../scheduleRules';
+
+// SCHEDULE RUNNER (Release 2): this PC's copies of each show's files. Absent, the panel is the
+// Release 1 panel exactly.
+export interface ScheduleFiles {
+  lib: ShowFiles;
+  durable: boolean;
+  assignHere: boolean;
+}
 
 interface Props {
   schedule: ScheduleApi;
   getNow?: () => number;
   deviceZone?: string;
+  files?: ScheduleFiles;
 }
 
 const deviceTimeZone = () => {
@@ -80,7 +91,7 @@ function Preview({ draft, zone, now, shows, ignoreId }: { draft: Draft; zone: st
   );
 }
 
-export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone }: Props) {
+export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone, files }: Props) {
   const zone = deviceZone ?? deviceTimeZone();
   const [, setTick] = useState(0);
   const [draft, setDraft] = useState<Draft>({ title: '', start: '' });
@@ -93,6 +104,7 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
   const buttons = useRef(new Map<string, HTMLButtonElement>());
   const [returnFocus, setReturnFocus] = useState<string | null>(null);
   const alertRef = useRef<HTMLParagraphElement>(null);
+  const [orphans, setOrphans] = useState<string[]>([]);
 
   useEffect(() => {
     const t = setInterval(() => setTick((n) => n + 1), 30_000);
@@ -113,6 +125,23 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
 
   const now = getNow();
   const { shows, saving, error } = schedule;
+
+  // Copies whose show is deleted or older than the five past shows the host sees. Never a show in
+  // this list, so a show on air (aired, so past) keeps its files while they play.
+  const canKeepFiles = !!files && files.durable && files.assignHere;
+  const showIds = shows.map((s) => s.id).join(',');
+  useEffect(() => {
+    if (!files || !canKeepFiles) return;
+    let live = true;
+    files.lib.orphans(showIds ? showIds.split(',') : []).then((ids) => { if (live) setOrphans(ids); }, () => {});
+    return () => { live = false; };
+  }, [files, canKeepFiles, showIds]);
+  async function clearOrphans() {
+    if (!files) return;
+    const ids = orphans;
+    for (const id of ids) await files.lib.removeShow(id).catch(() => {});
+    setOrphans((o) => o.filter((x) => !ids.includes(x)));
+  }
   const startOf = (s: Show) => Date.parse(s.starts_at);
   const upcoming = shows.filter((s) => !s.aired_at && startOf(s) > now - GRACE_MS).sort((a, b) => startOf(a) - startOf(b));
   const past = shows.filter((s) => !upcoming.includes(s)).sort((a, b) => startOf(b) - startOf(a));
@@ -145,7 +174,7 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
   };
   async function handleDelete(id: string) {
     setConfirmId(null);
-    await schedule.remove(id);
+    if ((await schedule.remove(id)) && files) await files.lib.removeShow(id).catch(() => {});
   }
 
   // A plain render function, not a component: a component declared in here would be a new type on
@@ -207,12 +236,18 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
         </div>
         {confirming && (
           <>
-            <p className="font-mono text-[11px] text-red-400">Delete this show? Guests stop seeing it within a minute.</p>
+            <p className="font-mono text-[11px] text-red-400">
+              Delete this show? Guests stop seeing it within a minute.{canKeepFiles ? ' Its files on this PC are removed too.' : ''}
+            </p>
             <div className="grid grid-cols-2 gap-2">
               <button type="button" onClick={() => handleDelete(s.id)} className={`${BTN} border-red-500 text-red-400 bg-red-500/10`}>DELETE</button>
               <button type="button" autoFocus onClick={() => { setConfirmId(null); setReturnFocus(`del:${s.id}`); }} className={`${BTN} border-border text-muted-foreground`}>KEEP</button>
             </div>
           </>
+        )}
+        {files && !isPast && !confirming && (
+          <ShowFilesRow show={s} shows={shows} lib={files.lib} durable={files.durable} assignHere={files.assignHere}
+            onNeon={(neon_mode) => schedule.update(s.id, { neon_mode })} />
         )}
       </div>
     );
@@ -255,6 +290,17 @@ export default function SchedulePanel({ schedule, getNow = Date.now, deviceZone 
         </button>
         {pastOpen && past.map((s) => renderRow(s, true))}
       </div>
+
+      {orphans.length > 0 && (
+        <div className="flex flex-col gap-2 border border-border p-3">
+          <p className="font-mono text-[11px] text-muted-foreground leading-relaxed">
+            Files for {orphans.length} {orphans.length === 1 ? 'show that is' : 'shows that are'} deleted or long past are still on this PC.
+          </p>
+          <button type="button" onClick={() => void clearOrphans()} className={`${BTN} border-border text-muted-foreground hover:text-white hover:border-primary`}>
+            REMOVE THEM
+          </button>
+        </div>
+      )}
 
       <p className="font-mono text-[10px] text-muted-foreground leading-relaxed">
         Guests see changes on the standby screen within a minute, in their own time zone. The schedule never starts a broadcast: GO LIVE is still yours.

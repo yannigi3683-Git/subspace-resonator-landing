@@ -8,7 +8,11 @@ export interface Show {
   title: string;
   starts_at: string;
   aired_at?: string | null;
+  neon_mode?: NeonMode;
 }
+
+// What the neon line shows during a SCHEDULE RUNNER show (Release 2, spec E6).
+export type NeonMode = 'tracks' | 'title';
 
 const MIN = 60_000;
 const HOUR = 60 * MIN;
@@ -204,4 +208,15 @@ export function showToMarkAired(shows: Show[], nowMs: number): Show | null {
   );
   candidates.sort((a, b) => Math.abs(startMs(a) - nowMs) - Math.abs(startMs(b) - nowMs));
   return candidates[0] ?? null;
+}
+
+// A set longer than the gap to the next show: SCHEDULE RUNNER never cuts it (spec E4), so the next
+// show starts late. Warned when files are assigned. Minutes round up, so a warning never says 0.
+export function overrun(show: Show, totalMs: number, shows: Show[]): { minutes: number; next: Show } | null {
+  const start = startMs(show);
+  if (!Number.isFinite(start) || !Number.isFinite(totalMs) || totalMs <= 0) return null;
+  const next = shows.filter((s) => s.id !== show.id && usable(s) && startMs(s) > start).sort(bySoonest)[0];
+  if (!next) return null;
+  const over = start + totalMs - startMs(next);
+  return over > 0 ? { minutes: Math.ceil(over / MIN), next } : null;
 }

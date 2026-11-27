@@ -1,10 +1,16 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { SupabaseClient } from '@supabase/supabase-js';
-import { GRACE_MS, type Show } from '../scheduleRules';
+import { GRACE_MS, type NeonMode, type Show } from '../scheduleRules';
+
+export type ShowPatch = { title?: string; starts_at?: string; neon_mode?: NeonMode };
 
 const RESYNC_MS = 60_000;
 const PAST_SHOWN = 5;
-const COLUMNS = 'id, title, starts_at, aired_at';
+const BASE_COLUMNS = 'id, title, starts_at, aired_at';
+// neon_mode arrives with the Release 2 database change. Until that is applied, asking for it fails
+// the whole read, so fall back to the Release 1 columns rather than lose the schedule.
+const COLUMNS = `${BASE_COLUMNS}, neon_mode`;
+const missingNeon = (r: Rows) => !!r.error && /neon_mode/.test(r.error.message);
 const READ_FAILED = 'Could not load the schedule. Retrying every minute.';
 const REFUSED = 'The server refused the change: your host sign-in may have expired. Reload the console and sign in again.';
 
@@ -14,7 +20,7 @@ export interface ScheduleApi {
   saving: boolean;
   reload: () => Promise<void>;
   add: (title: string, startsAt: string) => Promise<boolean>;
-  update: (id: string, patch: { title: string; starts_at: string }) => Promise<boolean>;
+  update: (id: string, patch: ShowPatch) => Promise<boolean>;
   remove: (id: string) => Promise<boolean>;
   markAired: (id: string) => Promise<void>;
 }
@@ -36,10 +42,12 @@ export function useSchedule(supabase: SupabaseClient): ScheduleApi {
   const reload = useCallback(async () => {
     try {
       const cutoff = new Date(Date.now() - GRACE_MS).toISOString();
-      const [up, past] = (await Promise.all([
-        supabase.from('scheduled_shows').select(COLUMNS).gte('starts_at', cutoff).order('starts_at', { ascending: true }),
-        supabase.from('scheduled_shows').select(COLUMNS).lt('starts_at', cutoff).order('starts_at', { ascending: false }).limit(PAST_SHOWN),
-      ])) as Rows[];
+      const read = (cols: string) => Promise.all([
+        supabase.from('scheduled_shows').select(cols).gte('starts_at', cutoff).order('starts_at', { ascending: true }),
+        supabase.from('scheduled_shows').select(cols).lt('starts_at', cutoff).order('starts_at', { ascending: false }).limit(PAST_SHOWN),
+      ]) as Promise<Rows[]>;
+      let [up, past] = await read(COLUMNS);
+      if (missingNeon(up) || missingNeon(past)) [up, past] = await read(BASE_COLUMNS);
       if (!alive.current) return;
       if (up.error || past.error) {
         setError(READ_FAILED);
@@ -88,7 +96,7 @@ export function useSchedule(supabase: SupabaseClient): ScheduleApi {
     [supabase, write],
   );
   const update = useCallback(
-    (id: string, patch: { title: string; starts_at: string }) =>
+    (id: string, patch: ShowPatch) =>
       write('Not saved.', () => supabase.from('scheduled_shows').update(patch).eq('id', id).select('id')),
     [supabase, write],
   );

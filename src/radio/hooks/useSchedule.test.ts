@@ -97,6 +97,37 @@ describe('useSchedule reads', () => {
   });
 });
 
+describe('useSchedule neon mode (Release 2)', () => {
+  it('reads each show\'s neon mode', async () => {
+    const { supabase, calls } = makeSupabase((_t, ops) => readsOk(ops));
+    renderHook(() => useSchedule(supabase));
+    await waitFor(() => expect(calls.filter(isRead)).toHaveLength(2));
+    expect(calls.filter(isRead).every((ops) => String(ops.find((o) => o.m === 'select')?.args[0]).includes('neon_mode'))).toBe(true);
+  });
+
+  it('still loads the schedule when the database does not have the column yet', async () => {
+    const { supabase } = makeSupabase((_t, ops) => {
+      const cols = String(ops.find((o) => o.m === 'select')?.args[0]);
+      return cols.includes('neon_mode')
+        ? { data: null, error: { message: 'column scheduled_shows.neon_mode does not exist' } }
+        : readsOk(ops);
+    });
+    const { result } = renderHook(() => useSchedule(supabase));
+    await waitFor(() => expect(result.current.shows.map((s) => s.id)).toEqual(['p1', 'u1']));
+    expect(result.current.error).toBeNull();
+  });
+
+  it('saves a neon mode on its own', async () => {
+    const { supabase, calls } = makeSupabase((_t, ops) => (has(ops, 'update') ? { data: [{ id: 'u1' }], error: null } : readsOk(ops)));
+    const { result } = renderHook(() => useSchedule(supabase));
+    await waitFor(() => expect(result.current.shows).toHaveLength(2));
+    let ok = false;
+    await act(async () => { ok = await result.current.update('u1', { neon_mode: 'title' }); });
+    expect(ok).toBe(true);
+    expect(calls.find((ops) => has(ops, 'update'))?.find((o) => o.m === 'update')?.args[0]).toEqual({ neon_mode: 'title' });
+  });
+});
+
 describe('useSchedule writes', () => {
   it('adds a show, then re-reads', async () => {
     const { supabase, calls } = makeSupabase((_t, ops) =>
