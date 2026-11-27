@@ -236,5 +236,12 @@ Verified true by the independent red team: a console reload always shows the sig
 | A7.3 | Watchdog and SCHEDULE RUNNER both end at once. | Both use "only if this broadcast id", so the second is a no-op. |
 | A7.4 | A guest could see DELAYED for a show that already aired early or ended within 30 min. | Shows are marked aired when a broadcast goes live for them (both releases); aired shows never show as late. |
 
+### Cycle A9 - Found while building the state machine (2026-11-27)
+| # | Finding | Resolution |
+|---|---|---|
+| A9.1 | The spec identifies SCHEDULE RUNNER's broadcast by `cfSessionId` (4.4, 6, 6.1, 6.2). A host reconnect mints a **new** `cfSessionId` mid-show (CLAUDE.md, broadcast identity), so after any network blip the runner would read its own show as someone else's: it would stop managing it, `end` with `expect` would refuse to end it, and the watchdog would never fire. | **The broadcast id is `live_session.startedAt` everywhere in Release 2**, which a reconnect preserves (`broadcastStartedAt()` in `api/rtc-session.ts`). `expect` in 6.1 compares `startedAt`; `runner_status` records `broadcast_started_at` instead of `cf_session_id`; the watchdog in 6.2 compares `startedAt`. `scheduleRunner.ts` calls it `broadcastId`. |
+| A9.2 | Right after GO LIVE the console's station row can lag a moment behind, so "the station is not mine" would end the runner's hold on a show it just started, leaving the show live with no deck. | The runner lets go of a show only after "not mine" has held for 15 s. Tested. |
+| A9.3 | DISARM during a show: the plan only says "no future starts". | The show is left to the host, who is at the PC to press DISARM; the runner stops issuing any action for it, hard END included. Tested. |
+
 ### Cycle A8 - Clean pass
 Re-read sections 1-9 and the plan against the files they touch. No new findings. Ready for the owner's journey review.

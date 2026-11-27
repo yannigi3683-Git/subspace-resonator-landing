@@ -10,6 +10,8 @@
 
 **Branch:** `feat/radio-schedule-runner` off `master` after Release 1 merges.
 
+**Broadcast id (spec cycle A9.1):** everywhere below, "broadcast id" means `live_session.startedAt`, not `cfSessionId`, because a host reconnect mints a new `cfSessionId` mid-show. That covers `expect`, the `runner_status` column (`broadcast_started_at`) and the watchdog.
+
 **Never touched:** `src/radio/rtc/*` (publisher, subscriber, mixer internals, ICE, jitter buffer), `restreamer/*`, listener audio hooks. `GoLivePanel.tsx` changes are fenced by the Task 5 diff gate. **`api/rtc-session.ts` gets one additive, optional condition (Task 1b) and nothing else.**
 
 ---
@@ -32,7 +34,7 @@
 
 ## Task 2: `scheduleRunner.ts` state machine (pure)
 
-- [ ] **2.1 Failing tests** with an injected clock:
+- [x] **2.1 Failing tests** with an injected clock (`src/radio/scheduleRunner.test.ts`, 35 tests, 2026-11-27):
   - States `off → armed → preflight (T-10) → starting (T-45 s, empty deck) → on_air (deck loaded and playing at T) → ending (30 s after queue finished, or hard END at start + total + 2 min) → armed`, and at least 15 s before the next start.
   - A failed attempt that left the station live with SCHEDULE RUNNER's own id: the retry resumes it; MISSED ends it with `expect`.
   - A file error during SCHEDULE RUNNER skips to the next file.
@@ -44,7 +46,7 @@
   - Host presses END during a show: show done, no retry; DISARM: no future starts.
   - Clock jumps (sleep/resume): a start time already more than 30 min past is `missed`, never started late.
   - Totality: bad dates, empty lists, unknown states never throw.
-- [ ] **2.2** Implement. **2.3** Commit.
+- [x] **2.2** Implement (`src/radio/scheduleRunner.ts`). **2.3** Commit.
 
 ## Task 3: `showFiles.ts` (local playlists)
 
