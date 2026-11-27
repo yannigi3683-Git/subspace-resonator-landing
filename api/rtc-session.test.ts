@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { checkAdminAal2, findBan, firstMid, classifyAuthError, readTokenCache, writeTokenCache, broadcastStartedAt } from './rtc-session';
+import { checkAdminAal2, findBan, firstMid, classifyAuthError, readTokenCache, writeTokenCache, broadcastStartedAt, parseExpect, expectHolds, writeStation } from './rtc-session';
 import type { SupabaseClient } from '@supabase/supabase-js';
 
 // checkAdminAal2 reads the role through the security-definer has_role() RPC, which
@@ -157,5 +157,89 @@ describe('firstMid', () => {
 
   it('defaults to "0" when no mid line is present', () => {
     expect(firstMid('v=0\r\nm=audio 9 UDP/TLS/RTP/SAVPF 111\r\n')).toBe('0');
+  });
+});
+
+// SCHEDULE RUNNER (Release 2, task 1b): an optional "only if" on going live and ending, so an
+// automatic show can never take over or end a show someone else started. The broadcast id is
+// live_session.startedAt, which a host reconnect keeps (spec cycle A9.1).
+describe('parseExpect', () => {
+  it('is none when absent, so manual GO LIVE and END are untouched', () => {
+    expect(parseExpect(undefined)).toEqual({ kind: 'none' });
+    expect(parseExpect(null)).toEqual({ kind: 'none' });
+  });
+  it('reads off and a broadcast id', () => {
+    expect(parseExpect('off')).toEqual({ kind: 'off' });
+    expect(parseExpect('2026-11-28T20:00:00.000Z')).toEqual({ kind: 'broadcast', startedAt: '2026-11-28T20:00:00.000Z' });
+  });
+  it('rejects anything else instead of guessing', () => {
+    for (const bad of ['', 42, {}, [], true, 'x'.repeat(41)]) expect(parseExpect(bad)).toBeNull();
+  });
+});
+
+describe('expectHolds', () => {
+  const ID = '2026-11-28T20:00:00.000Z';
+  const live = (startedAt?: string) => ({ mode: 'live', live_session: { cfSessionId: 'cf2', startedAt } });
+  it('always holds without a condition', () => {
+    expect(expectHolds({ kind: 'none' }, null)).toBe(true);
+  });
+  it('off holds only on an off-air station, and not when the row could not be read', () => {
+    expect(expectHolds({ kind: 'off' }, { mode: 'off', live_session: null })).toBe(true);
+    expect(expectHolds({ kind: 'off' }, live(ID))).toBe(false);
+    expect(expectHolds({ kind: 'off' }, null)).toBe(false);
+  });
+  it('a broadcast id holds only while that broadcast is live, whatever its cfSessionId', () => {
+    expect(expectHolds({ kind: 'broadcast', startedAt: ID }, live(ID))).toBe(true);
+    expect(expectHolds({ kind: 'broadcast', startedAt: ID }, live('2026-11-28T21:00:00.000Z'))).toBe(false);
+    expect(expectHolds({ kind: 'broadcast', startedAt: ID }, live(undefined))).toBe(false);
+    expect(expectHolds({ kind: 'broadcast', startedAt: ID }, { mode: 'off', live_session: { startedAt: ID } })).toBe(false);
+    expect(expectHolds({ kind: 'broadcast', startedAt: ID }, null)).toBe(false);
+  });
+});
+
+// Records every builder call and answers the awaited query with a canned result.
+function fakeStationClient(result: { data?: unknown; error: unknown }) {
+  const calls: unknown[][] = [];
+  const builder: Record<string, unknown> = {};
+  for (const m of ['update', 'eq', 'select']) {
+    builder[m] = (...args: unknown[]) => { calls.push([m, ...args]); return builder; };
+  }
+  builder.then = (resolve: (v: unknown) => unknown) => resolve(result);
+  const client = { from: (t: string) => { calls.push(['from', t]); return builder; } } as unknown as SupabaseClient;
+  return { client, calls };
+}
+
+describe('writeStation', () => {
+  const patch = { mode: 'live', live_title: 'T', live_session: { cfSessionId: 'cf', startedAt: 'S' } };
+  const ID = '2026-11-28T20:00:00.000Z';
+
+  it('without a condition makes exactly the write it always made (regression lock)', async () => {
+    const { client, calls } = fakeStationClient({ error: null });
+    expect(await writeStation(client, patch, { kind: 'none' })).toEqual({ error: null, busy: false });
+    expect(calls).toEqual([['from', 'station'], ['update', patch], ['eq', 'id', true]]);
+  });
+  it('without a condition passes a write error through', async () => {
+    const { client } = fakeStationClient({ error: { message: 'rls' } });
+    expect(await writeStation(client, patch, { kind: 'none' })).toEqual({ error: { message: 'rls' }, busy: false });
+  });
+  it('off adds mode = off to the same update and asks for the row back', async () => {
+    const { client, calls } = fakeStationClient({ data: [{ id: true }], error: null });
+    expect(await writeStation(client, patch, { kind: 'off' })).toEqual({ error: null, busy: false });
+    expect(calls).toEqual([['from', 'station'], ['update', patch], ['eq', 'id', true], ['eq', 'mode', 'off'], ['select', 'id']]);
+  });
+  it('a broadcast id matches on live and startedAt, never on cfSessionId', async () => {
+    const { client, calls } = fakeStationClient({ data: [{ id: true }], error: null });
+    await writeStation(client, { mode: 'off', live_session: null }, { kind: 'broadcast', startedAt: ID });
+    expect(calls.slice(3)).toEqual([['eq', 'mode', 'live'], ['eq', 'live_session->>startedAt', ID], ['select', 'id']]);
+  });
+  it('zero rows back means the condition failed: busy, not success', async () => {
+    const { client } = fakeStationClient({ data: [], error: null });
+    expect(await writeStation(client, patch, { kind: 'off' })).toEqual({ error: null, busy: true });
+    const { client: c2 } = fakeStationClient({ data: null, error: null });
+    expect(await writeStation(c2, patch, { kind: 'off' })).toEqual({ error: null, busy: true });
+  });
+  it('a conditional write error is an error, not busy', async () => {
+    const { client } = fakeStationClient({ data: null, error: { message: 'boom' } });
+    expect(await writeStation(client, patch, { kind: 'off' })).toEqual({ error: { message: 'boom' }, busy: false });
   });
 });

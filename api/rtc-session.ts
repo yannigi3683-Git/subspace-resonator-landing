@@ -295,6 +295,47 @@ export function broadcastStartedAt(prev: LiveSessionRow | null, nowIso: string):
   return nowIso;
 }
 
+// SCHEDULE RUNNER's "only if" (Release 2). `expect: 'off'` = go live only from off air;
+// `expect: <startedAt>` = act only while that broadcast is still the live one. startedAt, not
+// cfSessionId, because a host reconnect mints a new cfSessionId for the same show. Absent, every
+// path below is exactly the pre-Release-2 behaviour: manual GO LIVE and END never send it.
+export type StationExpect = { kind: 'none' } | { kind: 'off' } | { kind: 'broadcast'; startedAt: string };
+
+export function parseExpect(raw: unknown): StationExpect | null {
+  if (raw === undefined || raw === null) return { kind: 'none' };
+  if (raw === 'off') return { kind: 'off' };
+  if (typeof raw === 'string' && raw.length > 0 && raw.length <= 40) return { kind: 'broadcast', startedAt: raw };
+  return null;
+}
+
+export function expectHolds(expect: StationExpect, row: LiveSessionRow | null): boolean {
+  if (expect.kind === 'none') return true;
+  if (!row) return false;
+  if (expect.kind === 'off') return row.mode === 'off';
+  return row.mode === 'live' && row.live_session?.startedAt === expect.startedAt;
+}
+
+// The check above is advisory; this write is the real gate, so a show that went live between
+// the read and the write still wins. A conditional update RLS or the filter refuses comes back
+// as 200 with zero rows, so the row is asked for back and none means busy.
+export async function writeStation(
+  client: ReturnType<typeof getSupabaseAdmin>,
+  patch: Record<string, unknown>,
+  expect: StationExpect,
+): Promise<{ error: { message: string } | null; busy: boolean }> {
+  const base = client.from('station').update(patch).eq('id', true);
+  if (expect.kind === 'none') {
+    const { error } = await base;
+    return { error: error ?? null, busy: false };
+  }
+  const q = expect.kind === 'off'
+    ? base.eq('mode', 'off')
+    : base.eq('mode', 'live').eq('live_session->>startedAt', expect.startedAt);
+  const { data, error } = await q.select('id');
+  if (error) return { error, busy: false };
+  return { error: null, busy: !(Array.isArray(data) && data.length > 0) };
+}
+
 async function readLiveSession(): Promise<LiveSessionRow | null> {
   try {
     const { data } = await getSupabaseAdmin()
@@ -369,6 +410,11 @@ export async function POST(req: Request): Promise<Response> {
     }
     const sdpOffer = body.sdpOffer as string | undefined;
     if (!sdpOffer) return json({ error: 'sdpOffer required' }, 400);
+    const expect = parseExpect(body.expect);
+    if (!expect) return json({ error: 'invalid_expect' }, 400);
+    if (expect.kind !== 'none' && !expectHolds(expect, await readLiveSession())) {
+      return json({ error: 'station_busy' }, 409);
+    }
 
     let cfSessionId: string;
     let sdpAnswer: string;
@@ -385,14 +431,17 @@ export async function POST(req: Request): Promise<Response> {
     // Flip the station live server-side using the admin's own token, so the station
     // RLS write policy (has_role on auth.uid()) is satisfied deterministically.
     const title = ((body.title as string | undefined) ?? '').slice(0, 80) || 'Subspace Radio Live';
-    const { error: stErr } = await getUserClient(token)
-      .from('station')
-      .update({ mode: 'live', live_title: title, live_session: { cfSessionId, startedAt } })
-      .eq('id', true);
+    const { error: stErr, busy } = await writeStation(
+      getUserClient(token),
+      { mode: 'live', live_title: title, live_session: { cfSessionId, startedAt } },
+      expect,
+    );
     if (stErr) {
       console.error('[rtc-session publish-offer station]', stErr);
       return json({ error: 'station_update_failed', detail: stErr.message }, 500);
     }
+    // The publisher closes its connection on a refusal, which ends this unused Cloudflare session.
+    if (busy) return json({ error: 'station_busy' }, 409);
     return json({ cfSessionId, sdpAnswer });
   }
 
@@ -402,15 +451,20 @@ export async function POST(req: Request): Promise<Response> {
   if (phase === 'end-broadcast') {
     const check = await checkAdminAal2(identity.userId, identity.aal);
     if (!check.ok) return json({ error: 'forbidden', reason: check.reason }, 403);
+    const expect = parseExpect(body.expect);
+    if (!expect || expect.kind === 'off') return json({ error: 'invalid_expect' }, 400);
     const admin = getSupabaseAdmin();
 
     // Read the broadcast meta (start + title) BEFORE we null live_session, so we can build
     // the host's downloadable transcript of this broadcast's chat.
     const { data: st } = await admin
       .from('station')
-      .select('live_session, live_title')
+      .select('mode, live_session, live_title')
       .eq('id', true)
       .single();
+    if (expect.kind !== 'none' && !expectHolds(expect, (st as LiveSessionRow | null) ?? null)) {
+      return json({ error: 'station_busy' }, 409);
+    }
     const startedAt = (st?.live_session as { startedAt?: string } | null)?.startedAt ?? null;
     const title = (st?.live_title as string | null) ?? 'Subspace Radio Live';
 
@@ -437,14 +491,12 @@ export async function POST(req: Request): Promise<Response> {
     // The chat is NOT wiped: it stays private (RLS: admin-only once off air) and the 48h
     // TTL cron reclaims it. Listeners are floored to the current session so they never see
     // a past broadcast's chat; a new go-live starts them clean.
-    const { error: stErr } = await admin
-      .from('station')
-      .update({ mode: 'off', live_session: null })
-      .eq('id', true);
+    const { error: stErr, busy } = await writeStation(admin, { mode: 'off', live_session: null }, expect);
     if (stErr) {
       console.error('[rtc-session end-broadcast]', stErr);
       return json({ error: 'station_update_failed', detail: stErr.message }, 500);
     }
+    if (busy) return json({ error: 'station_busy' }, 409);
     return json({ ok: true, transcript, filename });
   }
 

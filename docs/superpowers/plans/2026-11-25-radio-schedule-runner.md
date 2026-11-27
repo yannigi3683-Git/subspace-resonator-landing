@@ -29,10 +29,12 @@
 
 ## Task 1b: server condition (`api/rtc-session.ts`)
 
-- [ ] **1b.1 Failing tests** in the existing `api/` test style: `publish-offer` **without** `expect` performs the same station write as today (regression lock); with `expect: 'off'` the write is conditional on `mode = 'off'` and a miss returns 409 `station_busy` (Cloudflare session closed, not leaked); with `expect: <id>` it is conditional on that `cfSessionId`; `end-broadcast` with `expect` ends only on a match and returns 409 otherwise; without it, unchanged.
-- [ ] **1b.2** Implement. Every relative import keeps its `.js` (guarded by `api/importExtensions.test.ts`).
+- [x] **1b.1 Failing tests** in the existing `api/` test style: `publish-offer` **without** `expect` performs the same station write as today (regression lock); with `expect: 'off'` the write is conditional on `mode = 'off'` and a miss returns 409 `station_busy` (Cloudflare session closed, not leaked); with `expect: <id>` it is conditional on that `cfSessionId`; `end-broadcast` with `expect` ends only on a match and returns 409 otherwise; without it, unchanged.
+- [x] **1b.2** Implement. Every relative import keeps its `.js` (guarded by `api/importExtensions.test.ts`).
 - [ ] **1b.3** Preview: `npm run check:api -- <preview>/api/rtc-session` prints `API ALIVE`; one manual GO LIVE / END on the preview behaves as before.
-- [ ] **1b.4** Commit: `feat(radio): optional expect condition on publish and end`.
+- [x] **1b.4** Commit: `feat(radio): optional expect condition on publish and end`.
+
+**As built (2026-11-27):** `parseExpect`, `expectHolds` and `writeStation` exported from `api/rtc-session.ts` (no new import), 12 tests. `expect: <id>` compares `live_session.startedAt` (A9.1), filtered in the update as `live_session->>startedAt`. Both phases read first (fast 409 before a Cloudflare session is created) and then make the write itself conditional, so a race still cannot double-broadcast; a conditional write that comes back with zero rows is 409 `station_busy`. A 409 after the Cloudflare session exists relies on the publisher closing its connection (Task 5 must do that). `end-broadcast` rejects `expect: 'off'` (400) and now also selects `mode` (read only). The regression lock asserts the no-`expect` write is exactly `from('station').update(patch).eq('id', true)`. **1b.3 still open:** the PostgREST JSON filter is proven only against a fake builder until the preview check.
 
 ## Task 2: `scheduleRunner.ts` state machine (pure)
 
