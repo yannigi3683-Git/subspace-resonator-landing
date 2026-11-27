@@ -10,7 +10,7 @@ export interface DeckState {
   readonly currentIndex: number;
 }
 
-function makeName(file: File): string {
+export function makeName(file: File): string {
   return file.name
     .replace(/\.[^.]+$/, '')
     .replace(/[-_]+/g, ' ');

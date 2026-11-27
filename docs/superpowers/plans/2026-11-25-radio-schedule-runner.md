@@ -50,8 +50,8 @@
 
 ## Task 3: `showFiles.ts` (local playlists)
 
-- [ ] **3.1 Failing tests** against an in-memory storage adapter (jsdom has no OPFS): add copies with progress; a failed copy leaves nothing behind; list order; reorder; display names; remove; verify (missing file or size mismatch reported by name); orphan detection; `persist()` result surfaced; `estimate()` surfaced.
-- [ ] **3.2** Implement with an OPFS adapter + IndexedDB for metadata; adapter chosen at runtime. **3.3** Commit.
+- [x] **3.1 Failing tests** (`src/radio/showFiles.test.ts`, 17 tests, 2026-11-27) against an in-memory storage adapter (jsdom has no OPFS): add copies with progress; a failed copy leaves nothing behind; list order; reorder; display names; remove; verify (missing file or size mismatch reported by name); orphan detection; `persist()` result surfaced; `estimate()` surfaced.
+- [x] **3.2** Implement with an OPFS adapter + IndexedDB for metadata; adapter chosen at runtime (`src/radio/showFiles.ts`; `makeName` exported from `rtc/localDeck.ts` so the neon line names files exactly as the deck does). A file the browser cannot play is rejected before it is copied. The OPFS and IndexedDB adapters cannot run in jsdom; V-A5 checks them on the owner's PC. **3.3** Commit.
 
 ## Task 4: playlist editor in `SchedulePanel`
 
