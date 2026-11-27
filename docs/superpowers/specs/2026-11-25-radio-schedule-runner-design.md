@@ -120,6 +120,7 @@ Release 1's 30-minute STARTING SOON window becomes 10 min STARTING SOON + 20 min
   listeners. Grants: select, insert, update to authenticated. Arming is a conditional update
   ("only if the lease is free, expired, or already mine") that must return one row; zero rows
   means another console holds it.
+- **As built (Task 1, 2026-11-27):** no write grant on `runner_status`; writes only through security-definer functions gated on host-with-2FA (`runner_claim`, `runner_beat`, `runner_release`), and the column is `broadcast_started_at` (A9.1). Delta: `plans/2026-11-27-radio-schedule-runner-delta.sql`.
 - The lease belongs to **one tab**, identified by a random id created when the page loads and held only in memory, so two tabs in the same browser cannot both arm. Claim and heartbeat are database functions that use the server clock.
 - `runner_status` also records SCHEDULE RUNNER's current broadcast id (`cfSessionId`) and its state, so the watchdog and the retries can tell SCHEDULE RUNNER's broadcast from a manual one.
 

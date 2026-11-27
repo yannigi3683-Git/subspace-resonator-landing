@@ -18,12 +18,14 @@
 
 ## Task 1: schema
 
-- [ ] **1.1** `scheduled_shows.neon_mode` (`tracks` | `title`, default `tracks`).
-- [ ] **1.2** `runner_status` singleton: device id and label, armed, heartbeat_at, state, next_show_id, message. RLS: select/insert/update only when `is_admin_aal2()`; nothing for anon or listeners. Grants to authenticated (guarded by `grants.test.ts`).
-- [ ] **1.3** RPCs `runner_claim(_lease_id, _label)` and `runner_beat(_lease_id, _state, _next, _cf_session_id, _message)`: security invoker, `set search_path = public`, server clock for the 3-minute lease; `_lease_id` is a random per-tab id held in memory. Execute granted to authenticated.
-- [ ] **1.3b** Watchdog job (pg_cron, every minute): if `runner_status.state = 'on_air'`, the heartbeat is over 5 min old and `station.live_session->>'cfSessionId'` equals `runner_status.cf_session_id`, set the station off air exactly as END does. Phase 0 confirms `pg_cron` is enabled. SQL test cases written as probe steps: manual show untouched; fresh heartbeat untouched; stale SCHEDULE RUNNER show ended.
-- [ ] **1.4** Probes (on the Release 1 probe harness): anon and an anonymous listener cannot read `runner_status`, cannot claim, cannot beat; self-test proves each probe can fail.
-- [ ] **1.5** Delta file for the owner, applied off air.
+- [x] **1.1** `scheduled_shows.neon_mode` (`tracks` | `title`, default `tracks`).
+- [x] **1.2** `runner_status` singleton: device id and label, armed, heartbeat_at, state, next_show_id, message. RLS: select/insert/update only when `is_admin_aal2()`; nothing for anon or listeners. Grants to authenticated (guarded by `grants.test.ts`).
+- [x] **1.3** RPCs `runner_claim(_lease_id, _label)` and `runner_beat(_lease_id, _state, _next, _cf_session_id, _message)`: security invoker, `set search_path = public`, server clock for the 3-minute lease; `_lease_id` is a random per-tab id held in memory. Execute granted to authenticated.
+- [x] **1.3b** Watchdog job (pg_cron, every minute): if `runner_status.state = 'on_air'`, the heartbeat is over 5 min old and `station.live_session->>'cfSessionId'` equals `runner_status.cf_session_id`, set the station off air exactly as END does. Phase 0 confirms `pg_cron` is enabled. SQL test cases written as probe steps: manual show untouched; fresh heartbeat untouched; stale SCHEDULE RUNNER show ended.
+- [x] **1.4** Probes (on the Release 1 probe harness): anon and an anonymous listener cannot read `runner_status`, cannot claim, cannot beat; self-test proves each probe can fail.
+- [x] **1.5** Delta file for the owner: `plans/2026-11-27-radio-schedule-runner-delta.sql` (written 2026-11-27; **not yet applied**, the owner pastes it off air and runs the probe).
+
+**As built (2026-11-27), where it differs from the lines above:** the lease functions are **security definer with an explicit gate** (`runner_caller_ok()`: `is_admin_aal2()` or the service role), not security invoker, so `runner_status` has **no write grant at all** and the lease can only change through the server-clock functions. `runner_release(_lease_id)` added for DISARM. The column is `broadcast_started_at` (text, `live_session.startedAt`), not `cf_session_id` (A9.1), and `runner_beat` takes `_broadcast`. Every new function is revoked from `public`/`anon` first (Postgres grants execute to PUBLIC by default); `runner_watchdog()` is executable only by the service role and pg_cron. The service role passes the gate so `rls-probe.mjs --selftest` can prove each new probe fails on a call that went through. Verified on a scratch Postgres 16 with a stubbed `auth` schema: anon and a listener refused on read, claim, beat, release, direct update and watchdog; host without 2FA refused; a second tab cannot arm, takes over only after 3 min of silence, and the old tab's beat then returns false; the watchdog leaves a fresh-beating show and a manual show alone and ends only the stale runner show; the delta applies twice on the master schema without error. New probe check `rpcRefused` in `rlsProbeChecks.mjs`, 5 tests.
 
 ## Task 1b: server condition (`api/rtc-session.ts`)
 

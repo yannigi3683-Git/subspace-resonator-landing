@@ -83,6 +83,24 @@ export function rpcAnswers(res, { list = false } = {}) {
   return ok ? { pass: true, detail: 'answered' } : { pass: false, detail: 'no answer' };
 }
 
+// A function a visitor must NOT be able to call (SCHEDULE RUNNER's lease and watchdog). Refused
+// means an error AND an unchanged row: an answer without an error fails even if nothing changed,
+// because the function should never have run for this caller. A changed row is put back.
+export async function rpcRefused({ attacker, admin, fn, args, table, match }) {
+  const first = await admin.select(table, match, 1);
+  if (unconfirmed(first)) return unconfirmed(first);
+  const before = rows(first)[0] && structuredClone(rows(first)[0]);
+  if (!before) return { pass: null, detail: 'no row to test against' };
+  const attempt = await attacker.rpc(fn, args);
+  const second = await admin.select(table, match, 1);
+  const changed = !unconfirmed(second) && !same(rows(second)[0], before);
+  if (changed) await admin.update(table, match, before);
+  if (!attempt?.error) return { pass: false, detail: `call went through${changed ? ' (row restored)' : ''}` };
+  if (changed) return { pass: false, detail: 'call refused but the row changed (restored)' };
+  if (unconfirmed(second)) return unconfirmed(second);
+  return { pass: true, detail: `refused: ${attempt.error.code ?? attempt.error.message}` };
+}
+
 // pass: true = PASS, false = FAIL, null = SKIP (could not be tested, never counted as a pass).
 export function summarize(results, { selftest = false } = {}) {
   const tested = results.filter((r) => r.pass !== null);

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, summarize } from './rlsProbeChecks.mjs';
+import { insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, rpcRefused, summarize } from './rlsProbeChecks.mjs';
 
 // In-memory stand-in for a Supabase client. A "locked" client behaves like RLS refusing it:
 // inserts error, updates and deletes silently touch zero rows, selects return nothing.
@@ -129,6 +129,42 @@ describe('rpcAnswers', () => {
   });
   it('fails when a list call answers with something that is not a list', () => {
     expect(rpcAnswers({ data: null, error: null }, { list: true }).pass).toBe(false);
+  });
+});
+
+describe('rpcRefused', () => {
+  const lease = () => ({ runner_status: [{ id: true, lease_id: null, armed: false }] });
+  const args = { fn: 'runner_claim', args: { _lease_id: 'x' }, table: 'runner_status', match: { id: true } };
+  const refused = { rpc: async () => ({ data: null, error: { code: '42501', message: 'not allowed' } }) };
+
+  it('passes when the call is refused and the row is unchanged', async () => {
+    const { admin } = makeStore(lease());
+    const r = await rpcRefused({ attacker: refused, admin, ...args });
+    expect(r.pass).toBe(true);
+    expect(r.detail).toContain('42501');
+  });
+  it('fails, and restores the row, when the call went through', async () => {
+    const { store, admin } = makeStore(lease());
+    const attacker = { rpc: async () => { store.runner_status[0].armed = true; return { data: true, error: null }; } };
+    const r = await rpcRefused({ attacker, admin, ...args });
+    expect(r.pass).toBe(false);
+    expect(store.runner_status[0].armed).toBe(false);
+  });
+  it('fails when the call answered without changing anything, since it should have been refused', async () => {
+    const { admin } = makeStore(lease());
+    const r = await rpcRefused({ attacker: { rpc: async () => ({ data: false, error: null }) }, admin, ...args });
+    expect(r.pass).toBe(false);
+  });
+  it('fails, and restores the row, when the call errored but the row changed anyway', async () => {
+    const { store, admin } = makeStore(lease());
+    const attacker = { rpc: async () => { store.runner_status[0].lease_id = 'x'; return { data: null, error: { message: 'late' } }; } };
+    const r = await rpcRefused({ attacker, admin, ...args });
+    expect(r.pass).toBe(false);
+    expect(store.runner_status[0].lease_id).toBeNull();
+  });
+  it('skips, never passes, when the row cannot be read', async () => {
+    const { admin } = makeStore({ runner_status: [] });
+    expect((await rpcRefused({ attacker: refused, admin, ...args })).pass).toBeNull();
   });
 });
 

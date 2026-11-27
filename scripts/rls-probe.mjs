@@ -14,7 +14,7 @@
 import { readFileSync } from 'node:fs';
 import { randomUUID } from 'node:crypto';
 import { createClient } from '@supabase/supabase-js';
-import { PROBE_TAG, PAST_ISO, insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, summarize } from './rlsProbeChecks.mjs';
+import { PROBE_TAG, PAST_ISO, insertRefused, updateRefused, deleteRefused, selectHidden, rpcAnswers, rpcRefused, summarize } from './rlsProbeChecks.mjs';
 
 const env = Object.fromEntries(
   readFileSync('.env', 'utf8')
@@ -121,6 +121,23 @@ try {
 
     record(who, 'cannot read the admin audit log',
       await selectHidden({ attacker, admin, table: 'admin_audit' }));
+
+    // SCHEDULE RUNNER: the lease decides which console may start shows by itself, and the
+    // watchdog can take the station off air, so neither may be reachable by a visitor.
+    const runner = { table: 'runner_status', match: { id: true } };
+    record(who, 'cannot read the SCHEDULE RUNNER status',
+      await selectHidden({ attacker, admin, table: 'runner_status' }));
+    record(who, 'cannot change the SCHEDULE RUNNER status',
+      await updateRefused({ attacker, admin, ...runner, patch: { device_label: tagged.slice(0, 40) } }));
+    record(who, 'cannot arm SCHEDULE RUNNER',
+      await rpcRefused({ attacker, admin, ...runner, fn: 'runner_claim', args: { _lease_id: ghost, _label: tagged.slice(0, 40) } }));
+    record(who, 'cannot send a SCHEDULE RUNNER heartbeat',
+      await rpcRefused({ attacker, admin, ...runner, fn: 'runner_beat',
+        args: { _lease_id: ghost, _state: 'armed', _next: null, _broadcast: null, _message: tagged } }));
+    record(who, 'cannot disarm SCHEDULE RUNNER',
+      await rpcRefused({ attacker, admin, ...runner, fn: 'runner_release', args: { _lease_id: ghost } }));
+    record(who, 'cannot run the SCHEDULE RUNNER watchdog',
+      await rpcRefused({ attacker, admin, table: 'station', match: { id: true }, fn: 'runner_watchdog', args: {} }));
   }
 
   if (!selftest) {
