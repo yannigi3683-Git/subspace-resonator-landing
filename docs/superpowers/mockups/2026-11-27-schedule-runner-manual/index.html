@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>SCHEDULE RUNNER manual</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;600&family=JetBrains+Mono:wght@500&display=swap" rel="stylesheet">
+<style>
+/* VOICE: a station operator's manual. Plain, calm, exact. Written for a host, not an engineer.
+   IDEA: the run sheet a radio studio pins beside the desk: times hang left, studio and listeners side by side.
+   PICTURE: the show-time run sheet, two lanes (studio PC, guests) across one real evening.
+   COLOUR and TYPE: the station's own near-black and electric blue, red for on air, amber for warnings. Space Grotesk + Inter, console text in JetBrains Mono.
+   LAYOUT: title, the run sheet, then host steps, guests, phone, failures, checklist, build progress. */
+:root{color-scheme:light dark;
+--bg:light-dark(#ffffff,#060608);--panel:light-dark(#f1f5fb,#0f1116);--line:light-dark(#d5dde9,#23262e);
+--ink:light-dark(#0b0d12,#eef1f6);--dim:light-dark(#4a5361,#9aa3b2);
+--blue:light-dark(#0062d6,#2f95ff);--blueSoft:light-dark(#e3efff,#0b1d36);
+--red:light-dark(#d1192f,#ff4d5e);--redSoft:light-dark(#fde6e9,#2c0c11);
+--amber:light-dark(#9a5b00,#ffb52e);--amberSoft:light-dark(#fff2d9,#2b1f07);
+--green:light-dark(#0b7a3e,#3ddc84);--greenSoft:light-dark(#e1f6ea,#0b2416)}
+:root[data-theme=light]{color-scheme:light}:root[data-theme=dark]{color-scheme:dark}
+*{box-sizing:border-box;min-width:0}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 Inter,system-ui,sans-serif;overflow-x:clip}
+h1,h2,h3{font-family:"Space Grotesk",Inter,sans-serif;line-height:1.1;text-wrap:balance;margin:0}
+h1{font-size:clamp(32px,5vw,50px)}h2{font-size:clamp(24px,3vw,32px);margin-bottom:14px}h3{font-size:19px;margin:22px 0 6px}
+p{max-width:68ch;margin:8px 0}
+.band{padding:clamp(28px,4vw,60px) max(5vw,16px)}.wrap{max-width:1180px;margin:0 auto}
+.hero{background:linear-gradient(180deg,var(--blueSoft),var(--bg) 85%)}
+.lede{font-size:18px;color:var(--dim);max-width:62ch}
+.pill{display:inline-block;font-size:13px;font-weight:600;padding:4px 10px;border-radius:99px;background:var(--amberSoft);color:var(--amber);margin-bottom:14px}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,230px),1fr));gap:12px;margin:22px 0 8px}
+.fact{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.fact b{display:block;font-family:"Space Grotesk";font-size:17px}.fact span{color:var(--dim);font-size:14px}
+nav.scroll{display:flex;gap:8px;overflow-x:auto;padding:12px max(5vw,16px);border-block:1px solid var(--line);background:var(--bg)}
+nav.scroll a{flex:none;color:var(--ink);text-decoration:none;font-size:14px;padding:10px 14px;border-radius:99px;border:1px solid var(--line);min-height:44px;display:flex;align-items:center}
+nav.scroll a:hover,nav.scroll a:focus-visible{border-color:var(--blue);color:var(--blue);outline:none}
+@media(min-width:900px){nav.scroll{position:sticky;top:0;z-index:5}}
+html{scroll-padding-top:72px}
+.sheet{border:1px solid var(--line);border-radius:16px;overflow:hidden;background:var(--panel);margin-top:18px}
+.row{display:grid;grid-template-columns:112px minmax(0,1fr) minmax(0,1fr);border-top:1px solid var(--line)}
+.row:first-child{border-top:0}
+.row.head{background:var(--bg);font-weight:600;font-size:14px;color:var(--dim)}
+.row>div{padding:14px 16px}
+.t{font-family:"Space Grotesk";font-size:22px;font-weight:700;white-space:nowrap;color:var(--blue)}
+.t small{display:block;font:500 12px Inter;color:var(--dim)}
+.row.air .t{color:var(--red)}
+.lane-l{display:none;font-size:12px;font-weight:600;color:var(--dim);margin-bottom:2px}
+.tag{display:inline-block;font:500 12px "JetBrains Mono",monospace;padding:2px 8px;border-radius:6px;margin-top:6px}
+.tag.blue{background:var(--blueSoft);color:var(--blue)}.tag.red{background:var(--redSoft);color:var(--red)}.tag.amber{background:var(--amberSoft);color:var(--amber)}.tag.green{background:var(--greenSoft);color:var(--green)}
+@media(max-width:600px){.row{grid-template-columns:1fr}.row.head{display:none}.row>div{padding:6px 16px}.row>div:first-child{padding-top:14px}.row>div:last-child{padding-bottom:14px}.lane-l{display:block}}
+.note{font-size:14px;color:var(--dim)}
+.steps{counter-reset:s;list-style:none;padding:0;margin:0;display:grid;gap:14px}
+.steps>li{counter-increment:s;position:relative;padding:16px 16px 16px 64px;background:var(--panel);border:1px solid var(--line);border-radius:12px}
+.steps>li::before{content:counter(s);position:absolute;left:16px;top:14px;width:34px;height:34px;border-radius:50%;background:var(--blue);color:#fff;font:700 17px "Space Grotesk";display:grid;place-items:center}
+.steps b{font-family:"Space Grotesk";font-size:18px}
+.mock{font:500 13px/1.5 "JetBrains Mono",monospace;background:#0b0c10;color:#dfe6f2;border-radius:10px;padding:12px 14px;margin:10px 0 4px;border:1px solid #23262e;display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;justify-content:space-between}
+.mock .btn{border:1px solid #2f95ff;color:#2f95ff;border-radius:6px;padding:6px 12px;white-space:nowrap}
+.mock.red{border-color:#ff4d5e}.mock.red .lbl{color:#ff4d5e}.mock.armed .lbl{color:#3ddc84}.mock.amber .lbl{color:#ffb52e}.mock.grey .lbl{color:#8b93a1}
+.two{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,320px),1fr));gap:14px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px 18px}
+.card h3{margin-top:0}
+table{width:100%;border-collapse:collapse;font-size:15px;background:var(--panel);border-radius:12px;overflow:hidden}
+th,td{text-align:left;padding:11px 14px;border-top:1px solid var(--line);vertical-align:top}
+th{background:var(--bg);font-size:13px;color:var(--dim);font-weight:600;border-top:0}
+td:first-child{font-weight:600}
+ul.check{list-style:none;padding:0;margin:0;display:grid;gap:10px}
+ul.check li{padding:12px 14px 12px 46px;position:relative;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+ul.check li::before{content:"";position:absolute;left:14px;top:14px;width:20px;height:20px;border:2px solid var(--blue);border-radius:5px}
+.prog{display:grid;gap:8px}
+.prog div{display:grid;grid-template-columns:96px minmax(0,1fr);gap:12px;align-items:start;padding:10px 14px;background:var(--panel);border:1px solid var(--line);border-radius:10px}
+.st{font:600 12px Inter;padding:3px 8px;border-radius:99px;text-align:center;white-space:nowrap}
+.st.done{background:var(--greenSoft);color:var(--green)}.st.next{background:var(--blueSoft);color:var(--blue)}.st.todo{background:var(--panel);color:var(--dim);border:1px solid var(--line)}.st.you{background:var(--amberSoft);color:var(--amber)}
+footer{color:var(--dim);font-size:14px}
+@media(max-width:600px){table{font-size:13px}.stack thead{display:none}.stack tr{display:grid;padding-block:10px;border-top:1px solid var(--line)}.stack td{display:flow-root;border:0;padding:3px 14px;padding-inline-start:calc(8em + 14px);text-align:start}.stack td::before{content:attr(data-l);float:inline-start;width:7.5em;margin-inline-start:-8em;white-space:normal;color:var(--dim);font-weight:600}.stack td:empty{display:none}}
+@media(prefers-reduced-motion:no-preference){.row.air .t{animation:pulse 2.4s ease-in-out infinite}@keyframes pulse{50%{opacity:.55}}}
+</style>
+<script>new MutationObserver(()=>{for(const c of document.querySelectorAll('.stack td:not([data-l])')){let i=0,p=c;while(p=p.previousElementSibling)i+=p.colSpan;c.dataset.l=c.closest('table').rows[0].cells[i]?.textContent||''}}).observe(document,{childList:true,subtree:true})</script>
+</head>
+<body>
+
+<header class="band hero"><div class="wrap">
+<span class="pill">Release 2 plan. Not built yet, nothing on the live site has changed.</span>
+<h1>SCHEDULE RUNNER: shows that start and end by themselves</h1>
+<p class="lede">You add a show, give it its music files on the studio PC, and press ARM. At show time the console goes live, plays the files in order, and ends the broadcast when the last one finishes. Nobody needs to be at the PC.</p>
+<div class="facts">
+<div class="fact"><b>Sound quality: unchanged</b><span>It uses the same GO LIVE, file deck and END you use today. Audio code, mixer and restreamer are not touched.</span></div>
+<div class="fact"><b>Crowd size: unchanged</b><span>No extra connections for listeners. Same 200-listener room as now.</span></div>
+<div class="fact"><b>Runs on your PC</b><span>The console stays open on the studio PC. Files stay on that PC, never uploaded.</span></div>
+<div class="fact"><b>Safe by design</b><span>Never starts over a show you are DJing, never ends a show it did not start, never cuts a set short.</span></div>
+</div>
+
+<h2 style="margin-top:28px">Show night, minute by minute</h2>
+<p class="note">Example: a show called Psy Night Vol. 7 at 22:00 with two hours of files. Show names and times on this page are examples.</p>
+<div class="sheet" role="table" aria-label="Show night run sheet">
+<div class="row head" role="row"><div>Time</div><div>Studio PC (console, nobody there)</div><div>Guests on /radio</div></div>
+<div class="row" role="row"><div class="t">earlier<small>any time</small></div><div><span class="lane-l">Studio PC</span>Armed. Sends a heartbeat every minute so your phone can see it is alive.<br><span class="tag green">SCHEDULE RUNNER ARMED</span></div><div><span class="lane-l">Guests</span>Countdown to the show, as today.</div></div>
+<div class="row" role="row"><div class="t">21:50<small>T - 10 min</small></div><div><span class="lane-l">Studio PC</span>Checks everything: signed in as host, files complete, station off air, sound allowed, internet up, restreamer running. A failed check is retried every 30 seconds.</div><div><span class="lane-l">Guests</span>Countdown.</div></div>
+<div class="row air" role="row"><div class="t">21:59:15<small>T - 45 s</small></div><div><span class="lane-l">Studio PC</span>Presses GO LIVE by itself, with an empty deck and no microphone or input device, so no Windows sound can ever go on air.<br><span class="tag red">ON AIR</span></div><div><span class="lane-l">Guests</span>The page moves to the entry screen. They tap in and wait a few seconds.</div></div>
+<div class="row air" role="row"><div class="t">22:00<small>T</small></div><div><span class="lane-l">Studio PC</span>Loads the show's files (REPEAT forced off) and starts playing. Auto-mix crossfades between tracks as usual.</div><div><span class="lane-l">Guests</span>Music. The neon line shows each track name, or the show title if you chose that.</div></div>
+<div class="row air" role="row"><div class="t">23:58<small>last file ends</small></div><div><span class="lane-l">Studio PC</span>Waits 30 seconds so deep-buffer listeners (8-20 s behind) hear the end of the last track.</div><div><span class="lane-l">Guests</span>The last track plays out to the end.</div></div>
+<div class="row" role="row"><div class="t">23:58:30<small>+30 s</small></div><div><span class="lane-l">Studio PC</span>Presses END BROADCAST. Chat log downloads to the PC. Back to ARMED for the next show.<br><span class="tag blue">Last: Psy Night Vol. 7 ended 23:58, chat log saved</span></div><div><span class="lane-l">Guests</span>Countdown to the next show, or TBA.</div></div>
+</div>
+</div></header>
+
+<nav class="scroll" aria-label="Sections">
+<a href="#host">Host: before a show</a><a href="#day">One show or several</a><a href="#guests">Guests</a><a href="#phone">Your phone</a><a href="#wrong">When something goes wrong</a><a href="#pc">PC checklist</a><a href="#rules">Rules</a><a href="#progress">Build progress</a>
+</nav>
+
+<section class="band" id="host"><div class="wrap">
+<h2>Host: setting up a show</h2>
+<p>Do this on the studio PC, the one that will play the show. Files you add on another computer or phone are not there at show time.</p>
+<ol class="steps">
+<li><b>Add the show in the SCHEDULE tab</b><p>Title and start time, exactly as today. You can do this part from your phone too.</p></li>
+<li><b>Give it its files</b><p>Each upcoming show gets a FILES row. Tap it, then ADD FILES (or drag files in). Each file is copied into the console's own storage on this PC, with a progress bar. A file the browser cannot play is refused before copying, and named.</p>
+<div class="mock"><span>FILES · none on this PC</span><span class="btn">ADD FILES</span></div>
+<div class="mock"><span>FILES · 4 files · 1:58:20 · on this PC</span></div>
+<p>In the playlist you can drag to reorder (or use up/down buttons), remove a file, and give any file a display name for the neon line.</p></li>
+<li><b>Choose what the neon line shows</b><p>NEON: TRACK NAMES (default) or SHOW TITLE. Saved with the show.</p></li>
+<li><b>Read the two warnings, if any</b><p>If the set is longer than the gap to the next show: <i>"Runs 25 min into Goa Classics 1998. That show will start when this one ends."</i> If the browser did not promise to keep the files: <i>"The browser may clear these files if the disk fills up."</i> Normally it reads <i>"Using 812 MB on this PC. Storage is protected."</i></p></li>
+<li><b>Press ARM</b><p>A bar at the top of every console tab. ARM has to be a real click: browsers only allow a page to play sound after a person has clicked on it, and that click is what lets the console start sound later with nobody there.</p>
+<div class="mock grey"><span class="lbl">SCHEDULE RUNNER OFF</span><span class="btn">ARM</span></div>
+<div class="mock red"><span class="lbl">Next show in 3 h has files but SCHEDULE RUNNER is off</span><span class="btn">ARM</span></div>
+<div class="mock armed"><span class="lbl">SCHEDULE RUNNER ARMED · Psy Night Vol. 7 at 22:00 · checks OK 1 min ago</span><span class="btn">DISARM</span></div></li>
+<li><b>Walk away</b><p>Leave the console window open and the PC on (see the PC checklist below). Check on it from your phone whenever you like.</p></li>
+</ol>
+<h3>Only one console can be armed</h3>
+<p>If a second tab or another PC tries, it shows:</p>
+<div class="mock amber"><span class="lbl">Armed on another console (PC-STUDIO), seen 40 s ago</span></div>
+<h3>Reload means disarmed</h3>
+<p>Any reload, Chrome restart or PC restart turns SCHEDULE RUNNER off and asks you to sign in again. Your files stay. Sign in, press ARM.</p>
+<h3>You can still DJ by hand</h3>
+<p>Manual GO LIVE and END work exactly as today. If you are live when a scheduled show is due, SCHEDULE RUNNER does not start it and reports <i>START FAILED: already live</i>. If you press END or DISARM during an automatic show, it stops managing that show and leaves it to you.</p>
+</div></section>
+
+<section class="band" id="day" style="background:var(--panel)"><div class="wrap">
+<h2>One show or several in a day</h2>
+<div class="two">
+<div class="card"><h3>Separate broadcasts</h3><p>Two shows, each with its own files. Show A ends (END, chat log saved), and show B goes live at its own time. Guests see the countdown between them. There is always at least 15 seconds between an END and the next GO LIVE, so the restreamer sees a real new show.</p></div>
+<div class="card"><h3>One continuous run</h3><p>One show holding all the files. They play back to back with the usual crossfade and only the neon line changes. One chat, one chat log.</p></div>
+</div>
+<p style="margin-top:14px"><b>A set is never cut.</b> If show A runs past show B's start time, B starts as soon as A ends (plus the 15 seconds).</p>
+</div></section>
+
+<section class="band" id="guests"><div class="wrap">
+<h2>What guests see</h2>
+<table class="stack"><thead><tr><th>When</th><th>Show started on time</th><th>Show did not start</th></tr></thead><tbody>
+<tr><td>Before T - 45 s</td><td>Countdown</td><td>Countdown</td></tr>
+<tr><td>T - 45 s</td><td>Entry screen, then the room</td><td>Countdown</td></tr>
+<tr><td>T to T + 10 min</td><td>Music, neon track names</td><td>STARTING SOON</td></tr>
+<tr><td>T + 10 to T + 30 min</td><td>Music</td><td>DELAYED. "The signal is late." with "Keep this page open" below</td></tr>
+<tr><td>After T + 30 min</td><td>Music until the set ends</td><td>Countdown to the next show, or TBA</td></tr>
+</tbody></table>
+<p class="note">Today STARTING SOON lasts the whole 30 minutes. Release 2 splits it into 10 minutes STARTING SOON and 20 minutes DELAYED, so nobody stares at "soon" for half an hour. Chat stays open during automatic shows (your choice).</p>
+</div></section>
+
+<section class="band" id="phone" style="background:var(--panel)"><div class="wrap">
+<h2>Checking from your phone</h2>
+<p>Open /radio and sign in as host with the padlock (as you do to moderate). One status line appears at the top. It only reads; arming happens at the PC. Listeners never see it.</p>
+<div class="mock armed"><span class="lbl">SCHEDULE RUNNER · armed on PC-STUDIO · next Psy Night Vol. 7 22:00 · seen 1 min ago</span></div>
+<p class="note">Green: armed and alive.</p>
+<div class="mock amber"><span class="lbl">SCHEDULE RUNNER · armed on PC-STUDIO · last seen 2 h ago</span></div>
+<p class="note">Amber: no heartbeat for over 3 minutes. The PC is probably off, asleep, or the tab was closed.</p>
+<div class="mock red"><span class="lbl">SCHEDULE RUNNER · MISSED Psy Night Vol. 7 22:00</span></div>
+<p class="note">Red: a start failed or a show was missed. The missed show stays named for 24 hours.</p>
+<div class="mock grey"><span class="lbl">SCHEDULE RUNNER off</span></div>
+<p class="note">Grey: not armed anywhere.</p>
+</div></section>
+
+<section class="band" id="wrong"><div class="wrap">
+<h2>When something goes wrong</h2>
+<p>Most problems fix themselves. A start is retried every 30 seconds until 30 minutes after the show's time, then the show is marked MISSED and the next one is prepared.</p>
+<table class="stack"><thead><tr><th>What happened</th><th>What you see</th><th>What guests see</th><th>What to do</th></tr></thead><tbody>
+<tr><td>PC asleep, off, or restarted</td><td>Phone amber</td><td>STARTING SOON, DELAYED, next show</td><td>Sign in at the PC, press ARM</td></tr>
+<tr><td>Console tab closed or reloaded</td><td>Phone amber</td><td>Same</td><td>Sign in, ARM</td></tr>
+<tr><td>Forgot to ARM</td><td>Red bar at the PC, phone grey</td><td>Same</td><td>ARM</td></tr>
+<tr><td>Sign-in expired</td><td>START FAILED: sign-in</td><td>Same</td><td>Reload, sign in, ARM</td></tr>
+<tr><td>Files missing or damaged</td><td>Check fails at T - 10 min</td><td>Same</td><td>Add the files again</td></tr>
+<tr><td>Internet down at show time</td><td>Retrying every 30 s</td><td>STARTING SOON</td><td>Nothing. Starts when it is back (until T + 30)</td></tr>
+<tr><td>You are already live by hand</td><td>START FAILED: already live</td><td>Your show</td><td>Nothing, your show is untouched</td></tr>
+<tr><td>Internet drops mid-show</td><td>Reconnects to the same broadcast</td><td>Short silence, chat kept</td><td>Nothing</td></tr>
+<tr><td>Power cut or tab crash mid-show</td><td>Phone amber</td><td>Silent room for up to 5 min</td><td>Nothing. A database watchdog ends the show after 5 min. Chat log downloadable for 48 h</td></tr>
+<tr><td>One file will not play</td><td>Skipped, noted</td><td>Next track</td><td>Replace the file later</td></tr>
+<tr><td>Restreamer not running</td><td>DEEP BUFFER OFF</td><td>Live audio only, locked phones lose sound</td><td>Start the restreamer</td></tr>
+<tr><td>Chrome blocks the chat log download</td><td>END still completes</td><td>Nothing</td><td>Allow automatic downloads once, or DOWNLOAD CHAT LOG within 48 h</td></tr>
+</tbody></table>
+</div></section>
+
+<section class="band" id="pc" style="background:var(--panel)"><div class="wrap">
+<h2>PC checklist before you leave it armed</h2>
+<ul class="check">
+<li>Chrome open on the console, window visible. Not minimised. Leave the screen unlocked and the display on until the tests tell us locking is safe.</li>
+<li>Windows Sleep set to Never.</li>
+<li>Windows Update "active hours" cover your show times, so it never restarts the PC mid-show.</li>
+<li>Chrome Memory Saver: add subspaceresonator.com to "Always keep these sites active".</li>
+<li>Chrome: allow automatic downloads for the site (chat logs).</li>
+<li>Restreamer window running, as on every show night.</li>
+<li>Never log out of Windows (that kills the show, as today). Win+L lock is fine for manual shows.</li>
+</ul>
+</div></section>
+
+<section class="band" id="rules"><div class="wrap">
+<h2>Rules worth knowing</h2>
+<div class="two">
+<div class="card"><h3>Files stay on the PC</h3><p>Copies live in Chrome's private storage on the studio PC. Nothing goes to the internet. Files added on a Vercel test link exist only on that test link, not on the real site.</p></div>
+<div class="card"><h3>Test links are real</h3><p>Vercel test links use the real station. A show added there appears on the real /radio, and a test that goes live is a real broadcast. Tests use shows titled TEST, at hours with no real show within 6 hours.</p></div>
+<div class="card"><h3>It cannot take over</h3><p>It goes live only if the station is off air, and ends only the broadcast it started itself. A manual show is never touched.</p></div>
+<div class="card"><h3>Hard stop</h3><p>Even if the deck gets stuck, the show ends at its start time + total length + any paused time + 2 minutes.</p></div>
+</div>
+</div></section>
+
+<section class="band" id="progress" style="background:var(--panel)"><div class="wrap">
+<h2>Build progress</h2>
+<div class="prog">
+<div><span class="st done">Done</span><span>The brain: the timing rules above, as code, with 35 tests.</span></div>
+<div><span class="st done">Done</span><span>File storage on the PC: add, order, rename, remove, check, with 17 tests.</span></div>
+<div><span class="st next">Next</span><span>Guest screen: STARTING SOON for 10 min, then DELAYED for 20 min.</span></div>
+<div><span class="st todo">Then</span><span>Database change (arming, heartbeat, watchdog, neon choice). I prepare it, you paste it in Supabase off air.</span></div>
+<div><span class="st todo">Then</span><span>Server safety condition (only if off air / only if mine), checked on a Vercel test link.</span></div>
+<div><span class="st todo">Then</span><span>FILES playlist editor, the ARM bar, the console wiring, the phone status line.</span></div>
+<div><span class="st todo">Then</span><span>Design check on every screen size, host guide PDF page, docs.</span></div>
+<div><span class="st you">Your tests</span><span>Start timing (window visible, minimised, locked, display off); an overnight run of three TEST shows; a 48-hour armed soak; failure tests (internet off, tab closed, PC asleep, a bad file, you live by hand); Chrome restart keeps files; your phone line in all of them. All on Vercel test links, far from real shows.</span></div>
+<div><span class="st you">You merge</span><span>Only after your tests pass. Production changes only when you merge.</span></div>
+</div>
+<p class="note" style="margin-top:14px">Not included: running from the cloud, phone or e-mail alerts, automatic sign-in after a restart, mixing a live microphone into an automatic show, adding files from a phone, repeating shows.</p>
+</div></section>
+
+<footer class="band"><div class="wrap">Subspace Radio · SCHEDULE RUNNER operation manual, draft of 27 November 2026, from the Release 2 design and plan.</div></footer>
+</body>
+</html>
